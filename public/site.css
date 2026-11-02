@@ -72,6 +72,13 @@ footer p { margin: 12px 0 0; }
 .shot { margin: 32px 0 0; }
 .shot img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; display: block; }
 .shot figcaption { margin-top: 6px; font-size: 0.8rem; color: var(--muted); text-align: center; }
+.gallery { margin-top: 44px; }
+.gallery h2 { font-size: 1.3rem; margin: 0 0 4px; }
+.gallery p { margin: 0 0 14px; color: var(--muted); }
+.gallery .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.gallery figure { margin: 0; }
+.gallery img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; display: block; }
+.gallery figcaption { margin-top: 6px; font-size: 0.8rem; color: var(--muted); text-align: center; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin: 40px 0 0; }
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; }
 .card h2 { margin: 0 0 6px; font-size: 1.05rem; color: var(--accent); }

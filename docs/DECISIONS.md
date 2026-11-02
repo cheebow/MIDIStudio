@@ -601,5 +601,5 @@ UI 側とコア／再生側を分けてコード全体を読み直し、確認�
 - **背景**: アプリの外から読める紹介ページが欲しい（RoboScript の about.html のようなもの）。
 - **決定**: `public/about.html` を静的ページとして置く（ビルドで `dist/about.html` にそのまま入る）。ナビ（紹介 / ヘルプ / 使う / GitHub）、ロゴとタグライン、「ブラウザで使う」、スクリーンショット、特徴のカード、できることの一覧、注意（開発中、GS は実機の再現ではない）、ライセンスと商標。配色はアプリと同じ変数で、OS の設定に合わせてライト／ダーク。ヘルプは静的な `help.html` としても読める: アプリ内ヘルプの節（`src/app/help/content.tsx`）を `react-dom/server` で HTML にし、Vite のプラグイン（`vite.config.ts` の `helpPage`）が開発サーバーでは `/help.html` をその場で描き、ビルド後は `dist/help.html` に書く。内容の二重管理はしない。起動ダイアログを通らずに読めるので、紹介ページのナビからはこちらに繋ぐ（`./?help` でアプリ内ヘルプを開く入口も残す）。公開は `.github/workflows/pages.yml`（main への push で SoundFont を取得して `BASE_PATH=/MIDIStudio/` でビルドし、GitHub Pages へ）。リポジトリ設定で Pages の Source を GitHub Actions にすると有効になる。
 - **見送った案**: ヘルプの静的 HTML をビルド時に生成する（内容は JSX のまま、必要になれば `renderToStaticMarkup` で作れる）。英語版（まず日本語のみ）。
-- **互換性影響**: なし。`public/images/screenshot.jpg` は README のものと同じ画像。
+- **互換性影響**: なし。画像は `public/images/`（daw.jpg と、ビジュアルモードの visual-list / visual-roll / visual-keys）に置き、README もここを参照する。元のキャプチャからブラウザの枠を除き、幅 1600px の JPEG にしている。
 - **検証**: E2E `smoke.spec.ts`（about.html の見出しと「ブラウザで使う」のリンク、`/?help` でヘルプが開く）。

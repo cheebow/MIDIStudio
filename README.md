@@ -6,7 +6,11 @@ DAW のような視覚的な編集と、レコンポーザのような数値入�
 
 紹介ページ: https://cheebow.github.io/MIDIStudio/about.html （アプリ: https://cheebow.github.io/MIDIStudio/ ）
 
-![MIDI Studio の画面](docs/images/screenshot.jpg)
+![MIDI Studio の画面。上にトラックビュー、下にピアノロール](public/images/daw.jpg)
+
+| ビジュアルモード: 数値リスト | ピアノロール | 鍵盤 |
+| --- | --- | --- |
+| ![数値リスト](public/images/visual-list.jpg) | ![ピアノロール](public/images/visual-roll.jpg) | ![鍵盤](public/images/visual-keys.jpg) |
 
 > 開発中です。編集・再生・録音・書き出しの各機能は自動テスト（単体・結合・Chromium / Firefox / WebKit の E2E）で確認していますが、外部 MIDI キーボード実機での録音と、Safari / Firefox での実際の音は未確認です。
 
