@@ -156,6 +156,25 @@ button.toggle.arm.on { background: var(--error); border-color: var(--error); }
 
 .dialog { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); padding: 0; max-width: min(640px, calc(100vw - 32px)); width: 100%; }
 .dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
+.dialog.wide { max-width: min(960px, calc(100vw - 32px)); }
+.dialog.wide .dialog-body { max-height: 78vh; }
+.help-layout { display: grid; grid-template-columns: 160px 1fr; gap: 16px; min-height: 60vh; }
+.help-nav { display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--border); padding-right: 10px; align-self: start; position: sticky; top: 0; }
+.help-nav button { text-align: left; border: none; background: transparent; padding: 5px 8px; border-radius: 5px; }
+.help-nav button.on { background: var(--selection); color: var(--accent); font-weight: 600; }
+.help-body h3 { margin: 0 0 8px; font-size: 1.1rem; }
+.help-body h4 { margin: 14px 0 4px; font-size: 0.95rem; }
+.help-body ul { padding-left: 1.2em; }
+.help-body li { margin: 4px 0; line-height: 1.5; }
+.help-body .summary td:first-child { white-space: nowrap; }
+.help-key { display: inline-block; padding: 0 5px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; background: var(--bg); font: 0.85em system-ui, sans-serif; }
+.about-head { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+.about-head h3 { margin: 0; font-size: 1.3rem; }
+.about h4 { margin: 14px 0 4px; font-size: 0.95rem; }
+@media (max-width: 640px) {
+  .help-layout { grid-template-columns: 1fr; }
+  .help-nav { flex-direction: row; flex-wrap: wrap; border-right: none; border-bottom: 1px solid var(--border); padding: 0 0 6px; position: static; }
+}
 .dialog header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); }
 .dialog header h2 { margin: 0; font-size: 1rem; }
 .dialog .startup-brand { justify-content: flex-start; gap: 14px; padding: 16px 18px 12px; }

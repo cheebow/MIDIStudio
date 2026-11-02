@@ -144,3 +144,23 @@ test('ADR-051: 表示 › テーマ switches to dark and the choice survives a r
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(238, 240, 243)');
 });
+
+test('ADR-054: F1 opens the help with a table of contents; the About dialog shows the version and the repository', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('F1');
+  const help = page.getByTestId('help-dialog');
+  await expect(help).toBeVisible();
+  await expect(help.getByRole('heading', { level: 3 })).toHaveText('はじめに');
+  await help.getByRole('button', { name: 'ショートカット' }).click();
+  await expect(help.getByRole('heading', { level: 3 })).toHaveText('ショートカット');
+  await expect(help).toContainText('再生 / 一時停止');
+  await page.getByRole('button', { name: '閉じる', exact: true }).click();
+  await menu(page, 'ヘルプ', /GM \/ GS について/);
+  await expect(page.getByTestId('help-dialog').getByRole('heading', { level: 3 })).toHaveText('GM / GS');
+  await page.getByRole('button', { name: '閉じる', exact: true }).click();
+  await menu(page, 'ヘルプ', /MIDI Studio について/);
+  const about = page.getByTestId('about-dialog');
+  await expect(about).toContainText(/バージョン \d+\.\d+\.\d+/);
+  await expect(about.getByRole('link', { name: 'GitHub' })).toHaveAttribute('href', 'https://github.com/cheebow/MIDIStudio');
+});

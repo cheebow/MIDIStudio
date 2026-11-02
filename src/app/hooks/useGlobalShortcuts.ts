@@ -29,6 +29,7 @@ export interface ShortcutDeps {
   saveToBrowser: () => void;
   openProjectFile: () => void;
   toggleVisual: () => void;
+  openHelp: () => void;
   setError: (m: string) => void;
   tryRun: (fn: () => void) => void;
 }
@@ -94,6 +95,11 @@ export function useGlobalShortcuts(d: ShortcutDeps): void {
       }
       const mod = IS_MAC ? e.metaKey : e.ctrlKey;
       const handled = () => e.preventDefault();
+      if (e.key === 'F1' && !mod) {
+        handled();
+        d.openHelp();
+        return;
+      }
       // Mode switches work in every mode (the router ignores keys with Alt / Option).
       if (e.altKey && !mod && !e.shiftKey && (e.code === 'KeyK' || e.code === 'KeyP')) {
         handled();

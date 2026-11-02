@@ -395,7 +395,9 @@ export default function App() {
     removeTrack: () => selectedTrack && store.run(removeTrack(store.project, selectedTrack.id)),
   };
 
-  useGlobalShortcuts({ store, transport, input, step, recorder, actions, ensureAudio, saveToBrowser: () => void saveToBrowser(), openProjectFile, toggleVisual: () => setTmOpen((v) => !v), setError, tryRun });
+  useGlobalShortcuts({ store, transport, input, step, recorder, actions, ensureAudio, saveToBrowser: () => void saveToBrowser(), openProjectFile, toggleVisual: () => setTmOpen((v) => !v), setError, tryRun,
+    openHelp: () => setDialog('help'),
+  });
 
   const services: AppServices = { store, transport, adapter, input, step, recorder, audioReady: audioPhase === 'ready', reportError: setError };
   const setMode = (m: InputMode) => input.setMode(m);

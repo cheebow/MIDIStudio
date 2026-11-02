@@ -254,9 +254,11 @@ export function buildMenus(d: MenuDeps): Menu[] {
     {
       label: 'ヘルプ',
       items: [
-        { label: 'キーボードショートカット', action: () => d.setDialog('shortcuts') },
-        { label: 'GM / GS 互換性について', action: () => d.setDialog('compat') },
-        { label: 'ライセンス / このアプリについて', action: () => d.setDialog('about') },
+        { label: '使い方…', shortcut: 'F1', action: () => d.setDialog('help') },
+        { label: 'キーボードショートカット…', action: () => d.setDialog('shortcuts') },
+        { label: 'GM / GS について…', action: () => d.setDialog('compat') },
+        sep,
+        { label: 'MIDI Studio について…', action: () => d.setDialog('about') },
       ],
     },
   ];

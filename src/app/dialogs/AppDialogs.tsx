@@ -13,9 +13,10 @@ import { HumanizeDialog } from '../../ui/editing/HumanizeDialog';
 import { VelocityDialog } from '../../ui/editing/VelocityDialog';
 import { ExportWavDialog } from '../../ui/export/ExportWavDialog';
 import { useEditorState, useServices } from '../store/context';
-import { AboutDialog, CompatDialog, ShortcutsDialog } from './HelpDialogs';
+import { AboutDialog } from './HelpDialogs';
+import { HelpDialog } from '../help/HelpDialog';
 
-export type DialogKind = null | 'issues' | 'recent' | 'shortcuts' | 'about' | 'compat' | 'diagnostics' | 'keys' | 'record' | 'midi' | 'sysex' | 'quantize' | 'humanize' | 'velocity' | 'wav' | { confirm: string; onYes: () => void };
+export type DialogKind = null | 'issues' | 'recent' | 'shortcuts' | 'about' | 'compat' | 'diagnostics' | 'keys' | 'record' | 'midi' | 'sysex' | 'quantize' | 'humanize' | 'velocity' | 'wav' | 'help' | { confirm: string; onYes: () => void };
 
 export function AppDialogs({ dialog, setDialog, issues, recent, openRecent, midi, onMidiChange, features, soundFont }: { dialog: DialogKind; setDialog: (d: DialogKind) => void; issues: ImportIssue[]; recent: ProjectSummary[]; openRecent: (id: string) => void; midi: MidiInputAdapter; onMidiChange: () => void; features: BrowserFeatures; soundFont: ArrayBuffer | null }) {
   const { store, input, adapter } = useServices();
@@ -97,10 +98,12 @@ export function AppDialogs({ dialog, setDialog, issues, recent, openRecent, midi
           <KeyBindings presets={project.inputPresets} onChange={(p) => store.setInputPresets(p)} />
         </Dialog>
       );
+    case 'help':
+      return <HelpDialog onClose={close} />;
     case 'shortcuts':
-      return <ShortcutsDialog onClose={close} />;
+      return <HelpDialog section="shortcuts" onClose={close} />;
     case 'compat':
-      return <CompatDialog onClose={close} />;
+      return <HelpDialog section="gm-gs" onClose={close} />;
     case 'about':
       return <AboutDialog onClose={close} />;
     case 'diagnostics':
