@@ -1,6 +1,7 @@
 // About: what the app is, version, where it lives, licences (ADR-054).
 import { Dialog } from '../../ui/Dialog';
 import { Logo } from '../../ui/Logo';
+import { SAMPLE_CREDIT, SAMPLE_SONGS } from '../samples';
 
 export const REPOSITORY_URL = 'https://github.com/cheebow/MIDIStudio';
 
@@ -43,6 +44,13 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
             </a>
           </li>
         </ul>
+        <h4>サンプル曲</h4>
+        <p>
+          {SAMPLE_SONGS.map((s) => s.title).join(' / ')} — {SAMPLE_CREDIT}{' '}
+          <a href={`${base}samples/LICENSE.txt`} target="_blank" rel="noreferrer">
+            詳細
+          </a>
+        </p>
         <p className="note">GS の SysEx は保持・編集できますが、Roland SC-55 / SC-88Pro 実機の音色やエフェクトを再現するものではありません。「レコンポーザ」は株式会社カモンミュージックの製品名で、本アプリは同社とは無関係です。</p>
       </div>
     </Dialog>

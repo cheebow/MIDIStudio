@@ -75,6 +75,7 @@ test.describe('startup dialog (ADR-049)', () => {
     const dialog = page.getByTestId('startup-dialog');
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText('新しい曲');
+    await expect(dialog.getByRole('combobox', { name: 'サンプル曲' })).toContainText('VISION');
     await expect(dialog.getByTestId('startup-sound')).toContainText(/読み込み|準備完了/);
     await expect(dialog).toContainText('MIDI キーボード');
     // the song behind the modal is not reachable while it is open
@@ -198,3 +199,16 @@ test('ADR-056: the beginner\'s guide is a static page and an in-app dialog with 
   await dialog.getByRole('button', { name: '7. 保存と書き出し' }).click();
   await expect(dialog.getByRole('heading', { level: 3 })).toHaveText('7. 保存と書き出し');
 });
+
+test('ADR-058: the bundled sample songs open from ファイル › サンプル曲; an untitled file gets the sample title', async ({ page }) => {
+  await page.goto('/');
+  await menu(page, 'ファイル', 'VISION (GS Version)', 'サンプル曲');
+  await expect(page.getByTestId('track-header')).toHaveCount(23);
+  await expect(page.getByTestId('status-info')).toContainText(/VISION \(GS Version\) を読み込みました/);
+  await expect(page.getByRole('dialog')).toHaveCount(0); // import notes do not pop up for a sample
+  await menu(page, 'ファイル', "Merry X'mas For You!", 'サンプル曲');
+  await expect(page.getByTestId('track-header')).toHaveCount(22);
+  await menu(page, 'ヘルプ', /MIDI Studio について/);
+  await expect(page.getByTestId('about-dialog')).toContainText("Merry X'mas For You!");
+});
+

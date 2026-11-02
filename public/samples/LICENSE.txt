@@ -1,0 +1,15 @@
+MIDI Studio サンプル曲 / Sample songs
+
+  vision.mid  VISION (GS Version)
+  xmas.mid    Merry X'mas For You!
+
+作曲・制作: cheebow  © cheebow
+
+これらは MIDI Studio で聴く・編集するためのサンプル曲です。アプリと一緒に配布されますが、
+MIT ライセンスの対象ではありません。曲そのもの（MIDI データ、およびそこから作った音声）の
+再配布・商用利用はできません。個人で聴く・編集して練習する範囲でお使いください。
+
+These songs are composed and produced by cheebow (© cheebow). They are bundled with MIDI
+Studio as samples to listen to and edit inside the app. They are NOT covered by the MIT
+license of the application: redistribution and commercial use of the songs (the MIDI data
+or audio rendered from it) are not permitted. Personal listening and editing practice is fine.

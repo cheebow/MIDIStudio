@@ -5,10 +5,13 @@ import { useState } from 'react';
 import { Dialog } from '../../ui/Dialog';
 import { Logo } from '../../ui/Logo';
 import { midiPref, type AudioPhase, type MidiSetupState } from '../hooks/useAudioEngine';
+import { SAMPLE_SONGS } from '../samples';
 
 export interface StartupChoice {
-  song: 'restore' | 'new';
+  song: 'restore' | 'new' | 'sample';
   useMidi: boolean;
+  /** which sample when song === 'sample' (ADR-058) */
+  sampleId?: string;
 }
 
 export function StartupDialog({
@@ -34,7 +37,8 @@ export function StartupDialog({
   onChooseSoundFont: () => void;
   onStart: (choice: StartupChoice) => void;
 }) {
-  const [song, setSong] = useState<'restore' | 'new'>('new');
+  const [song, setSong] = useState<'restore' | 'new' | 'sample'>('new');
+  const [sampleId, setSampleId] = useState(SAMPLE_SONGS[0].id);
   const [useMidi, setUseMidi] = useState(midiPref() !== 'skip');
   // the autosave offer may arrive after the dialog opened: default to restoring once it is known
   const [restoreSeen, setRestoreSeen] = useState(false);
@@ -77,7 +81,7 @@ export function StartupDialog({
         data-testid="startup-dialog"
         onSubmit={(e) => {
           e.preventDefault();
-          onStart({ song, useMidi: midiChoice && useMidi });
+          onStart({ song, useMidi: midiChoice && useMidi, sampleId });
         }}
       >
         <fieldset>
@@ -89,6 +93,23 @@ export function StartupDialog({
           )}
           <label>
             <input type="radio" name="startup-song" checked={song === 'new'} onChange={() => setSong('new')} /> 新しい曲（ピアノ・ベース・ギター・ドラム）
+          </label>
+          <label className="row">
+            <input type="radio" name="startup-song" checked={song === 'sample'} onChange={() => setSong('sample')} /> サンプル曲
+            <select
+              aria-label="サンプル曲"
+              value={sampleId}
+              onChange={(e) => {
+                setSampleId(e.target.value);
+                setSong('sample');
+              }}
+            >
+              {SAMPLE_SONGS.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title}
+                </option>
+              ))}
+            </select>
           </label>
         </fieldset>
         <fieldset>

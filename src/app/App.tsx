@@ -23,6 +23,7 @@ import { EditorStore } from './store/EditorStore';
 import { EditActionsContext, ServicesContext, type AppActions, type AppServices } from './store/context';
 import { useAudioEngine, startupDialogWanted } from './hooks/useAudioEngine';
 import { StartupDialog, type StartupChoice } from './dialogs/StartupDialog';
+import { SAMPLE_SONGS, sampleUrl } from './samples';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { buildMenus } from './menus';
 import { AppDialogs, type DialogKind } from './dialogs/AppDialogs';
@@ -221,6 +222,7 @@ export default function App() {
       setRestore(null);
       void db.clearAutosave().catch(() => undefined);
     }
+    if (c.song === 'sample' && c.sampleId) void openSample(c.sampleId);
   };
 
   // ------------------------------------------------------------------ file actions
@@ -237,15 +239,33 @@ export default function App() {
   }
 
   async function importMidi(file: File) {
-    const bytes = new Uint8Array(await file.arrayBuffer());
+    importMidiBytes(new Uint8Array(await file.arrayBuffer()), file.name);
+  }
+
+  /** SMF bytes from a file or a bundled sample; `title` replaces an untitled song's name. */
+  function importMidiBytes(bytes: Uint8Array, name: string, opts: { title?: string; silentIssues?: boolean } = {}) {
     const r = openMidiFile(bytes, { decodeText: decodeShiftJis });
     if (!r.ok) {
-      setError(`${file.name} を開けませんでした（現在の曲はそのままです）: ${r.errors.map((e) => e.message).join(' / ')}`);
+      setError(`${name} を開けませんでした（現在の曲はそのままです）: ${r.errors.map((e) => e.message).join(' / ')}`);
       return;
     }
-    loadProject(r.project, { message: `${file.name} を読み込みました（PPQ ${r.project.ppq}、${r.project.tracks.length} トラック）。` });
+    const project = opts.title && r.project.title === '無題' ? { ...r.project, title: opts.title } : r.project;
+    loadProject(project, { message: `${name} を読み込みました（PPQ ${project.ppq}、${project.tracks.length} トラック）。` });
     setIssues(r.issues);
-    if (r.issues.some((i) => i.severity !== 'info')) setDialog('issues');
+    if (!opts.silentIssues && r.issues.some((i) => i.severity !== 'info')) setDialog('issues');
+  }
+
+  /** Opens a bundled sample song (ADR-058). Its import notes stay in ツール › 読み込み時の注意 rather than popping up. */
+  async function openSample(id: string) {
+    const song = SAMPLE_SONGS.find((s) => s.id === id);
+    if (!song) return;
+    try {
+      const res = await fetch(sampleUrl(song));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      importMidiBytes(new Uint8Array(await res.arrayBuffer()), song.title, { title: song.title, silentIssues: true });
+    } catch (e) {
+      setError(`サンプル曲「${song.title}」を読み込めませんでした: ${errorText(e)}`);
+    }
   }
 
   async function openProject(file: File) {
@@ -289,6 +309,9 @@ export default function App() {
   }
   function importMidiFile() {
     guardDirty(() => midiInput?.click());
+  }
+  function openSampleSong(id: string) {
+    guardDirty(() => void openSample(id));
   }
   function chooseSoundFont() {
     sf2Input?.click();
@@ -475,6 +498,7 @@ export default function App() {
       saveToBrowser: () => void saveToBrowser(),
       saveAsFile,
       importMidi: importMidiFile,
+      openSample: openSampleSong,
       exportMidi,
       chooseSoundFont,
     },

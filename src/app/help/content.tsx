@@ -230,6 +230,7 @@ export const HELP_SECTIONS: HelpSection[] = [
         <ul>
           <li>ブラウザに保存（<K>{MOD}S</K>）はこのブラウザの中に保存します。ファイル › 最近のプロジェクトから開けます。編集中の曲は自動保存され、次の起動時に復元を選べます。</li>
           <li>.midstudio として保存 / プロジェクトを開く（<K>{MOD}O</K>）はファイルとしての保存と読み込みです。</li>
+          <li>サンプル曲: ファイル › サンプル曲（起動ダイアログからも）。VISION (GS Version) と Merry X'mas For You!（作曲・制作: cheebow、試聴・編集用）。</li>
           <li>MIDI を読み込む: SMF Format 0 / 1。ノート・CC・SysEx・未知のイベントは捨てずに保持します。MIDI を書き出す: Format 1。</li>
           <li>WAV を書き出す: 内蔵音源でレンダリングします（ミュート／ソロは反映、ループは無視）。</li>
           <li>SoundFont を選ぶ: 手元の .sf2 / .sf3 / .dls を音源にします。</li>

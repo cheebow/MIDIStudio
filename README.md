@@ -21,6 +21,7 @@ DAW のような視覚的な編集と、レコンポーザのような数値入�
 - **ドラムエディター** — 楽器名別のレーン（GM / GS マップ、ユーザーマップ）と画面上のドラムパッド
 - **リストエディター** — `MEAS / STEP / NOTE / K# / ST / GT / VEL` を PC キーボードで数値入力。♩=48 表示にも対応
 - **ミキサー** — Volume / Expression / Pan / Reverb / Chorus。曲頭の CC として保存
+- **サンプル曲** — VISION (GS Version) と Merry X'mas For You!（作曲・制作: cheebow）を同梱。起動ダイアログかファイル › サンプル曲から
 - **ビジュアルモード** — レコンポーザ風のイベントリスト（分割表示・3 種類の追従・譜表）、全トラックのピアノロール、トラックごとの鍵盤で演奏を眺める
 - **演奏と録音** — PC の文字キー、テンキー（任意）、外部 MIDI キーボード。リアルタイム録音とステップ入力。DAW 風のショートカット（L でループ、M / S でミュート／ソロ、`,` `.` で小節移動など）は PC 鍵盤モードと衝突しないよう入力モードで切り替え
 - **ファイル** — SMF Format 0/1 の読み込み、Format 1 の書き出し、内蔵音源での WAV 書き出し、プロジェクトの保存（`.midstudio` とブラウザ内の自動保存）
@@ -74,6 +75,7 @@ MIDI Studio 本体は [MIT ライセンス](LICENSE)（© 2026 cheebow）です�
 - 標準音源: GeneralUser GS v2.0.3 © S. Christian Collins — [public/licenses/GeneralUser-GS-LICENSE.txt](public/licenses/GeneralUser-GS-LICENSE.txt)
 - 音声合成: spessasynth_lib / spessasynth_core（Apache-2.0）— [public/licenses/spessasynth_lib-LICENSE.txt](public/licenses/spessasynth_lib-LICENSE.txt)
 - その他のライブラリ: [public/licenses/THIRD_PARTY.md](public/licenses/THIRD_PARTY.md)
+- サンプル曲（VISION (GS Version)、Merry X'mas For You!）: © cheebow。MIT の対象外で、試聴・編集用です。曲そのものの再配布・商用利用はできません — [public/samples/LICENSE.txt](public/samples/LICENSE.txt)
 
 ## 商標について
 

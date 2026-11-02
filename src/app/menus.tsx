@@ -20,6 +20,7 @@ import type { AppActions } from './store/context';
 import type { Recorder } from './recording/Recorder';
 import type { DialogKind } from './dialogs/AppDialogs';
 import { errorText } from './errorText';
+import { SAMPLE_SONGS } from './samples';
 
 export interface MenuDeps {
   project: MidiProject;
@@ -54,6 +55,7 @@ export interface MenuDeps {
     saveToBrowser: () => void;
     saveAsFile: () => void;
     importMidi: () => void;
+    openSample: (id: string) => void;
     exportMidi: () => void;
     chooseSoundFont: () => void;
   };
@@ -81,6 +83,7 @@ export function buildMenus(d: MenuDeps): Menu[] {
         { label: '.midstudio として保存…', action: d.file.saveAsFile },
         sep,
         { label: 'MIDI を読み込む…', action: d.file.importMidi },
+        { label: 'サンプル曲', items: SAMPLE_SONGS.map((s) => ({ label: s.title, action: () => d.file.openSample(s.id) })) },
         { label: 'MIDI を書き出す…', action: d.file.exportMidi },
         { label: 'WAV を書き出す…', action: () => d.setDialog('wav'), disabled: !d.audioReady, reason: '音源が読み込まれていません' },
         sep,
