@@ -8,6 +8,7 @@ import { compareEvents, policyRank, sortEvents } from '../events/order';
 import type { Command, ProjectPatch } from './history';
 import { SMF_LIMITS } from '../smf/types';
 import { maxOf, minOf } from '../model/numbers';
+import { TimeSignatureMap } from '../timing/timeSignatureMap';
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 /** A new event before it gets an ID and an origin order. */
@@ -90,13 +91,46 @@ export function addEvents(project: MidiProject, trackId: TrackId, events: readon
     // put into and the clip's quantize, move and delete act on it. Events outside every clip stay free (ADR-059).
     const own = project.clips.filter((c) => c.trackId === trackId);
     const joined = new Map<string, string[]>();
+    const free: MidiEvent[] = [];
     for (const e of created) {
       const c = own.find((x) => x.startTick <= e.tick && e.tick < x.endTick);
       if (c) joined.set(c.id, [...(joined.get(c.id) ?? []), e.id]);
+      else free.push(e);
     }
-    if (joined.size) patch.clips = project.clips.map((c) => (joined.has(c.id) ? { ...c, eventIds: [...c.eventIds, ...joined.get(c.id)!] } : c));
+    let clips = joined.size ? project.clips.map((c) => (joined.has(c.id) ? { ...c, eventIds: [...c.eventIds, ...joined.get(c.id)!] } : c)) : project.clips;
+    // Notes put where no clip is get a clip of their own, as recording onto an empty track does in a DAW
+    // (ADR-060): whole bars around the material, clamped to the gap between the neighbouring clips. CC / Program
+    // / SysEx alone (mixer and patch setup) make no clip.
+    if (free.some((e) => e.kind === 'note')) clips = [...clips, ...clipsAroundFreeEvents(project, trackId, own, free)];
+    if (clips !== project.clips) patch.clips = clips;
   }
   return { command: cmd(opts.label ?? 'イベントを追加', patch), ids };
+}
+
+/** One new clip per gap between the track's existing clips that holds free events, on bar boundaries. */
+function clipsAroundFreeEvents(project: MidiProject, trackId: TrackId, own: readonly MidiClip[], free: readonly MidiEvent[]): MidiClip[] {
+  const sig = new TimeSignatureMap(project.ppq, project.conductor.filter((c) => c.kind === 'time-signature'));
+  const barStart = (tick: number) => Math.round(sig.barBeatToTick(sig.tickToBarBeat(tick).bar));
+  const barEndAfter = (tick: number) => Math.round(sig.barBeatToTick(sig.tickToBarBeat(Math.max(0, tick - 1)).bar + 1));
+  const sorted = [...free].sort((a, b) => a.tick - b.tick);
+  const gapOf = (tick: number) => ({
+    lo: maxOf(own.filter((c) => c.endTick <= tick), (c) => c.endTick),
+    hi: minOf(own.filter((c) => c.startTick > tick), (c) => c.startTick),
+  });
+  const groups = new Map<string, MidiEvent[]>();
+  for (const e of sorted) {
+    const g = gapOf(e.tick);
+    const key = `${g.lo}:${g.hi}`;
+    groups.set(key, [...(groups.get(key) ?? []), e]);
+  }
+  return [...groups.values()].map((events) => {
+    const g = gapOf(events[0].tick);
+    const first = events[0].tick;
+    const last = maxOf(events, (e) => (e.kind === 'note' ? e.tick + e.durationTicks : e.tick + 1));
+    const startTick = Math.max(Number.isFinite(g.lo) ? g.lo : 0, barStart(first));
+    const endTick = Math.max(startTick + 1, Math.min(Number.isFinite(g.hi) ? g.hi : Infinity, barEndAfter(last)));
+    return { id: newId('clp'), trackId, startTick, endTick, eventIds: events.map((e) => e.id) };
+  });
 }
 
 function extendClip(c: MidiClip, events: readonly MidiEvent[]): MidiClip {

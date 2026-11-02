@@ -175,14 +175,14 @@ describe('event operations', () => {
 describe('clips (E03 / E04, REQ-PRJ-06)', () => {
   function setup() {
     const s = new Session(createEmptyProject());
-    const { command } = addEvents(s.project, s.track.id, [note(0, 60, 1920), note(480, 62), { kind: 'cc', tick: 960, controller: 7, value: 90 }, note(1440, 64)])!;
-    s.run(command);
     const c = createClip(s.project, s.track.id, 0, 1920);
     s.run(c.command);
+    const { command } = addEvents(s.project, s.track.id, [note(0, 60, 1920), note(480, 62), { kind: 'cc', tick: 960, controller: 7, value: 90 }, note(1440, 64)])!; // join the clip (ADR-059)
+    s.run(command);
     return { s, clipId: c.clipId };
   }
 
-  it('ADR-059: events added inside a clip later (recording, drawing, step input) join that clip; outside stay free', () => {
+  it('ADR-059: events added inside a clip later (recording, drawing, step input) join that clip; the rest gets its own clip', () => {
     const { s, clipId } = setup();
     const before = s.project.clips[0].eventIds.length;
     const r = addEvents(s.project, s.track.id, [note(960, 67), { kind: 'cc', tick: 1919, controller: 1, value: 10 }, note(1920, 69), note(2400, 71)])!;
@@ -190,9 +190,11 @@ describe('clips (E03 / E04, REQ-PRJ-06)', () => {
     const clip = s.project.clips.find((c) => c.id === clipId)!;
     expect(clip.eventIds.length).toBe(before + 2); // the note at 960 and the CC at 1919 (onset inside [0, 1920))
     expect(clip.eventIds).toEqual(expect.arrayContaining(r.ids.slice(0, 2)));
-    expect(clip.eventIds).not.toEqual(expect.arrayContaining(r.ids.slice(2)));
     expect(clip).toMatchObject({ startTick: 0, endTick: 1920 }); // the range is not extended
+    expect(s.project.clips).toHaveLength(2);
+    expect(s.project.clips[1]).toMatchObject({ startTick: 1920, endTick: 3840, eventIds: r.ids.slice(2) }); // ADR-060
     s.undo();
+    expect(s.project.clips).toHaveLength(1);
     expect(s.project.clips[0].eventIds.length).toBe(before);
   });
 
@@ -201,16 +203,35 @@ describe('clips (E03 / E04, REQ-PRJ-06)', () => {
     expect(adoptFreeEvents(s.project, clipId)).toBeNull();
     // an older project: two of the clip's notes were added before clips adopted events, so they are free
     const [a, b] = [s.notes[1].id, s.notes[2].id];
-    const r = addEvents(s.project, s.track.id, [note(2400, 60)])!; // outside the clip, stays free either way
-    s.run(r.command);
     s.run({ label: 'detach', patch: { clips: s.project.clips.map((c) => (c.id === clipId ? { ...c, eventIds: c.eventIds.filter((id) => id !== a && id !== b) } : c)) } });
     expect(freeEventsInClip(s.project, clipId)).toEqual([a, b]);
     s.run(adoptFreeEvents(s.project, clipId));
     expect(freeEventsInClip(s.project, clipId)).toEqual([]);
     expect(s.project.clips[0].eventIds).toEqual(expect.arrayContaining([a, b]));
-    expect(s.project.clips[0].eventIds).not.toContain(r.ids[0]);
     s.undo();
     expect(freeEventsInClip(s.project, clipId)).toEqual([a, b]);
+  });
+
+  it('ADR-060: notes added where no clip is get a bar-aligned clip of their own, clamped to the neighbouring clips; CC alone does not', () => {
+    const s = new Session(createEmptyProject()); // 4/4, PPQ 480 → 1920 per bar
+    s.run(addEvents(s.project, s.track.id, [{ kind: 'cc', tick: 100, controller: 7, value: 90 }])!.command);
+    expect(s.project.clips).toHaveLength(0);
+    const r1 = addEvents(s.project, s.track.id, [note(2000, 60), note(4000, 62, 480)])!; // bar 2 … into bar 3
+    s.run(r1.command);
+    expect(s.project.clips).toHaveLength(1);
+    expect(s.project.clips[0]).toMatchObject({ startTick: 1920, endTick: 5760, eventIds: r1.ids });
+    // a recording that starts in the clip and runs past its end: the inside joins, the rest gets the next clip
+    const r2 = addEvents(s.project, s.track.id, [note(5000, 64), note(6000, 65), note(9000, 67)])!;
+    s.run(r2.command);
+    expect(s.project.clips).toHaveLength(2);
+    expect(s.project.clips[0].eventIds).toEqual([...r1.ids, r2.ids[0]]);
+    expect(s.project.clips[1]).toMatchObject({ startTick: 5760, endTick: 9600, eventIds: r2.ids.slice(1) }); // bar 4 … end of bar 5
+    // a note in the gap before bar 2 is clamped so the new clip does not overlap the first
+    const r3 = addEvents(s.project, s.track.id, [note(500, 70, 1920)])!;
+    s.run(r3.command);
+    expect(s.project.clips[2]).toMatchObject({ startTick: 0, endTick: 1920, eventIds: r3.ids });
+    s.undo();
+    expect(s.project.clips).toHaveLength(2);
   });
 
   it('moving a clip moves all its events (CC included) and keeps durations', () => {
@@ -669,12 +690,12 @@ describe('clip groups (ADR-057): copy / paste / duplicate / move / delete severa
     const s = new Session(createEmptyProject());
     s.run(addTrack(s.project, { name: 'B', channel: 1 }).command);
     const [a, b] = s.project.tracks;
-    s.run(addEvents(s.project, a.id, [note(0, 60), note(480, 62)])!.command);
-    s.run(addEvents(s.project, b.id, [note(960, 40, 960), { kind: 'cc', tick: 960, controller: 7, value: 100 }])!.command);
     const ca = createClip(s.project, a.id, 0, 960);
     s.run(ca.command);
     const cb = createClip(s.project, b.id, 960, 1920, 'clip B');
     s.run(cb.command);
+    s.run(addEvents(s.project, a.id, [note(0, 60), note(480, 62)])!.command); // join the clips (ADR-059)
+    s.run(addEvents(s.project, b.id, [note(960, 40, 960), { kind: 'cc', tick: 960, controller: 7, value: 100 }])!.command);
     s.run(updateClip(s.project, cb.clipId, { name: 'bass', color: '#123456' }));
     return { s, a, b, ids: [ca.clipId, cb.clipId] };
   }

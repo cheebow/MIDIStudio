@@ -889,9 +889,15 @@ function drawTrackClips(ctx: CanvasRenderingContext2D, project: MidiProject, tra
     const c = clipOf.get(e.id);
     const nx = e.tick * pxPerTick - scrollX;
     const ny = bodyTop + ((hi - e.pitch) / range) * (bodyH - 3);
-    ctx.fillStyle = c ? withAlpha(c.color ?? track.color, 0.95) : withAlpha(th.accent, 0.55);
-    if (drums) ctx.fillRect(nx, ny, 3, 3);
-    else ctx.fillRect(nx, ny, Math.max(2, e.durationTicks * pxPerTick - 0.5), 3);
+    const nw = drums ? 3 : Math.max(2, e.durationTicks * pxPerTick - 0.5);
+    if (c) {
+      ctx.fillStyle = withAlpha(c.color ?? track.color, 0.95);
+      ctx.fillRect(nx, ny, nw, 3);
+    } else {
+      // not in any clip (an older project, or a note moved out): an outline, so it reads as "loose"
+      ctx.strokeStyle = withAlpha(th.accent, 0.8);
+      ctx.strokeRect(nx + 0.5, ny + 0.5, Math.max(2, nw - 1), 3);
+    }
   }
   ctx.restore();
 }
