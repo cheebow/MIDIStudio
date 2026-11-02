@@ -96,6 +96,7 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
   return (
     <Dialog title="MIDI Studio について" onClose={onClose}>
       <p>ブラウザ内で完結する MIDI シーケンサー（開発中）。曲データや音源を外部に送信しません。</p>
+      <p>MIDI Studio 本体: MIT ライセンス © 2026 cheebow</p>
       <ul>
         <li>
           標準音源: GeneralUser GS v2.0.3 © S. Christian Collins —{' '}

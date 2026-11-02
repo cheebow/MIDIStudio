@@ -75,7 +75,7 @@ npm run dev
 - 音声合成: spessasynth_lib / spessasynth_core（Apache-2.0）— [public/licenses/spessasynth_lib-LICENSE.txt](public/licenses/spessasynth_lib-LICENSE.txt)
 - その他の同梱ライブラリ: [public/licenses/THIRD_PARTY.md](public/licenses/THIRD_PARTY.md)
 
-MIDI Studio 本体のライセンスは公開時に追記します。
+MIDI Studio 本体は [MIT ライセンス](LICENSE)（© 2026 cheebow）です。同梱の音源・ライブラリはそれぞれのライセンスに従います。
 
 ## 商標について
 
