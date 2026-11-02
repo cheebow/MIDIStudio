@@ -89,6 +89,9 @@ a { color: var(--accent); }
 .toolbar-sub { padding: 4px 10px; }
 .zoom-buttons button { padding: 0 8px; min-width: 24px; height: 20px; line-height: 1; font-size: 0.9rem; }
 .arr-corner { box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; padding: 0 4px; border-bottom: 1px solid var(--border); flex: none; }
+.arr-tools { margin-right: auto; }
+.arr-tools .icon-btn { padding: 0 6px; height: 20px; }
+.arr-tools .icon-btn .icon { width: 14px; height: 14px; }
 .segmented { display: inline-flex; }
 .segmented button { border-radius: 0; }
 .segmented button:first-child { border-radius: 5px 0 0 5px; }

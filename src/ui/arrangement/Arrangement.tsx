@@ -18,6 +18,7 @@ import { useEditActions, useEditorState, useServices } from '../../app/store/con
 import { conductorMarks, drawLoopRuler, drawMarkerLane, drawMarkerLines, drawPlayhead, drawRulerConductorMarks, drawTempoLane, fitCanvas, readTheme } from '../canvas';
 import { useAnimationLoop, useDragState, useElementSize, usePlayheadFollow, useSignatureMap, useZoomAnchor } from '../hooks';
 import { useThemeVersion } from '../../app/theme';
+import { PencilIcon, SelectIcon } from '../icons';
 import { selectedTrack } from '../../core/model/selectedTrack';
 
 const RULER_H = 24;
@@ -654,6 +655,15 @@ export function Arrangement() {
     <div className="arrangement">
       <div className="track-headers" onWheel={(e) => scrollRef.current && (scrollRef.current.scrollTop += e.deltaY)}>
         <div className="arr-corner" style={{ height: RULER_H }}>
+          {/* same tool state as the piano roll / drum editor; shown here too so the draw mode is discoverable from the track view */}
+          <span className="segmented arr-tools" role="group" aria-label="トラックビューのツール">
+            <button aria-label="選択" aria-pressed={tool === 'select'} className={`icon-btn${tool === 'select' ? ' on' : ''}`} onClick={() => store.setTool('select')} title="選択ツール (V): クリックで選択、ドラッグで移動、空いているところのドラッグで範囲選択" data-testid="arr-tool-select">
+              <SelectIcon />
+            </button>
+            <button aria-label="描画" aria-pressed={tool === 'draw'} className={`icon-btn${tool === 'draw' ? ' on' : ''}`} onClick={() => store.setTool('draw')} title="描画ツール (P): 空いているところをドラッグでクリップ（リージョン）を作成" data-testid="arr-tool-draw">
+              <PencilIcon />
+            </button>
+          </span>
           <span className="segmented zoom-buttons" role="group" aria-label="トラックビューの拡大・縮小">
             <button onClick={() => store.updateSettings(arrangementZoomPatch(settings, 'out'))} aria-label="トラックビューを縮小" title="横方向に縮小">
               −

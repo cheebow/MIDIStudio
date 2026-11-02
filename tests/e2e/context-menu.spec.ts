@@ -135,8 +135,11 @@ test('ADR-057: Shift+click / rubber band select clips across tracks; ⌘D, copy 
   expect(await sorted()).toEqual([]);
   await page.keyboard.press(`${mod}+v`);
   expect((await sorted()).length).toBe(2);
-  // with the draw tool (P) a drag on empty space creates a clip instead: the new clip at bar 5 can be deleted on its own
-  await page.keyboard.press('p');
+  // with the draw tool a drag on empty space creates a clip instead: the new clip at bar 5 can be deleted on its own.
+  // The tool is switched from the track view's own buttons (shared state with the piano roll; P / V do the same)
+  await expect(page.getByTestId('arr-tool-select')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('arr-tool-draw').click();
+  await expect(page.getByTestId('arr-tool-draw')).toHaveAttribute('aria-pressed', 'true');
   await page.mouse.move(box.x + bar * 5 + 4, p.y);
   await page.mouse.down();
   await page.mouse.move(box.x + bar * 6 - 4, p.y, { steps: 4 });
