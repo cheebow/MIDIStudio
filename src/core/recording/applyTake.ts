@@ -1,0 +1,45 @@
+// Turns a finished take into ONE undoable command (Undo restores the state before recording).
+import type { Command } from '../editing/history';
+import { addEvents, type NewEvent } from '../editing/operations';
+import type { MidiProject } from '../model/types';
+import { snapTick } from '../timing/grid';
+import type { Rational } from '../timing/rational';
+import type { TakeResult } from './liveTake';
+
+export type RecordMode = 'overdub' | 'replace';
+export type LoopTakeChoice = 'merge' | 'last';
+
+export interface ApplyOptions {
+  mode: RecordMode;
+  loopChoice?: LoopTakeChoice;
+  /** quantize note onsets of the new material (applied to the recording only, INPUT_RECORDING 5-7) */
+  quantize?: Rational | null;
+  /** Replace range: defaults to the recorded range (punch range when punching) */
+  replaceRange?: { startTick: number; endTick: number };
+}
+
+export function takeToCommand(project: MidiProject, trackId: string, take: TakeResult, opts: ApplyOptions): { command: Command; ids: string[] } | null {
+  const takes = opts.loopChoice === 'last' ? take.takes.slice(-1) : take.takes;
+  let events: NewEvent[] = takes.flatMap((t) => t.events);
+  if (opts.quantize) {
+    const g = opts.quantize;
+    events = events.map((e) => (e.kind === 'note' ? { ...e, tick: snapTick(e.tick, g).tick } : e));
+  }
+  let base = project;
+  let patch = {};
+  if (opts.mode === 'replace') {
+    const r = opts.replaceRange ?? take.range;
+    const track = project.tracks.find((t) => t.id === trackId);
+    if (track) {
+      // Replace removes notes and controller data whose onset is in the range (SysEx / meta stay).
+      const removable = new Set(track.events.filter((e) => e.tick >= r.startTick && e.tick < r.endTick && e.kind !== 'sysex' && e.kind !== 'meta' && e.kind !== 'raw').map((e) => e.id));
+      const tracks = project.tracks.map((t) => (t.id === trackId ? { ...t, events: t.events.filter((e) => !removable.has(e.id)) } : t));
+      const clips = project.clips.map((c) => (c.trackId === trackId ? { ...c, eventIds: c.eventIds.filter((id) => !removable.has(id)) } : c));
+      base = { ...project, tracks, clips };
+      patch = { tracks, clips };
+    }
+  }
+  const added = events.length ? addEvents(base, trackId, events, { label: '録音' }) : null;
+  if (!added && opts.mode !== 'replace') return null;
+  return { command: { label: opts.mode === 'replace' ? '録音（置き換え）' : '録音', patch: { ...patch, ...(added?.command.patch ?? {}) } }, ids: added?.ids ?? [] };
+}

@@ -1,0 +1,838 @@
+// Track view (REQ-EDT-01/02, UI_DESIGN 3): track headers + a canvas with ruler, clips, loop range
+// and playhead. Only the visible range is drawn; the playhead lives on its own overlay canvas
+// redrawn per animation frame (the song is not redrawn every frame).
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { arrangementZoomPatch } from '../zoom';
+import { draggedLoop, hitLoop, loopCursor, loopSnap, type LoopDrag } from '../loopDrag';
+import { createClip, deleteClip, duplicateClip, moveClip, reorderTracks, resizeClip, splitClip, updateClip, updateTrack } from '../../core/editing/operations';
+import { pasteEvents } from '../../core/editing/clipboard';
+import { isSecondaryClick, useContextMenu } from '../menu/ContextMenu';
+import { Dialog } from '../Dialog';
+import { deleteConductorEvent } from '../../core/editing/conductorOps';
+import { ConductorEventDialog, conductorValueText, KIND_NAMES, type ConductorDialogTarget, type ConductorKind } from '../tempo/conductorUi';
+import type { MenuItem } from '../menu/MenuBar';
+import type { MidiClip, MidiProject, MidiTrack } from '../../core/model/types';
+import { snapTick, gridTicks, gridLabel } from '../../core/timing/grid';
+import { useEditActions, useEditorState, useServices } from '../../app/store/context';
+import { conductorMarks, drawLoopRuler, drawMarkerLane, drawMarkerLines, drawPlayhead, drawRulerConductorMarks, drawTempoLane, fitCanvas, readTheme } from '../canvas';
+import { useAnimationLoop, useDragState, useElementSize, usePlayheadFollow, useSignatureMap, useZoomAnchor } from '../hooks';
+import { useThemeVersion } from '../../app/theme';
+import { selectedTrack } from '../../core/model/selectedTrack';
+
+const RULER_H = 24;
+/** tempo lane under the bar ruler */
+const COND_H = 26;
+/** marker lane between the ruler and the tempo lane (only when the song has markers) */
+const MARKER_H = 18;
+const TRACK_H = 48;
+
+function songEnd(p: MidiProject): number {
+  let end = p.ppq * 4 * 16;
+  for (const t of p.tracks) {
+    end = Math.max(end, t.endOfTrackTick ?? 0);
+    for (const e of t.events) end = Math.max(end, e.kind === 'note' ? e.tick + e.durationTicks : e.tick);
+  }
+  for (const c of p.clips) end = Math.max(end, c.endTick);
+  return end + p.ppq * 4 * 8;
+}
+
+/** half width in px of the grab zone at a clip edge */
+const EDGE_PX = 4;
+
+type Drag =
+  | { kind: 'clip'; clip: MidiClip; startX: number; dx: number; duplicate: boolean; trackOffset: number; startY: number }
+  /** dragging a clip edge: the new tick of that edge (ADR-040) */
+  | { kind: 'resize'; clip: MidiClip; edge: 'start' | 'end'; tick: number }
+  | { kind: 'create'; trackId: string; startTick: number; endTick: number }
+  | { kind: 'seek' }
+  | LoopDrag;
+
+/** track-header drag: the track being moved and the insertion index under the pointer (0..n) */
+interface HeaderDrag {
+  trackId: string;
+  from: number;
+  to: number;
+}
+
+export function Arrangement() {
+  const { store, transport, recorder, reportError } = useServices();
+  const actions = useEditActions();
+  const { project, selection } = useEditorState();
+  const settings = project.settings;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const follow = usePlayheadFollow();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
+  const [scrollLeft, setScrollX] = useState(0);
+  const [scrollY, setScrollY] = useState(0);
+  const { w: viewW, h: viewH } = useElementSize(scrollRef);
+  const [drag, dragRef, setDrag] = useDragState<Drag>();
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [headerDrag, setHeaderDragState] = useState<HeaderDrag | null>(null);
+  const headerDragRef = useRef<HeaderDrag | null>(null);
+  const headersClipRef = useRef<HTMLDivElement>(null);
+  const setHeaderDrag = (d: HeaderDrag | null) => {
+    headerDragRef.current = d;
+    setHeaderDragState(d);
+  };
+  /** last pointer y of a header drag (client coordinates), for the auto-scroll loop */
+  const headerDragY = useRef(0);
+  const headerDragActive = headerDrag !== null;
+
+  /** insertion index under clientY, read from the live scroll position (not the render-time state) */
+  const updateDropIndex = (clientY: number) => {
+    const d = headerDragRef.current;
+    const el = headersClipRef.current;
+    const sc = scrollRef.current;
+    if (!d || !el || !sc) return;
+    const n = store.project.tracks.length;
+    const to = Math.max(0, Math.min(n, Math.round((clientY - el.getBoundingClientRect().top + sc.scrollTop) / TRACK_H)));
+    if (to !== d.to) setHeaderDrag({ ...d, to });
+  };
+
+  const finishHeaderDrag = () => {
+    const d = headerDragRef.current;
+    setHeaderDrag(null);
+    if (!d) return;
+    const ids = store.project.tracks.map((x) => x.id);
+    const insertAt = d.to > d.from ? d.to - 1 : d.to;
+    if (insertAt === d.from || d.from >= ids.length) return;
+    ids.splice(insertAt, 0, ...ids.splice(d.from, 1));
+    store.run(reorderTracks(store.project, ids));
+  };
+
+  // While a header drag is active: auto-scroll near the top / bottom edge of the header list, and
+  // make sure the drag always ends (pointerup anywhere, window blur, Escape cancels) so a header
+  // can never stay in its faded "dragging" state.
+  useEffect(() => {
+    if (!headerDragActive) return;
+    const end = () => finishHeaderDrag();
+    const cancel = () => setHeaderDrag(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') cancel();
+    };
+    window.addEventListener('pointerup', end);
+    window.addEventListener('blur', cancel);
+    window.addEventListener('keydown', onKey, true);
+    let raf = 0;
+    const tick = () => {
+      const el = headersClipRef.current;
+      const sc = scrollRef.current;
+      if (el && sc) {
+        const r = el.getBoundingClientRect();
+        const y = headerDragY.current;
+        const dir = y < r.top + 24 ? -1 : y > r.bottom - 24 ? 1 : 0;
+        if (dir) {
+          const before = sc.scrollTop;
+          sc.scrollTop += dir * 8;
+          if (sc.scrollTop !== before) updateDropIndex(y);
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('blur', cancel);
+      window.removeEventListener('keydown', onKey, true);
+      cancelAnimationFrame(raf);
+    };
+    // the handlers only read refs and the store, which do not change while a drag is active
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headerDragActive]);
+  const [clipEdit, setClipEdit] = useState<MidiClip | null>(null);
+  const [conductorEdit, setConductorEdit] = useState<ConductorDialogTarget | null>(null);
+  const ctxMenu = useContextMenu();
+
+  const ppq = project.ppq;
+  const pxPerTick = settings.horizontalZoom / ppq;
+  const sig = useSignatureMap(project);
+  const themeVersion = useThemeVersion();
+  const end = useMemo(() => songEnd(project), [project]);
+  const marks = useMemo(() => conductorMarks(project.conductor), [project.conductor]);
+  const markerH = marks.some((m) => m.kind === 'marker') ? MARKER_H : 0;
+  /** fixed area above the track lanes: ruler, marker lane (if any), tempo lane */
+  const HEAD_H = RULER_H + markerH + COND_H;
+  /** one bar of margin before bar 1 (ADR-045 追記): drawing uses scrollX = scrollLeft − lead, so tick 0 sits `leadPx` in */
+  const leadPx = Math.round(sig.ticksPerBar(0) * pxPerTick);
+  const scrollX = scrollLeft - leadPx;
+  useZoomAnchor(scrollRef, pxPerTick, leadPx, viewW);
+  const totalW = end * pxPerTick + leadPx;
+  const height = HEAD_H + project.tracks.length * TRACK_H;
+  const snapGrid = useMemo(() => (settings.snapEnabled ? gridTicks(ppq, { division: 4, kind: 'straight' }) : null), [ppq, settings.snapEnabled]);
+  const selectedTrackId = selectedTrack(project)?.id;
+
+  const tickAt = (x: number) => Math.max(0, (x + scrollX) / pxPerTick);
+  const snap = (t: number) => (snapGrid ? snapTick(t, snapGrid).tick : Math.round(t));
+
+  // Static layer: ruler, lanes, clips. Redrawn when the project / view changes.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const h = Math.max(HEAD_H, Math.min(height, viewH));
+    const ctx = fitCanvas(canvas, viewW, h);
+    if (!ctx) return;
+    const th = readTheme(canvas);
+    ctx.fillStyle = th.panel;
+    ctx.fillRect(0, 0, viewW, h);
+    if (scrollX < 0) {
+      // the margin before bar 1 is shaded like a black-key row: outside the song
+      ctx.fillStyle = th.blackKey;
+      ctx.fillRect(0, 0, -scrollX, h);
+    }
+    const t0 = scrollX / pxPerTick;
+    const t1 = (scrollX + viewW) / pxPerTick;
+    // loop range (the preview while its edges / band are dragged on the ruler)
+    const loopView = drag?.kind === 'loop' ? drag.preview : project.loop;
+    if (loopView.enabled) {
+      ctx.fillStyle = th.loop;
+      const lx = loopView.startTick * pxPerTick - scrollX;
+      ctx.fillRect(lx, 0, (loopView.endTick - loopView.startTick) * pxPerTick, h);
+    }
+    // bar lines and ruler labels
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    let bar = sig.tickToBarBeat(Math.max(0, t0)).bar;
+    for (let guard = 0; guard < 2000; guard++, bar++) {
+      const tick = sig.barBeatToTick(bar);
+      if (tick > t1) break;
+      const x = Math.round(tick * pxPerTick - scrollX) + 0.5;
+      ctx.strokeStyle = th.gridStrong;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+    // lanes
+    project.tracks.forEach((track, i) => {
+      const y = HEAD_H + i * TRACK_H - scrollY;
+      if (y + TRACK_H < HEAD_H || y > h) return;
+      if (track.id === selectedTrackId) {
+        ctx.fillStyle = th.selection;
+        ctx.fillRect(0, y, viewW, TRACK_H);
+      }
+      ctx.strokeStyle = th.border;
+      ctx.beginPath();
+      ctx.moveTo(0, y + TRACK_H + 0.5);
+      ctx.lineTo(viewW, y + TRACK_H + 0.5);
+      ctx.stroke();
+      drawTrackClips(ctx, project, track, y, t0, t1, pxPerTick, scrollX, selection.clipIds, th.accent, th.noteSelected, th.text);
+    });
+    drawMarkerLines(ctx, marks, pxPerTick, scrollX, viewW, HEAD_H, h, th);
+    // ruler + tempo lane on top (fixed while the lanes scroll vertically)
+    ctx.fillStyle = th.panel;
+    ctx.fillRect(0, 0, viewW, HEAD_H);
+    if (scrollX < 0) {
+      ctx.fillStyle = th.blackKey;
+      ctx.fillRect(0, 0, -scrollX, HEAD_H);
+    }
+    drawLoopRuler(ctx, loopView, pxPerTick, scrollX, RULER_H, th);
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    const barLabelEnd = new Map<number, number>();
+    let rbar = sig.tickToBarBeat(Math.max(0, t0)).bar;
+    for (let guard = 0; guard < 2000; guard++, rbar++) {
+      const tick = sig.barBeatToTick(rbar);
+      if (tick > t1) break;
+      const x = Math.round(tick * pxPerTick - scrollX) + 0.5;
+      ctx.strokeStyle = th.gridStrong;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, HEAD_H);
+      ctx.stroke();
+      ctx.fillStyle = th.muted;
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.fillText(String(rbar), x + 3, RULER_H / 2);
+      barLabelEnd.set(Math.round(tick), x + 3 + ctx.measureText(String(rbar)).width);
+    }
+    drawRulerConductorMarks(ctx, marks.filter((m) => m.kind === 'signature' || m.kind === 'key'), pxPerTick, scrollX, viewW, RULER_H, th, (t) => barLabelEnd.get(t) ?? -Infinity);
+    ctx.strokeStyle = th.border;
+    ctx.beginPath();
+    ctx.moveTo(0, RULER_H + 0.5);
+    ctx.lineTo(viewW, RULER_H + 0.5);
+    ctx.stroke();
+    if (markerH) {
+      drawMarkerLane(ctx, marks, pxPerTick, scrollX, viewW, RULER_H, markerH, th);
+      ctx.strokeStyle = th.border;
+      ctx.beginPath();
+      ctx.moveTo(0, RULER_H + markerH + 0.5);
+      ctx.lineTo(viewW, RULER_H + markerH + 0.5);
+      ctx.stroke();
+    }
+    drawTempoLane(ctx, marks, pxPerTick, scrollX, viewW, RULER_H + markerH, COND_H, th);
+    ctx.strokeStyle = th.border;
+    ctx.beginPath();
+    ctx.moveTo(0, HEAD_H + 0.5);
+    ctx.lineTo(viewW, HEAD_H + 0.5);
+    ctx.stroke();
+    // drag previews
+    if (drag?.kind === 'create') {
+      const i = project.tracks.findIndex((t) => t.id === drag.trackId);
+      const a = Math.min(drag.startTick, drag.endTick);
+      const b = Math.max(drag.startTick, drag.endTick);
+      ctx.strokeStyle = th.accent;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(a * pxPerTick - scrollX + 0.5, HEAD_H + i * TRACK_H - scrollY + 4.5, (b - a) * pxPerTick, TRACK_H - 9);
+      ctx.setLineDash([]);
+    }
+    if (drag?.kind === 'clip' && drag.dx !== 0) {
+      const i = project.tracks.findIndex((t) => t.id === drag.clip.trackId) + drag.trackOffset;
+      ctx.strokeStyle = th.accent;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect((drag.clip.startTick + drag.dx) * pxPerTick - scrollX + 0.5, HEAD_H + i * TRACK_H - scrollY + 3.5, (drag.clip.endTick - drag.clip.startTick) * pxPerTick, TRACK_H - 7);
+      ctx.setLineDash([]);
+    }
+    if (drag?.kind === 'resize') {
+      const i = project.tracks.findIndex((t) => t.id === drag.clip.trackId);
+      const a = drag.edge === 'start' ? drag.tick : drag.clip.startTick;
+      const b = drag.edge === 'end' ? drag.tick : drag.clip.endTick;
+      ctx.strokeStyle = th.accent;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(a * pxPerTick - scrollX + 0.5, HEAD_H + i * TRACK_H - scrollY + 3.5, (b - a) * pxPerTick, TRACK_H - 7);
+      ctx.setLineDash([]);
+    }
+  }, [project, viewW, viewH, height, scrollX, scrollY, pxPerTick, sig, selection.clipIds, selectedTrackId, drag, marks, markerH, HEAD_H, themeVersion]);
+
+  // Playhead overlay: redrawn every animation frame, nothing else.
+  useAnimationLoop(() => {
+    const canvas = overlayRef.current;
+    if (!canvas) return;
+    const oh = Math.max(HEAD_H, Math.min(height, viewH));
+    const ctx = fitCanvas(canvas, viewW, oh);
+    if (!ctx) return;
+    ctx.clearRect(0, 0, viewW, oh);
+    const pos = transport.getPosition();
+    const x = Math.round(pos.tick * pxPerTick - scrollX) + 0.5;
+    drawPlayhead(ctx, canvas, x, oh);
+    // notes being recorded, as mini notes in their lanes
+    const live = recorder.livePreview();
+    if (live.size) {
+      ctx.fillStyle = 'rgba(229,72,77,0.9)';
+      project.tracks.forEach((t, i) => {
+        const notes = live.get(t.id);
+        if (!notes) return;
+        const y0 = HEAD_H + i * TRACK_H - scrollY;
+        for (const n of notes) ctx.fillRect(n.tick * pxPerTick - scrollX, y0 + 6 + ((127 - n.pitch) / 127) * (TRACK_H - 12), Math.max(2, n.durationTicks * pxPerTick), 2);
+      });
+    }
+    follow(pos, x, viewW, scrollRef.current, sig, pxPerTick, settings.followPlayback);
+  }, [transport, viewW, viewH, height, pxPerTick, scrollX, scrollY, settings.followPlayback, recorder, project.tracks, sig, HEAD_H, follow]);
+
+  function hitClip(x: number, y: number): MidiClip | null {
+    const i = Math.floor((y - HEAD_H + scrollY) / TRACK_H);
+    const track = project.tracks[i];
+    if (!track) return null;
+    const t = tickAt(x);
+    return project.clips.find((c) => c.trackId === track.id && t >= c.startTick && t < c.endTick) ?? null;
+  }
+
+  /** a clip edge within EDGE_PX of x in the lane at y (edges win over the clip body) */
+  function hitClipEdge(x: number, y: number): { clip: MidiClip; edge: 'start' | 'end' } | null {
+    const i = Math.floor((y - HEAD_H + scrollY) / TRACK_H);
+    const track = project.tracks[i];
+    if (!track) return null;
+    let best: { clip: MidiClip; edge: 'start' | 'end' } | null = null;
+    let bestD = EDGE_PX + 0.001;
+    for (const c of project.clips) {
+      if (c.trackId !== track.id) continue;
+      const ds = Math.abs(c.startTick * pxPerTick - scrollX - x);
+      const de = Math.abs(c.endTick * pxPerTick - scrollX - x);
+      if (ds < bestD) {
+        best = { clip: c, edge: 'start' };
+        bestD = ds;
+      }
+      if (de < bestD) {
+        best = { clip: c, edge: 'end' };
+        bestD = de;
+      }
+    }
+    return best;
+  }
+
+  function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (isSecondaryClick(e)) return; // the context menu handles it
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    if (y < HEAD_H) {
+      const hit = y < RULER_H ? hitLoop(x, y, project.loop, pxPerTick, scrollX, RULER_H) : null;
+      if (hit) setDrag({ kind: 'loop', hit, startX: x, origin: project.loop, preview: project.loop });
+      else {
+        transport.seek(snap(tickAt(x)));
+        setDrag({ kind: 'seek' });
+      }
+      return;
+    }
+    const i = Math.floor((y - HEAD_H + scrollY) / TRACK_H);
+    const track = project.tracks[i];
+    if (!track) return;
+    store.updateSettings({ selectedTrackId: track.id });
+    const edge = hitClipEdge(x, y);
+    if (edge) {
+      store.setSelection({ ...selection, eventIds: new Set(), clipIds: new Set([edge.clip.id]), trackIds: new Set([track.id]) });
+      setDrag({ kind: 'resize', clip: edge.clip, edge: edge.edge, tick: edge.edge === 'start' ? edge.clip.startTick : edge.clip.endTick });
+      return;
+    }
+    const clip = hitClip(x, y);
+    if (clip) {
+      // selecting a region clears note selection so Delete acts on the region
+      store.setSelection({ ...selection, eventIds: new Set(), clipIds: new Set([clip.id]), trackIds: new Set([track.id]) });
+      setDrag({ kind: 'clip', clip, startX: x, dx: 0, duplicate: e.altKey, trackOffset: 0, startY: y });
+    } else {
+      store.setSelection({ ...selection, clipIds: new Set(), trackIds: new Set([track.id]) });
+      const t = snap(tickAt(x));
+      setDrag({ kind: 'create', trackId: track.id, startTick: t, endTick: t });
+    }
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+    const drag = dragRef.current;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    if (!drag) {
+      e.currentTarget.style.cursor = y < RULER_H ? loopCursor(hitLoop(x, y, project.loop, pxPerTick, scrollX, RULER_H)) || 'default' : y >= HEAD_H && hitClipEdge(x, y) ? 'ew-resize' : 'default';
+      return;
+    }
+    if (drag.kind === 'loop') setDrag({ ...drag, preview: draggedLoop(drag.origin, drag.hit, (x - drag.startX) / pxPerTick, loopSnap(sig, e.shiftKey), sig.ticksPerBeat(0)) });
+    else if (drag.kind === 'seek') transport.seek(snap(tickAt(x)));
+    else if (drag.kind === 'create') setDrag({ ...drag, endTick: snap(tickAt(x)) });
+    else if (drag.kind === 'resize') {
+      const t = snap(tickAt(x));
+      // the clip keeps at least one tick
+      const tick = drag.edge === 'start' ? Math.max(0, Math.min(drag.clip.endTick - 1, t)) : Math.max(drag.clip.startTick + 1, t);
+      setDrag({ ...drag, tick });
+    } else {
+      const raw = (x - drag.startX) / pxPerTick;
+      const newStart = Math.max(0, snap(drag.clip.startTick + raw));
+      const trackOffset = drag.duplicate ? Math.round((y - drag.startY) / TRACK_H) : 0;
+      setDrag({ ...drag, dx: newStart - drag.clip.startTick, duplicate: drag.duplicate || e.altKey, trackOffset });
+    }
+  }
+
+  function onPointerUp() {
+    const d = dragRef.current;
+    setDrag(null);
+    if (!d) return;
+    try {
+      if (d.kind === 'loop') {
+        if (d.preview.startTick !== d.origin.startTick || d.preview.endTick !== d.origin.endTick) store.setLoop(d.preview);
+      } else if (d.kind === 'create') {
+        const a = Math.min(d.startTick, d.endTick);
+        const b = Math.max(d.startTick, d.endTick);
+        if (b - a >= 1) {
+          const r = createClip(store.project, d.trackId, a, b);
+          store.run(r.command);
+          store.setSelection({ ...store.getState().selection, clipIds: new Set([r.clipId]) });
+        }
+      } else if (d.kind === 'resize') {
+        store.run(resizeClip(store.project, d.clip.id, d.edge === 'start' ? { startTick: d.tick } : { endTick: d.tick }));
+      } else if (d.kind === 'clip' && (d.dx !== 0 || d.trackOffset !== 0)) {
+        if (d.duplicate) {
+          const idx = project.tracks.findIndex((t) => t.id === d.clip.trackId) + d.trackOffset;
+          const target = project.tracks[Math.max(0, Math.min(project.tracks.length - 1, idx))];
+          const r = duplicateClip(store.project, d.clip.id, d.clip.startTick + d.dx, target.id);
+          store.run(r.command);
+          store.setSelection({ ...store.getState().selection, clipIds: new Set([r.clipId]) });
+        } else store.run(moveClip(store.project, d.clip.id, d.dx));
+      }
+    } catch (err) {
+      console.warn(err);
+    }
+  }
+
+  /** which header lane a y falls in */
+  const headLane = (y: number): 'ruler' | 'marker' | 'tempo' | null => (y < RULER_H ? 'ruler' : y < RULER_H + markerH ? 'marker' : y < HEAD_H ? 'tempo' : null);
+
+  /** tempo-track event of `kind` drawn near x (within a few px), the nearest one */
+  function conductorNear(kind: ConductorKind, x: number) {
+    let best: (typeof project.conductor)[number] | undefined;
+    let bestD = 7;
+    for (const c of project.conductor) {
+      if (c.kind !== kind) continue;
+      const d = Math.abs(c.tick * pxPerTick - scrollX - x);
+      if (d < bestD) {
+        best = c;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  function conductorItems(kind: ConductorKind, x: number, tick: number, addTick = tick): MenuItem[] {
+    const near = conductorNear(kind, x);
+    const name = KIND_NAMES[kind];
+    return [
+      { label: `ここに${name}を追加…`, action: () => setConductorEdit({ kind, tick: addTick }) },
+      ...(near
+        ? [
+            { label: `この${name}（${conductorValueText(near)}）を変更…`, action: () => setConductorEdit({ kind, tick: near.tick, id: near.id }) },
+            { label: `この${name}を削除`, action: () => store.run(deleteConductorEvent(store.project, near.id)) },
+          ]
+        : []),
+    ];
+  }
+
+  function onHeadContextMenu(e: React.MouseEvent<HTMLCanvasElement>, lane: 'ruler' | 'marker' | 'tempo', x: number) {
+    const raw = Math.round(tickAt(x));
+    const tick = snap(raw);
+    const barStart = Math.round(sig.barBeatToTick(sig.tickToBarBeat(raw).bar));
+    const sep: MenuItem = { separator: true, label: '' };
+    const open: MenuItem = { label: 'コンダクタートラックを開く', action: () => store.updateSettings({ activePanel: 'tempo', editorCollapsed: false }) };
+    const seek: MenuItem = { label: '再生位置をここに移動', action: () => transport.seek(tick) };
+    if (lane === 'tempo') return ctxMenu.open(e, [...conductorItems('tempo', x, tick), sep, seek, open]);
+    if (lane === 'marker') return ctxMenu.open(e, [...conductorItems('marker', x, tick), sep, seek, open]);
+    ctxMenu.open(e, [seek, sep, ...conductorItems('time-signature', x, barStart), ...conductorItems('key-signature', x, barStart), ...(markerH ? [] : conductorItems('marker', x, tick)), sep, open]);
+  }
+
+  function onHeadDoubleClick(lane: 'ruler' | 'marker' | 'tempo', x: number) {
+    const kind: ConductorKind = lane === 'tempo' ? 'tempo' : lane === 'marker' ? 'marker' : 'time-signature';
+    const near = conductorNear(kind, x);
+    const raw = Math.round(tickAt(x));
+    if (near) setConductorEdit({ kind, tick: near.tick, id: near.id });
+    else setConductorEdit({ kind, tick: kind === 'time-signature' ? Math.round(sig.barBeatToTick(sig.tickToBarBeat(raw).bar)) : snap(raw) });
+  }
+
+  function onContextMenu(e: React.MouseEvent<HTMLCanvasElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const lane = headLane(y);
+    if (lane) return onHeadContextMenu(e, lane, x);
+    const tick = snap(tickAt(x));
+    const i = Math.floor((y - HEAD_H + scrollY) / TRACK_H);
+    const track = y >= HEAD_H ? project.tracks[i] : undefined;
+    const clip = hitClip(x, y);
+    const run = (fn: () => void) => () => {
+      try {
+        fn();
+      } catch (err) {
+        reportError((err as Error).message);
+      }
+    };
+    if (clip && track) {
+      store.updateSettings({ selectedTrackId: track.id });
+      store.setSelection({ ...store.getState().selection, eventIds: new Set(), clipIds: new Set([clip.id]), trackIds: new Set([track.id]) });
+      // quantize acts on the selection: select the clip's notes first (the clip stays selected)
+      const ids = new Set(clip.eventIds);
+      const noteIds = track.events.filter((ev) => ev.kind === 'note' && ids.has(ev.id)).map((ev) => ev.id);
+      const withNotes = (fn: () => void) => () => {
+        store.setSelection({ ...store.getState().selection, eventIds: new Set(noteIds) });
+        fn();
+      };
+      ctxMenu.open(e, [
+        { label: 'ピアノロールで開く', action: () => store.updateSettings({ selectedTrackId: track.id, activePanel: track.displayMode === 'drum' ? 'drum' : 'piano-roll', editorCollapsed: false }) },
+        { label: '名前と色…', action: () => setClipEdit(clip) },
+        { separator: true, label: '' },
+        { label: `クオンタイズ（${gridLabel(settings.grid)}）`, action: withNotes(actions.quantize), disabled: noteIds.length === 0, reason: 'クリップにノートがありません' },
+        { label: 'クオンタイズ…', action: withNotes(actions.quantizeDialog), disabled: noteIds.length === 0, reason: 'クリップにノートがありません' },
+        { label: 'ヒューマナイズ…', action: withNotes(actions.humanizeDialog), disabled: noteIds.length === 0, reason: 'クリップにノートがありません' },
+        { label: 'ベロシティ…', action: withNotes(actions.velocityDialog), disabled: noteIds.length === 0, reason: 'クリップにノートがありません' },
+        { separator: true, label: '' },
+        { label: 'ここで分割', action: run(() => store.run(splitClip(store.project, clip.id, tick))), disabled: tick <= clip.startTick || tick >= clip.endTick, reason: 'クリップの内側で右クリックしてください' },
+        { label: '複製（すぐ後ろへ）', action: run(() => store.run(duplicateClip(store.project, clip.id, clip.endTick).command)) },
+        { separator: true, label: '' },
+        { label: '削除（中のノートごと）', shortcut: 'Delete', action: run(() => store.run(deleteClip(store.project, clip.id, { deleteEvents: true }))) },
+        { label: 'クリップだけ解除（ノートは残す）', action: run(() => store.run(deleteClip(store.project, clip.id, { deleteEvents: false }, 'クリップを解除'))) },
+      ]);
+      return;
+    }
+    const clipboard = store.getState().clipboard;
+    ctxMenu.open(e, [
+      { label: '再生位置をここに移動', action: () => transport.seek(tick) },
+      ...(track
+        ? [
+            { label: 'ここに1小節のクリップを作成', action: run(() => {
+              const start = Math.round(sig.barBeatToTick(sig.tickToBarBeat(tick).bar));
+              const r = createClip(store.project, track.id, start, start + Math.round(sig.ticksPerBar(start)));
+              store.run(r.command);
+              store.setSelection({ ...store.getState().selection, clipIds: new Set([r.clipId]) });
+            }) },
+            { label: 'ここに貼り付け', disabled: !clipboard, reason: 'コピーしたノートがありません', action: run(() => {
+              const r = clipboard && pasteEvents(store.project, track.id, tick, clipboard);
+              if (r) store.run(r.command, { select: r.ids });
+            }) },
+          ]
+        : []),
+    ]);
+  }
+
+  return (
+    <div className="arrangement">
+      <div className="track-headers" onWheel={(e) => scrollRef.current && (scrollRef.current.scrollTop += e.deltaY)}>
+        <div className="arr-corner" style={{ height: RULER_H }}>
+          <span className="segmented zoom-buttons" role="group" aria-label="トラックビューの拡大・縮小">
+            <button onClick={() => store.updateSettings(arrangementZoomPatch(settings, 'out'))} aria-label="トラックビューを縮小" title="横方向に縮小">
+              −
+            </button>
+            <button onClick={() => store.updateSettings(arrangementZoomPatch(settings, 'in'))} aria-label="トラックビューを拡大" title="横方向に拡大">
+              +
+            </button>
+          </span>
+        </div>
+        {markerH > 0 && (
+          <div className="tempo-lane-label marker-lane-label" style={{ height: markerH }} role="button" tabIndex={0} onClick={() => store.updateSettings({ activePanel: 'tempo', editorCollapsed: false })} title="マーカー（SMF のマーカーイベント）。クリックで「コンダクター」タブを開きます。右クリック・ダブルクリックで追加・変更できます。">
+            マーカー
+          </div>
+        )}
+        <div className="tempo-lane-label" style={{ height: COND_H }} role="button" tabIndex={0} data-testid="tempo-lane-label" onClick={() => store.updateSettings({ activePanel: 'tempo', editorCollapsed: false })} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && store.updateSettings({ activePanel: 'tempo', editorCollapsed: false })} title="テンポの変化（線の高さ）と、変わる位置の BPM。拍子と調号の変化は小節番号の横に表示します。クリックで「コンダクター」タブを開きます。右クリック・ダブルクリックで追加・変更できます。">
+          テンポ
+        </div>
+        <div className="track-headers-clip" ref={headersClipRef}>
+        <div style={{ transform: `translateY(${-scrollY}px)` }}>
+        {project.tracks.map((t, i) => (
+          <TrackHeader
+            key={t.id}
+            track={t}
+            selected={t.id === selectedTrackId}
+            dragging={headerDrag?.trackId === t.id}
+            renaming={renaming === t.id}
+            onSelect={() => store.updateSettings({ selectedTrackId: t.id })}
+            onDragStart={(clientY) => {
+              headerDragY.current = clientY;
+              setHeaderDrag({ trackId: t.id, from: i, to: i });
+            }}
+            onDragMove={(clientY) => {
+              headerDragY.current = clientY;
+              updateDropIndex(clientY);
+            }}
+            onDragEnd={finishHeaderDrag}
+            onRename={(name) => {
+              setRenaming(null);
+              if (name !== null && name !== t.name) store.run(updateTrack(store.project, t.id, { name }, 'トラック名を変更'));
+            }}
+            onStartRename={() => setRenaming(t.id)}
+            onFlag={(flags) => store.setTrackFlags(t.id, flags)}
+          />
+        ))}
+        </div>
+        {headerDrag && <div className="track-drop-line" style={{ top: headerDrag.to * TRACK_H - scrollY }} aria-hidden="true" />}
+        </div>
+      </div>
+      <div className="arrangement-scroll" ref={scrollRef} onScroll={(e) => {
+          setScrollX(e.currentTarget.scrollLeft);
+          setScrollY(e.currentTarget.scrollTop);
+        }}>
+        <div style={{ width: totalW, height }} className="arrangement-spacer">
+          <div className="sticky-canvas" style={{ width: viewW, height: Math.max(HEAD_H, Math.min(height, viewH)) }}>
+            <canvas
+              ref={canvasRef}
+              className="arrangement-canvas"
+              aria-label="トラックビュー（クリップの配置）"
+              data-testid="arrangement-canvas"
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={() => setDrag(null)}
+              onContextMenu={onContextMenu}
+              onDoubleClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const lane = headLane(e.clientY - rect.top);
+                if (lane) return onHeadDoubleClick(lane, e.clientX - rect.left);
+                const clip = hitClip(e.clientX - rect.left, e.clientY - rect.top);
+                const track = clip && project.tracks.find((t) => t.id === clip.trackId);
+                if (track) store.updateSettings({ selectedTrackId: track.id, activePanel: track.displayMode === 'drum' ? 'drum' : 'piano-roll', editorCollapsed: false });
+              }}
+            />
+            <canvas ref={overlayRef} className="overlay-canvas" aria-hidden="true" />
+          </div>
+        </div>
+      </div>
+      {ctxMenu.element}
+      {conductorEdit && <ConductorEventDialog target={conductorEdit} onClose={() => setConductorEdit(null)} />}
+      {clipEdit && (
+        <Dialog title="クリップの名前と色" onClose={() => setClipEdit(null)}>
+          <form
+            className="form-grid"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const f = new FormData(e.currentTarget);
+              store.run(updateClip(store.project, clipEdit.id, { name: String(f.get('name') ?? '') || undefined, color: String(f.get('color')) }));
+              setClipEdit(null);
+            }}
+          >
+            <label>
+              名前
+              <input name="name" defaultValue={clipEdit.name ?? ''} placeholder={project.tracks.find((t) => t.id === clipEdit.trackId)?.name} autoFocus />
+            </label>
+            <label>
+              色
+              <input name="color" type="color" defaultValue={(clipEdit.color ?? project.tracks.find((t) => t.id === clipEdit.trackId)?.color ?? '#4f8ef7').slice(0, 7)} />
+            </label>
+            <div className="row">
+              <button className="primary" type="submit">
+                OK
+              </button>
+              <button type="button" onClick={() => setClipEdit(null)}>
+                キャンセル
+              </button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+    </div>
+  );
+}
+
+function drawTrackClips(
+  ctx: CanvasRenderingContext2D,
+  project: MidiProject,
+  track: MidiTrack,
+  y: number,
+  t0: number,
+  t1: number,
+  pxPerTick: number,
+  scrollX: number,
+  selectedClips: ReadonlySet<string>,
+  accent: string,
+  selectedColor: string,
+  text: string,
+) {
+  const clips = project.clips.filter((c) => c.trackId === track.id && c.endTick >= t0 && c.startTick <= t1);
+  const inClip = new Set(clips.flatMap((c) => c.eventIds));
+  for (const c of clips) {
+    const x = c.startTick * pxPerTick - scrollX;
+    const w = Math.max(2, (c.endTick - c.startTick) * pxPerTick);
+    const color = c.color ?? track.color;
+    ctx.fillStyle = color + '33';
+    ctx.fillRect(x, y + 3, w, TRACK_H - 6);
+    // header strip with the region name (DAW-style)
+    ctx.fillStyle = color + 'aa';
+    ctx.fillRect(x, y + 3, w, 12);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y + 3, w, 12);
+    ctx.clip();
+    ctx.fillStyle = text;
+    ctx.font = '10px system-ui, sans-serif';
+    ctx.fillText(c.name ?? track.name, x + 4, y + 9.5);
+    ctx.restore();
+    ctx.strokeStyle = selectedClips.has(c.id) ? selectedColor : color;
+    ctx.lineWidth = selectedClips.has(c.id) ? 2 : 1;
+    ctx.strokeRect(x + 0.5, y + 3.5, w - 1, TRACK_H - 7);
+    ctx.lineWidth = 1;
+  }
+  // Mini notes (events outside any clip are drawn too, so nothing is hidden).
+  let lo = 127;
+  let hi = 0;
+  for (const e of track.events) if (e.kind === 'note') {
+    lo = Math.min(lo, e.pitch);
+    hi = Math.max(hi, e.pitch);
+  }
+  const range = Math.max(12, hi - lo + 1);
+  for (const e of track.events) {
+    if (e.kind !== 'note' || e.tick > t1 || e.tick + e.durationTicks < t0) continue;
+    const nx = e.tick * pxPerTick - scrollX;
+    const ny = y + 18 + ((hi - e.pitch) / range) * (TRACK_H - 24); // below the header strip
+    ctx.fillStyle = inClip.has(e.id) ? track.color : accent + '88';
+    ctx.fillRect(nx, ny, Math.max(1, e.durationTicks * pxPerTick), 2);
+  }
+}
+
+/** pointer movement before a header press becomes a reorder drag */
+const HEADER_DRAG_PX = 6;
+
+function TrackHeader({
+  track,
+  selected,
+  dragging,
+  renaming,
+  onSelect,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  onRename,
+  onStartRename,
+  onFlag,
+}: {
+  track: MidiTrack;
+  selected: boolean;
+  dragging: boolean;
+  renaming: boolean;
+  onSelect: () => void;
+  onDragStart: (clientY: number) => void;
+  onDragMove: (clientY: number) => void;
+  onDragEnd: () => void;
+  onRename: (name: string | null) => void;
+  onStartRename: () => void;
+  onFlag: (f: Partial<Pick<MidiTrack, 'mute' | 'solo' | 'recordArm'>>) => void;
+}) {
+  // press state of a reorder drag (ADR-040): armed on pointer down on the grip, dragging after
+  // HEADER_DRAG_PX. Any end of the pointer sequence (up, cancel, lost capture) releases it.
+  const press = useRef<{ y: number; dragging: boolean } | null>(null);
+  // Enter / Esc end the rename; the input then unmounts and Chromium fires blur on it, which must
+  // not commit a second time (or commit the typed name after Esc).
+  const renameDone = useRef(false);
+  const release = () => {
+    const p = press.current;
+    press.current = null;
+    if (p?.dragging) onDragEnd();
+  };
+  return (
+    <div className={`track-header${selected ? ' selected' : ''}${dragging ? ' dragging' : ''}`} style={{ height: TRACK_H }} onClick={onSelect} data-testid="track-header">
+      <span
+        className="track-grip"
+        role="button"
+        aria-label={`${track.name} を並べ替え`}
+        title="ドラッグで並べ替え（Alt / Option+↑↓ でも移動）"
+        draggable={false}
+        onPointerDown={(e) => {
+          if (e.button !== 0 || press.current) return;
+          e.preventDefault(); // no text selection / native drag from the grip
+          press.current = { y: e.clientY, dragging: false };
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }}
+        onPointerMove={(e) => {
+          const p = press.current;
+          if (!p) return;
+          if (!p.dragging) {
+            if (Math.abs(e.clientY - p.y) < HEADER_DRAG_PX) return;
+            p.dragging = true;
+            onDragStart(e.clientY);
+          }
+          onDragMove(e.clientY);
+        }}
+        onPointerUp={release}
+        onPointerCancel={release}
+        onLostPointerCapture={release}
+      >
+        ⋮⋮
+      </span>
+      <span className="track-color" style={{ background: track.color }} />
+      {renaming ? (
+        <input
+          className="track-name-input"
+          defaultValue={track.name}
+          autoFocus
+          aria-label="トラック名"
+          onFocus={() => (renameDone.current = false)}
+          onBlur={(e) => !renameDone.current && onRename(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' && e.key !== 'Escape') return;
+            renameDone.current = true;
+            onRename(e.key === 'Enter' ? (e.target as HTMLInputElement).value : null);
+          }}
+        />
+      ) : (
+        <span className="track-name" onDoubleClick={onStartRename} title="ダブルクリックで名前を変更">
+          {track.name}
+        </span>
+      )}
+      <span className="track-meta">
+        {track.port}
+        {track.channel + 1}
+        {track.displayMode === 'drum' ? ' 🥁' : ''}
+      </span>
+      <button className={`toggle${track.mute ? ' on' : ''}`} aria-pressed={track.mute} aria-label={`${track.name} をミュート`} onClick={(e) => (e.stopPropagation(), onFlag({ mute: !track.mute }))}>
+        M
+      </button>
+      <button className={`toggle${track.solo ? ' on' : ''}`} aria-pressed={track.solo} aria-label={`${track.name} をソロ`} onClick={(e) => (e.stopPropagation(), onFlag({ solo: !track.solo }))}>
+        S
+      </button>
+      <button className={`toggle arm${track.recordArm ? ' on' : ''}`} aria-pressed={track.recordArm} aria-label={`${track.name} を録音待機`} title="録音待機（R キー / ● で録音するトラック）" onClick={(e) => (e.stopPropagation(), onFlag({ recordArm: !track.recordArm }))}>
+        R
+      </button>
+    </div>
+  );
+}

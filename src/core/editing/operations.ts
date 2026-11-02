@@ -1,0 +1,424 @@
+// Pure editing operations. Each returns a Command (a reversible project patch) or null when the
+// operation does nothing. Track.events is the only source of truth; clips are ID groups (ADR-005).
+import { newId } from '../model/ids';
+import { portIndex } from '../model/ports';
+import { createTrack } from '../model/defaults';
+import type { MidiClip, MidiEvent, MidiProject, MidiTrack, NoteEvent, TrackId } from '../model/types';
+import { compareEvents, policyRank, sortEvents } from '../events/order';
+import type { Command, ProjectPatch } from './history';
+import { SMF_LIMITS } from '../smf/types';
+import { maxOf, minOf } from '../model/numbers';
+
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+/** A new event before it gets an ID and an origin order. */
+export type NewEvent = DistributiveOmit<MidiEvent, 'id' | 'originOrder'>;
+
+export class EditError extends Error {}
+
+function cmd(label: string, patch: ProjectPatch): Command {
+  return { label, patch };
+}
+
+function replaceTracks(project: MidiProject, changed: Map<TrackId, MidiTrack>): MidiTrack[] {
+  return project.tracks.map((t) => changed.get(t.id) ?? t);
+}
+
+function findTrack(project: MidiProject, trackId: TrackId): MidiTrack {
+  const t = project.tracks.find((x) => x.id === trackId);
+  if (!t) throw new EditError(`track ${trackId} not found`);
+  return t;
+}
+
+const MAX_TICK = SMF_LIMITS.maxTick;
+
+/** Validates value ranges of an event (throws EditError). */
+export function assertValidEvent(e: NewEvent | MidiEvent): void {
+  const in7 = (v: number) => Number.isInteger(v) && v >= 0 && v <= 127;
+  if (!Number.isSafeInteger(e.tick) || e.tick < 0 || e.tick > MAX_TICK) throw new EditError(`invalid tick ${e.tick}`);
+  if ('channelOverride' in e && e.channelOverride !== undefined && !(Number.isInteger(e.channelOverride) && e.channelOverride >= 0 && e.channelOverride < 16)) {
+    throw new EditError(`invalid channel ${e.channelOverride}`);
+  }
+  switch (e.kind) {
+    case 'note':
+      if (!in7(e.pitch) || !in7(e.velocity) || e.velocity === 0 || !in7(e.releaseVelocity)) throw new EditError('invalid note values');
+      if (!Number.isSafeInteger(e.durationTicks) || e.durationTicks < 1 || e.tick + e.durationTicks > MAX_TICK) throw new EditError(`invalid note duration ${e.durationTicks}`);
+      break;
+    case 'cc':
+      if (!in7(e.controller) || !in7(e.value)) throw new EditError('invalid CC values');
+      break;
+    case 'program':
+      if (!in7(e.program)) throw new EditError('invalid program');
+      break;
+    case 'pitch-bend':
+      if (!Number.isInteger(e.value) || e.value < -8192 || e.value > 8191) throw new EditError('invalid pitch bend');
+      break;
+    case 'channel-pressure':
+      if (!in7(e.pressure)) throw new EditError('invalid pressure');
+      break;
+    case 'poly-pressure':
+      if (!in7(e.pitch) || !in7(e.pressure)) throw new EditError('invalid poly pressure');
+      break;
+    case 'meta':
+      if (!Number.isInteger(e.metaType) || e.metaType < 0 || e.metaType > 127) throw new EditError('invalid meta type');
+      break;
+    default:
+      break;
+  }
+}
+
+/**
+ * Adds events to a track. New events at the same tick are ordered by the generation policy
+ * (Bank Select -> Program -> controls -> notes) and get increasing originOrder (ADR-014).
+ * Optionally adds them to a clip.
+ */
+export function addEvents(project: MidiProject, trackId: TrackId, events: readonly NewEvent[], opts: { clipId?: string; label?: string } = {}): { command: Command; ids: string[] } | null {
+  if (events.length === 0) return null;
+  const track = findTrack(project, trackId);
+  events.forEach(assertValidEvent);
+  const ordered = events.map((e, i) => ({ e, i })).sort((a, b) => a.e.tick - b.e.tick || policyRank(a.e as MidiEvent) - policyRank(b.e as MidiEvent) || a.i - b.i);
+  let next = project.nextOriginOrder;
+  const created: MidiEvent[] = new Array(events.length);
+  for (const { e, i } of ordered) created[i] = { ...e, id: newId('evt'), originOrder: next++ } as MidiEvent;
+  const newTrack: MidiTrack = { ...track, events: sortEvents([...track.events, ...created]) };
+  const ids = created.map((e) => e.id);
+  const patch: ProjectPatch = { tracks: replaceTracks(project, new Map([[trackId, newTrack]])), nextOriginOrder: next };
+  if (opts.clipId) {
+    patch.clips = project.clips.map((c) => (c.id === opts.clipId ? extendClip({ ...c, eventIds: [...c.eventIds, ...ids] }, created) : c));
+  }
+  return { command: cmd(opts.label ?? 'イベントを追加', patch), ids };
+}
+
+function extendClip(c: MidiClip, events: readonly MidiEvent[]): MidiClip {
+  let start = c.startTick;
+  let end = c.endTick;
+  for (const e of events) {
+    start = Math.min(start, e.tick);
+    end = Math.max(end, e.kind === 'note' ? e.tick + e.durationTicks : e.tick + 1);
+  }
+  return start === c.startTick && end === c.endTick ? c : { ...c, startTick: start, endTick: end };
+}
+
+export function deleteEvents(project: MidiProject, ids: Iterable<string>, label = 'イベントを削除'): Command | null {
+  const del = new Set(ids);
+  if (del.size === 0) return null;
+  const changed = new Map<TrackId, MidiTrack>();
+  for (const t of project.tracks) {
+    if (!t.events.some((e) => del.has(e.id))) continue;
+    changed.set(t.id, { ...t, events: t.events.filter((e) => !del.has(e.id)) });
+  }
+  if (changed.size === 0) return null;
+  const clips = project.clips.map((c) => (c.eventIds.some((id) => del.has(id)) ? { ...c, eventIds: c.eventIds.filter((id) => !del.has(id)) } : c));
+  return cmd(label, { tracks: replaceTracks(project, changed), clips });
+}
+
+/** Fields an edit may change. Kind and id are fixed. */
+export type EventChanges = Partial<Omit<NoteEvent, 'id' | 'kind' | 'originOrder'>> & Record<string, unknown>;
+
+/**
+ * Updates event fields. When a note's onset or length changes, its imported Note Off order is
+ * dropped so the generated Note Off follows the policy order (ADR-014).
+ */
+export function updateEvents(project: MidiProject, updates: ReadonlyArray<{ id: string; changes: EventChanges }>, label = 'イベントを変更'): Command | null {
+  const byId = new Map(updates.map((u) => [u.id, u.changes]));
+  const changed = new Map<TrackId, MidiTrack>();
+  for (const t of project.tracks) {
+    let touched = false;
+    const events = t.events.map((e) => {
+      const ch = byId.get(e.id);
+      if (!ch) return e;
+      touched = true;
+      const { id: _id, kind: _kind, originOrder: _o, ...rest } = ch as Record<string, unknown>;
+      void _id;
+      void _kind;
+      void _o;
+      const next = { ...e, ...rest } as MidiEvent;
+      if (next.kind === 'note' && e.kind === 'note' && (next.tick !== e.tick || next.durationTicks !== e.durationTicks) && next.releaseOrder !== undefined) {
+        delete (next as NoteEvent).releaseOrder;
+      }
+      assertValidEvent(next);
+      return next;
+    });
+    if (touched) changed.set(t.id, { ...t, events: sortEvents(events) });
+  }
+  if (changed.size === 0) return null;
+  return cmd(label, { tracks: replaceTracks(project, changed), clips: refreshClipBounds(project.clips, changed) });
+}
+
+/** Clip bounds grow to contain their (possibly moved) events; they never shrink implicitly. */
+function refreshClipBounds(clips: readonly MidiClip[], changed: Map<TrackId, MidiTrack>): MidiClip[] {
+  return clips.map((c) => {
+    const t = changed.get(c.trackId);
+    if (!t) return c;
+    const ids = new Set(c.eventIds);
+    return extendClip(c, t.events.filter((e) => ids.has(e.id)));
+  });
+}
+
+/**
+ * Moves events in time and/or pitch. The group keeps its shape: the deltas are limited so that
+ * no event goes below tick 0 or outside pitch 0..127 (only pitched events are transposed).
+ */
+export function moveEvents(project: MidiProject, ids: Iterable<string>, deltaTick: number, deltaPitch = 0, label = 'イベントを移動'): Command | null {
+  const sel = new Set(ids);
+  const targets = project.tracks.flatMap((t) => t.events.filter((e) => sel.has(e.id)));
+  if (targets.length === 0) return null;
+  const minTick = minOf(targets, (e) => e.tick);
+  let dt = Math.max(deltaTick, -minTick);
+  const pitched = targets.filter((e): e is NoteEvent | Extract<MidiEvent, { kind: 'poly-pressure' }> => e.kind === 'note' || e.kind === 'poly-pressure');
+  let dp = deltaPitch;
+  if (pitched.length > 0 && dp !== 0) {
+    const lo = minOf(pitched, (e) => e.pitch);
+    const hi = maxOf(pitched, (e) => e.pitch);
+    dp = Math.min(Math.max(dp, -lo), 127 - hi);
+  } else dp = 0;
+  if (!Number.isSafeInteger(dt)) throw new EditError('tick delta must be an integer');
+  if (dt === 0 && dp === 0) return null;
+  dt = Math.trunc(dt);
+  return updateEvents(
+    project,
+    targets.map((e) => ({
+      id: e.id,
+      changes: { tick: e.tick + dt, ...(dp !== 0 && (e.kind === 'note' || e.kind === 'poly-pressure') ? { pitch: e.pitch + dp } : {}) },
+    })),
+    label,
+  );
+}
+
+/** Copies events (new IDs and origin orders) shifted by deltaTick, into the same track. */
+export function duplicateEvents(project: MidiProject, ids: Iterable<string>, deltaTick: number, label = 'イベントを複製'): { command: Command; ids: string[] } | null {
+  const sel = new Set(ids);
+  let p = project;
+  const newIds: string[] = [];
+  const patch: ProjectPatch = {};
+  for (const t of project.tracks) {
+    const src = t.events.filter((e) => sel.has(e.id)).sort(compareEvents);
+    if (src.length === 0) continue;
+    const copies = src.map((e) => stripForCopy(e, deltaTick));
+    const r = addEvents(p, t.id, copies, { label });
+    if (!r) continue;
+    p = { ...p, ...r.command.patch };
+    Object.assign(patch, r.command.patch);
+    newIds.push(...r.ids);
+  }
+  if (newIds.length === 0) return null;
+  return { command: cmd(label, patch), ids: newIds };
+}
+
+function stripForCopy(e: MidiEvent, deltaTick: number): NewEvent {
+  const { id: _id, originOrder: _o, ...rest } = e;
+  void _id;
+  void _o;
+  const copy = { ...rest, tick: e.tick + deltaTick } as NewEvent & { releaseOrder?: number };
+  delete copy.releaseOrder; // copies are generated events
+  if (copy.tick < 0) throw new EditError('copy would start before tick 0');
+  return copy;
+}
+
+// ---------------------------------------------------------------- clips
+
+export function createClip(project: MidiProject, trackId: TrackId, startTick: number, endTick: number, label = 'クリップを作成'): { command: Command; clipId: string } {
+  findTrack(project, trackId);
+  if (!(Number.isSafeInteger(startTick) && Number.isSafeInteger(endTick) && startTick >= 0 && endTick > startTick)) throw new EditError('invalid clip range');
+  const track = findTrack(project, trackId);
+  const inClip = new Set(project.clips.filter((c) => c.trackId === trackId).flatMap((c) => c.eventIds));
+  // Events whose onset is inside the range and that are not in another clip join the new clip.
+  const eventIds = track.events.filter((e) => e.tick >= startTick && e.tick < endTick && !inClip.has(e.id)).map((e) => e.id);
+  const clip: MidiClip = { id: newId('clp'), trackId, startTick, endTick, eventIds };
+  return { command: cmd(label, { clips: [...project.clips, clip] }), clipId: clip.id };
+}
+
+/** Moves a clip and all its events (CC / Program / SysEx included) by deltaTick. */
+export function moveClip(project: MidiProject, clipId: string, deltaTick: number, label = 'クリップを移動'): Command | null {
+  const clip = project.clips.find((c) => c.id === clipId);
+  if (!clip) throw new EditError(`clip ${clipId} not found`);
+  const dt = Math.max(deltaTick, -clip.startTick);
+  if (dt === 0) return null;
+  const ids = new Set(clip.eventIds);
+  const track = findTrack(project, clip.trackId);
+  const minEvent = minOf(track.events.filter((e) => ids.has(e.id)), (e) => e.tick);
+  const delta = Number.isFinite(minEvent) ? Math.max(dt, -minEvent) : dt;
+  const events = sortEvents(
+    track.events.map((e) => {
+      if (!ids.has(e.id)) return e;
+      return { ...e, tick: e.tick + delta } as MidiEvent; // duration unchanged, so the imported Note Off order stays valid relative to the note
+    }),
+  );
+  // releaseOrder only orders against other events at the same tick; after a move the old order is meaningless.
+  const cleaned = events.map((e) => (ids.has(e.id) && e.kind === 'note' && e.releaseOrder !== undefined ? dropReleaseOrder(e) : e));
+  const newTrack = { ...track, events: cleaned };
+  const clips = project.clips.map((c) => (c.id === clipId ? { ...c, startTick: c.startTick + delta, endTick: c.endTick + delta } : c));
+  return cmd(label, { tracks: replaceTracks(project, new Map([[track.id, newTrack]])), clips });
+}
+
+function dropReleaseOrder(n: NoteEvent): NoteEvent {
+  const { releaseOrder: _r, ...rest } = n;
+  void _r;
+  return rest;
+}
+
+/** Copies a clip and its events to start at targetTick (optionally on another track). */
+export function duplicateClip(project: MidiProject, clipId: string, targetTick: number, targetTrackId?: TrackId, label = 'クリップを複製'): { command: Command; clipId: string } {
+  const clip = project.clips.find((c) => c.id === clipId);
+  if (!clip) throw new EditError(`clip ${clipId} not found`);
+  const src = findTrack(project, clip.trackId);
+  const dstId = targetTrackId ?? clip.trackId;
+  findTrack(project, dstId);
+  if (!Number.isSafeInteger(targetTick) || targetTick < 0) throw new EditError('invalid clip position');
+  const delta = targetTick - clip.startTick;
+  const ids = new Set(clip.eventIds);
+  const copies = src.events.filter((e) => ids.has(e.id)).sort(compareEvents).map((e) => stripForCopy(e, delta));
+  const newClip: MidiClip = { ...clip, id: newId('clp'), trackId: dstId, startTick: clip.startTick + delta, endTick: clip.endTick + delta, eventIds: [] };
+  const withClip = { ...project, clips: [...project.clips, newClip] };
+  const r = addEvents(withClip, dstId, copies, { clipId: newClip.id, label });
+  const patch: ProjectPatch = r ? { ...r.command.patch } : { clips: withClip.clips };
+  if (!patch.clips) patch.clips = withClip.clips;
+  return { command: cmd(label, patch), clipId: newClip.id };
+}
+
+/**
+ * Splits a clip at `tick`. Events belong to the side of their onset; a note crossing the split
+ * stays on the left with its full length (REQ-PRJ-06). The MIDI content does not change.
+ */
+export function splitClip(project: MidiProject, clipId: string, tick: number, label = 'クリップを分割'): Command | null {
+  const clip = project.clips.find((c) => c.id === clipId);
+  if (!clip) throw new EditError(`clip ${clipId} not found`);
+  if (tick <= clip.startTick || tick >= clip.endTick) return null;
+  const track = findTrack(project, clip.trackId);
+  const ids = new Set(clip.eventIds);
+  const left: string[] = [];
+  const right: string[] = [];
+  for (const e of track.events) if (ids.has(e.id)) (e.tick < tick ? left : right).push(e.id);
+  const a: MidiClip = { ...clip, endTick: tick, eventIds: left };
+  const b: MidiClip = { ...clip, id: newId('clp'), startTick: tick, eventIds: right };
+  const clips = project.clips.flatMap((c) => (c.id === clipId ? [a, b] : [c]));
+  return cmd(label, { clips });
+}
+
+/**
+ * Changes a clip's range without moving or cutting any event (non-destructive trim / extend,
+ * ADR-040). Events whose onset leaves the range leave the clip but stay on the track; free events
+ * (in no other clip) whose onset is inside the new range join it, as in createClip. The MIDI
+ * content does not change.
+ */
+export function resizeClip(project: MidiProject, clipId: string, range: { startTick?: number; endTick?: number }, label = 'クリップの長さを変更'): Command | null {
+  const clip = project.clips.find((c) => c.id === clipId);
+  if (!clip) throw new EditError(`clip ${clipId} not found`);
+  const startTick = range.startTick ?? clip.startTick;
+  const endTick = range.endTick ?? clip.endTick;
+  if (!(Number.isSafeInteger(startTick) && Number.isSafeInteger(endTick) && startTick >= 0 && endTick > startTick)) throw new EditError('invalid clip range');
+  if (startTick === clip.startTick && endTick === clip.endTick) return null;
+  const track = findTrack(project, clip.trackId);
+  const others = new Set(project.clips.filter((c) => c.trackId === clip.trackId && c.id !== clipId).flatMap((c) => c.eventIds));
+  const eventIds = track.events.filter((e) => e.tick >= startTick && e.tick < endTick && !others.has(e.id)).map((e) => e.id);
+  return cmd(label, { clips: project.clips.map((c) => (c.id === clipId ? { ...c, startTick, endTick, eventIds } : c)) });
+}
+
+export function updateClip(project: MidiProject, clipId: string, changes: { name?: string; color?: string }, label = 'クリップを変更'): Command | null {
+  const clip = project.clips.find((c) => c.id === clipId);
+  if (!clip) return null;
+  return cmd(label, { clips: project.clips.map((c) => (c.id === clipId ? { ...c, ...changes } : c)) });
+}
+
+export function deleteClip(project: MidiProject, clipId: string, opts: { deleteEvents: boolean } = { deleteEvents: true }, label = 'クリップを削除'): Command | null {
+  const clip = project.clips.find((c) => c.id === clipId);
+  if (!clip) return null;
+  const clips = project.clips.filter((c) => c.id !== clipId);
+  if (!opts.deleteEvents) return cmd(label, { clips });
+  const del = deleteEvents({ ...project, clips }, clip.eventIds, label);
+  return cmd(label, { clips, ...(del ? { tracks: del.patch.tracks } : {}) });
+}
+
+// ---------------------------------------------------------------- tracks
+
+export function addTrack(project: MidiProject, partial: Partial<MidiTrack> = {}, index = project.tracks.length, label = 'トラックを追加'): { command: Command; trackId: string } {
+  const t = createTrack({ name: `Track ${project.tracks.length + 1}`, events: [], ...partial }, project.tracks.length);
+  const tracks = [...project.tracks];
+  tracks.splice(index, 0, t);
+  return { command: cmd(label, { tracks }), trackId: t.id };
+}
+
+export function removeTrack(project: MidiProject, trackId: TrackId, label = 'トラックを削除'): Command | null {
+  if (!project.tracks.some((t) => t.id === trackId)) return null;
+  return cmd(label, { tracks: project.tracks.filter((t) => t.id !== trackId), clips: project.clips.filter((c) => c.trackId !== trackId) });
+}
+
+export type TrackChanges = Partial<Pick<MidiTrack, 'name' | 'color' | 'port' | 'channel' | 'displayMode' | 'drumMapId' | 'mute' | 'solo' | 'recordArm'>>;
+
+export function updateTrack(project: MidiProject, trackId: TrackId, changes: TrackChanges, label = 'トラックを変更'): Command | null {
+  const t = findTrack(project, trackId);
+  if (changes.channel !== undefined && !(Number.isInteger(changes.channel) && changes.channel >= 0 && changes.channel < 16)) throw new EditError('invalid channel');
+  const next = { ...t, ...changes };
+  return cmd(label, { tracks: replaceTracks(project, new Map([[trackId, next]])) });
+}
+
+export function reorderTracks(project: MidiProject, orderedIds: readonly TrackId[], label = 'トラックを並べ替え'): Command | null {
+  if (orderedIds.length !== project.tracks.length || new Set(orderedIds).size !== orderedIds.length) throw new EditError('reorder needs every track exactly once');
+  const byId = new Map(project.tracks.map((t) => [t.id, t]));
+  const tracks = orderedIds.map((id) => {
+    const t = byId.get(id);
+    if (!t) throw new EditError(`track ${id} not found`);
+    return t;
+  });
+  return cmd(label, { tracks });
+}
+
+/** Moves a track up (delta < 0) or down (delta > 0) by |delta| places; null at the ends. */
+export function moveTrack(project: MidiProject, trackId: TrackId, delta: number): Command | null {
+  const from = project.tracks.findIndex((t) => t.id === trackId);
+  if (from < 0) throw new EditError(`track ${trackId} not found`);
+  const to = Math.max(0, Math.min(project.tracks.length - 1, from + Math.trunc(delta)));
+  if (to === from) return null;
+  const ids = project.tracks.map((t) => t.id);
+  ids.splice(to, 0, ...ids.splice(from, 1));
+  return reorderTracks(project, ids, delta < 0 ? 'トラックを上へ移動' : 'トラックを下へ移動');
+}
+
+export function duplicateTrack(project: MidiProject, trackId: TrackId, label = 'トラックを複製'): { command: Command; trackId: string } {
+  const src = findTrack(project, trackId);
+  let next = project.nextOriginOrder;
+  const idMap = new Map<string, string>();
+  const events = src.events.map((e) => {
+    const id = newId('evt');
+    idMap.set(e.id, id);
+    const copy = { ...e, id, originOrder: next++ } as MidiEvent;
+    return copy.kind === 'note' && copy.releaseOrder !== undefined ? dropReleaseOrder(copy) : copy;
+  });
+  const t: MidiTrack = { ...src, id: newId('trk'), name: `${src.name} (コピー)`, events: sortEvents(events), solo: false, recordArm: false };
+  const tracks = [...project.tracks];
+  tracks.splice(project.tracks.indexOf(src) + 1, 0, t);
+  const clips = [
+    ...project.clips,
+    ...project.clips.filter((c) => c.trackId === trackId).map((c) => ({ ...c, id: newId('clp'), trackId: t.id, eventIds: c.eventIds.map((id) => idMap.get(id)!).filter(Boolean) })),
+  ];
+  return { command: cmd(label, { tracks, clips, nextOriginOrder: next }), trackId: t.id };
+}
+
+/**
+ * Track order: SysEx-only setup tracks first, then tracks with channel data by port and channel
+ * (A1..A16, B1..), then empty / meta-only tracks last (their channel is only a default).
+ * Equal keys keep their current order.
+ */
+export function tracksInChannelOrder(tracks: readonly MidiTrack[]): MidiTrack[] {
+  const group = (t: MidiTrack) => {
+    const channelData = t.events.some((e) => e.kind !== 'sysex' && e.kind !== 'meta');
+    if (channelData) return 1;
+    return t.events.some((e) => e.kind === 'sysex') ? 0 : 2;
+  };
+  return tracks
+    .map((t, i) => ({ t, i, g: group(t) }))
+    .sort((a, b) => a.g - b.g || (a.g === 1 ? portIndex(a.t.port) - portIndex(b.t.port) || a.t.channel - b.t.channel : 0) || a.i - b.i)
+    .map((x) => x.t);
+}
+
+export function sortTracksByChannel(project: MidiProject, label = 'トラックをチャンネル順に並べ替え'): Command | null {
+  const sorted = tracksInChannelOrder(project.tracks);
+  if (sorted.every((t, i) => t === project.tracks[i])) return null;
+  return cmd(label, { tracks: sorted });
+}
+
+/** Index where a new track with this port / channel belongs in channel order (after equal ones). */
+export function channelInsertIndex(project: MidiProject, port: string, channel: number): number {
+  const key = portIndex(port) * 16 + channel;
+  const i = project.tracks.findIndex((t) => portIndex(t.port) * 16 + t.channel > key);
+  return i < 0 ? project.tracks.length : i;
+}

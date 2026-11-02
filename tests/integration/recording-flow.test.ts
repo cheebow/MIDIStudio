@@ -1,0 +1,153 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EditorStore } from '../../src/app/store/EditorStore';
+import { Recorder, recordTargets } from '../../src/app/recording/Recorder';
+import { StepController } from '../../src/app/recording/StepController';
+import { InputController } from '../../src/input/InputController';
+import { Transport } from '../../src/playback/Transport';
+import { createEmptyProject, createTrack } from '../../src/core/model/defaults';
+import { createCounterIdGenerator, setIdGenerator } from '../../src/core/model/ids';
+import type { NoteEvent } from '../../src/core/model/types';
+import { FakeEngine } from '../fixtures/fakeEngine';
+
+beforeEach(() => setIdGenerator(createCounterIdGenerator('f')));
+
+function setup() {
+  const p = createEmptyProject();
+  const drums = createTrack({ name: 'Drums', channel: 9, displayMode: 'drum' }, 1);
+  const project = { ...p, tracks: [{ ...p.tracks[0], recordArm: true }, { ...drums, recordArm: true }], settings: { ...p.settings, recording: { ...p.settings.recording, countInBars: 0 as const } } };
+  const store = new EditorStore(project);
+  const engine = new FakeEngine();
+  const transport = new Transport(engine);
+  const input = new InputController(transport, () => store.project, project.inputPresets);
+  return { store, engine, transport, input };
+}
+const notesOf = (store: EditorStore, i: number) => store.project.tracks[i].events.filter((e): e is NoteEvent => e.kind === 'note').map((n) => [n.tick, n.pitch, n.durationTicks]);
+
+describe('recording through the real input path (fake engine)', () => {
+  it('routes piano input to the armed melodic track and drum pads to the armed drum track; one undo step', async () => {
+    const { store, engine, transport, input } = setup();
+    await transport.setProject(store.project);
+    const rec = new Recorder(store, transport, input, () => {}, () => null);
+    input.setMode('drum-performance');
+    await rec.start();
+    expect(transport.getState().status).toBe('playing');
+    engine.advance(0.5); // tick 480
+    input.midiMessage({ type: 'note-on', channel: 0, pitch: 60, velocity: 90 }, 'kb', performance.now());
+    input.padDown(36, 110);
+    engine.advance(0.5);
+    input.midiMessage({ type: 'note-off', channel: 0, pitch: 60, releaseVelocity: 0 }, 'kb', performance.now());
+    input.padUp(36);
+    rec.stop();
+    // MIDI keyboard in drum mode goes to the drum target as well (drum mode)
+    expect(notesOf(store, 1).map((n) => n[1]).sort()).toEqual([36, 60]);
+    expect(transport.getState().status).toBe('stopped');
+    expect(store.getState().history.past).toHaveLength(1);
+    store.undo();
+    expect(notesOf(store, 1)).toEqual([]);
+  });
+
+  it('piano mode: MIDI keyboard notes land on the melodic track with velocity and timing', async () => {
+    const { store, engine, transport, input } = setup();
+    await transport.setProject(store.project);
+    const rec = new Recorder(store, transport, input, () => {}, () => null);
+    input.setMode('piano-performance');
+    await rec.start();
+    engine.advance(1);
+    input.midiMessage({ type: 'note-on', channel: 0, pitch: 64, velocity: 77 }, 'kb', performance.now());
+    engine.advance(0.25);
+    input.midiMessage({ type: 'note-off', channel: 0, pitch: 64, releaseVelocity: 10 }, 'kb', performance.now());
+    rec.stop();
+    const [n] = notesOf(store, 0);
+    expect(n[1]).toBe(64);
+    expect(Math.abs(n[0] - 960)).toBeLessThanOrEqual(2);
+    expect(Math.abs(n[2] - 240)).toBeLessThanOrEqual(2);
+  });
+
+  it('refuses ambiguous or missing record targets', () => {
+    const { store } = setup();
+    const none = { ...store.project, tracks: store.project.tracks.map((t) => ({ ...t, recordArm: false })) };
+    expect(recordTargets(none)).toHaveProperty('error');
+    const two = { ...store.project, tracks: [...store.project.tracks, { ...store.project.tracks[0], id: 'x', recordArm: true }] };
+    expect(recordTargets(two)).toHaveProperty('error');
+  });
+
+  it('I14: a device that disappears releases its held notes (closed in the take)', async () => {
+    const { store, engine, transport, input } = setup();
+    await transport.setProject(store.project);
+    const rec = new Recorder(store, transport, input, () => {}, () => null);
+    input.setMode('piano-performance');
+    await rec.start();
+    input.midiMessage({ type: 'note-on', channel: 0, pitch: 50, velocity: 90 }, 'kb', performance.now());
+    engine.advance(0.5);
+    input.releaseSource('midi:kb');
+    expect(input.getSnapshot().pianoHeld.size).toBe(0);
+    rec.stop();
+    expect(notesOf(store, 0)[0][1]).toBe(50);
+  });
+
+  it('step recording: chord on key release, rest, drum stacking with auto-advance off', async () => {
+    const { store, transport, input } = setup();
+    await transport.setProject(store.project);
+    const step = new StepController(store, input);
+    input.setMode('step-piano');
+    // C + E pressed together, released -> one chord step
+    input.keyDown({ code: 'KeyZ' });
+    input.keyDown({ code: 'KeyC' });
+    input.keyUp({ code: 'KeyZ' });
+    input.keyUp({ code: 'KeyC' });
+    step.rest();
+    input.keyDown({ code: 'KeyB' });
+    input.keyUp({ code: 'KeyB' });
+    expect(notesOf(store, 0)).toEqual([
+      [0, 60, 216],
+      [0, 64, 216],
+      [480, 67, 216],
+    ]);
+    input.setMode('step-drums');
+    step.setCursor(0);
+    input.keyDown({ code: 'KeyM' });
+    input.keyUp({ code: 'KeyM' });
+    input.keyDown({ code: 'Period' });
+    input.keyUp({ code: 'Period' });
+    step.forward();
+    input.keyDown({ code: 'Comma' });
+    input.keyUp({ code: 'Comma' });
+    expect(notesOf(store, 1)).toEqual([
+      [0, 36, 216],
+      [0, 42, 216],
+      [240, 38, 216],
+    ]);
+  });
+});
+
+describe('early hits during the count-in (ADR-047)', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('a note in the last beat of the count-in lands on the start position; one in the first beat is dropped and reported', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { store, engine, transport, input } = setup();
+    store.updateSettings({ recording: { ...store.project.settings.recording, countInBars: 1 } }); // 4 beats at 120 BPM = 0.5 s each
+    await transport.setProject(store.project);
+    const rec = new Recorder(store, transport, input, () => {}, () => 0);
+    input.setMode('piano-performance');
+    const started = rec.start();
+    await vi.advanceTimersByTimeAsync(100); // first beat: far too early
+    expect(rec.getState()).toMatchObject({ phase: 'count-in', countIn: 4 });
+    input.midiMessage({ type: 'note-on', channel: 0, pitch: 62, velocity: 80 }, 'kb', performance.now());
+    input.midiMessage({ type: 'note-off', channel: 0, pitch: 62, releaseVelocity: 0 }, 'kb', performance.now());
+    await vi.advanceTimersByTimeAsync(1500); // now in the last beat
+    expect(rec.getState()).toMatchObject({ phase: 'count-in', countIn: 1 });
+    input.midiMessage({ type: 'note-on', channel: 0, pitch: 60, velocity: 90 }, 'kb', performance.now()); // pickup, a little early
+    await vi.advanceTimersByTimeAsync(600);
+    await started;
+    expect(rec.getState().phase).toBe('recording');
+    engine.advance(0.5); // tick 480
+    input.midiMessage({ type: 'note-off', channel: 0, pitch: 60, releaseVelocity: 0 }, 'kb', performance.now());
+    rec.stop();
+    const notes = notesOf(store, 0);
+    expect(notes.map((n) => [n[0], n[1]])).toEqual([[0, 60]]); // on the start position, not lost; the too-early note is not there
+    expect(notes[0][2]).toBeGreaterThanOrEqual(1);
+    expect(rec.getState().message).toContain('開始位置に揃えました');
+    expect(rec.getState().message).toContain('1 個は記録していません');
+  });
+});
