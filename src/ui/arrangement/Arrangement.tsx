@@ -4,8 +4,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { arrangementZoomPatch } from '../zoom';
 import { draggedLoop, hitLoop, loopCursor, loopSnap, type LoopDrag } from '../loopDrag';
-import { createClip, deleteClip, duplicateClip, moveClip, reorderTracks, resizeClip, splitClip, updateClip, updateTrack } from '../../core/editing/operations';
-import { pasteEvents } from '../../core/editing/clipboard';
+import { createClip, deleteClip, duplicateClip, moveClips, reorderTracks, resizeClip, splitClip, updateClip, updateTrack } from '../../core/editing/operations';
+import { duplicateClips, pasteClips, pasteEvents } from '../../core/editing/clipboard';
+import { MOD_LABEL as MOD } from '../platform';
 import { isSecondaryClick, useContextMenu } from '../menu/ContextMenu';
 import { Dialog } from '../Dialog';
 import { deleteConductorEvent } from '../../core/editing/conductorOps';
@@ -40,7 +41,10 @@ function songEnd(p: MidiProject): number {
 const EDGE_PX = 4;
 
 type Drag =
-  | { kind: 'clip'; clip: MidiClip; startX: number; dx: number; duplicate: boolean; trackOffset: number; startY: number }
+  /** moving the selected clips; `clip` is the one under the pointer, `ids` every clip that moves (ADR-057) */
+  | { kind: 'clip'; clip: MidiClip; ids: string[]; startX: number; dx: number; duplicate: boolean; trackOffset: number; startY: number }
+  /** Shift+drag on empty space: a rubber band over ticks × track rows selecting clips (ADR-057) */
+  | { kind: 'marquee'; tick0: number; row0: number; tick1: number; row1: number; add: boolean }
   /** dragging a clip edge: the new tick of that edge (ADR-040) */
   | { kind: 'resize'; clip: MidiClip; edge: 'start' | 'end'; tick: number }
   | { kind: 'create'; trackId: string; startTick: number; endTick: number }
@@ -275,11 +279,28 @@ export function Arrangement() {
       ctx.strokeRect(a * pxPerTick - scrollX + 0.5, HEAD_H + i * TRACK_H - scrollY + 4.5, (b - a) * pxPerTick, TRACK_H - 9);
       ctx.setLineDash([]);
     }
-    if (drag?.kind === 'clip' && drag.dx !== 0) {
-      const i = project.tracks.findIndex((t) => t.id === drag.clip.trackId) + drag.trackOffset;
+    if (drag?.kind === 'clip' && (drag.dx !== 0 || drag.trackOffset !== 0)) {
+      const ids = new Set(drag.ids);
+      const last = project.tracks.length - 1;
       ctx.strokeStyle = th.accent;
       ctx.setLineDash([4, 3]);
-      ctx.strokeRect((drag.clip.startTick + drag.dx) * pxPerTick - scrollX + 0.5, HEAD_H + i * TRACK_H - scrollY + 3.5, (drag.clip.endTick - drag.clip.startTick) * pxPerTick, TRACK_H - 7);
+      for (const c of project.clips) {
+        if (!ids.has(c.id)) continue;
+        const i = Math.max(0, Math.min(last, project.tracks.findIndex((t) => t.id === c.trackId) + drag.trackOffset));
+        ctx.strokeRect((c.startTick + drag.dx) * pxPerTick - scrollX + 0.5, HEAD_H + i * TRACK_H - scrollY + 3.5, (c.endTick - c.startTick) * pxPerTick, TRACK_H - 7);
+      }
+      ctx.setLineDash([]);
+    }
+    if (drag?.kind === 'marquee') {
+      const x0 = Math.min(drag.tick0, drag.tick1) * pxPerTick - scrollX;
+      const x1 = Math.max(drag.tick0, drag.tick1) * pxPerTick - scrollX;
+      const y0 = HEAD_H + Math.min(drag.row0, drag.row1) * TRACK_H - scrollY;
+      const y1 = HEAD_H + Math.max(drag.row0, drag.row1) * TRACK_H - scrollY;
+      ctx.fillStyle = th.selection;
+      ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+      ctx.strokeStyle = th.accent;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(Math.round(x0) + 0.5, Math.round(y0) + 0.5, Math.round(x1 - x0), Math.round(y1 - y0));
       ctx.setLineDash([]);
     }
     if (drag?.kind === 'resize') {
@@ -376,14 +397,35 @@ export function Arrangement() {
     }
     const clip = hitClip(x, y);
     if (clip) {
-      // selecting a region clears note selection so Delete acts on the region
-      store.setSelection({ ...selection, eventIds: new Set(), clipIds: new Set([clip.id]), trackIds: new Set([track.id]) });
-      setDrag({ kind: 'clip', clip, startX: x, dx: 0, duplicate: e.altKey, trackOffset: 0, startY: y });
+      // Shift / Ctrl / ⌘ + click toggles the clip in the selection; a plain click on an already
+      // selected clip keeps the group so the drag moves all of them. Selecting regions clears the
+      // note selection so Delete / copy act on the regions.
+      const toggle = e.shiftKey || e.metaKey || e.ctrlKey;
+      const ids = new Set(toggle || selection.clipIds.has(clip.id) ? selection.clipIds : []);
+      if (toggle && ids.has(clip.id)) ids.delete(clip.id);
+      else ids.add(clip.id);
+      store.setSelection({ ...selection, eventIds: new Set(), clipIds: ids, trackIds: new Set([track.id]) });
+      if (ids.has(clip.id)) setDrag({ kind: 'clip', clip, ids: [...ids], startX: x, dx: 0, duplicate: e.altKey, trackOffset: 0, startY: y });
+    } else if (e.shiftKey || e.metaKey || e.ctrlKey) {
+      const t = tickAt(x);
+      const row = rowAt(y);
+      setDrag({ kind: 'marquee', tick0: t, row0: row, tick1: t, row1: row, add: true });
     } else {
       store.setSelection({ ...selection, clipIds: new Set(), trackIds: new Set([track.id]) });
       const t = snap(tickAt(x));
       setDrag({ kind: 'create', trackId: track.id, startTick: t, endTick: t });
     }
+  }
+
+  /** track row (fractional) at a canvas y */
+  const rowAt = (y: number) => (y - HEAD_H + scrollY) / TRACK_H;
+
+  /** clips whose range overlaps the tick span and whose track row lies in the row span */
+  function clipsInBox(tickA: number, tickB: number, rowA: number, rowB: number): string[] {
+    const [t0, t1] = tickA <= tickB ? [tickA, tickB] : [tickB, tickA];
+    const [r0, r1] = rowA <= rowB ? [rowA, rowB] : [rowB, rowA];
+    const rows = new Map(project.tracks.map((t, i) => [t.id, i]));
+    return project.clips.filter((c) => c.startTick < t1 && c.endTick > t0 && (rows.get(c.trackId) ?? -1) + 1 > r0 && (rows.get(c.trackId) ?? -1) < r1).map((c) => c.id);
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -398,6 +440,7 @@ export function Arrangement() {
     if (drag.kind === 'loop') setDrag({ ...drag, preview: draggedLoop(drag.origin, drag.hit, (x - drag.startX) / pxPerTick, loopSnap(sig, e.shiftKey), sig.ticksPerBeat(0)) });
     else if (drag.kind === 'seek') transport.seek(snap(tickAt(x)));
     else if (drag.kind === 'create') setDrag({ ...drag, endTick: snap(tickAt(x)) });
+    else if (drag.kind === 'marquee') setDrag({ ...drag, tick1: tickAt(x), row1: rowAt(y) });
     else if (drag.kind === 'resize') {
       const t = snap(tickAt(x));
       // the clip keeps at least one tick
@@ -428,14 +471,18 @@ export function Arrangement() {
         }
       } else if (d.kind === 'resize') {
         store.run(resizeClip(store.project, d.clip.id, d.edge === 'start' ? { startTick: d.tick } : { endTick: d.tick }));
+      } else if (d.kind === 'marquee') {
+        const hit = clipsInBox(d.tick0, d.tick1, d.row0, d.row1);
+        const sel = store.getState().selection;
+        store.setSelection({ ...sel, eventIds: new Set(), clipIds: new Set(d.add ? [...sel.clipIds, ...hit] : hit) });
       } else if (d.kind === 'clip' && (d.dx !== 0 || d.trackOffset !== 0)) {
         if (d.duplicate) {
-          const idx = project.tracks.findIndex((t) => t.id === d.clip.trackId) + d.trackOffset;
-          const target = project.tracks[Math.max(0, Math.min(project.tracks.length - 1, idx))];
-          const r = duplicateClip(store.project, d.clip.id, d.clip.startTick + d.dx, target.id);
-          store.run(r.command);
-          store.setSelection({ ...store.getState().selection, clipIds: new Set([r.clipId]) });
-        } else store.run(moveClip(store.project, d.clip.id, d.dx));
+          const r = duplicateClips(store.project, d.ids, { deltaTick: d.dx, trackOffset: d.trackOffset });
+          if (r) {
+            store.run(r.command);
+            store.setSelection({ ...store.getState().selection, clipIds: new Set(r.clipIds) });
+          }
+        } else store.run(moveClips(store.project, d.ids, d.dx));
       }
     } catch (err) {
       console.warn(err);
@@ -494,6 +541,12 @@ export function Arrangement() {
     else setConductorEdit({ kind, tick: kind === 'time-signature' ? Math.round(sig.barBeatToTick(sig.tickToBarBeat(raw).bar)) : snap(raw) });
   }
 
+  /** selects every clip (on any track) that contains the tick (ADR-057) */
+  function selectClipsAt(tick: number, trackId: string) {
+    const ids = project.clips.filter((c) => tick >= c.startTick && tick < c.endTick).map((c) => c.id);
+    store.setSelection({ ...store.getState().selection, eventIds: new Set(), clipIds: new Set(ids), trackIds: new Set([trackId]) });
+  }
+
   function onContextMenu(e: React.MouseEvent<HTMLCanvasElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -513,7 +566,20 @@ export function Arrangement() {
     };
     if (clip && track) {
       store.updateSettings({ selectedTrackId: track.id });
-      store.setSelection({ ...store.getState().selection, eventIds: new Set(), clipIds: new Set([clip.id]), trackIds: new Set([track.id]) });
+      // a right-click on one of several selected clips keeps the group: copy / duplicate / delete act on all of them
+      const group = store.getState().selection.clipIds.has(clip.id) ? store.getState().selection.clipIds : new Set([clip.id]);
+      store.setSelection({ ...store.getState().selection, eventIds: new Set(), clipIds: new Set(group), trackIds: new Set([track.id]) });
+      if (group.size > 1) {
+        const n = group.size;
+        ctxMenu.open(e, [
+          { label: `コピー（${n} 個のクリップ）`, shortcut: `${MOD}C`, action: actions.copy },
+          { label: '切り取り', shortcut: `${MOD}X`, action: run(actions.cut) },
+          { label: '複製（すぐ後ろへ）', shortcut: `${MOD}D`, action: run(actions.duplicate) },
+          { separator: true, label: '' },
+          { label: '削除（中のノートごと）', shortcut: 'Delete', action: run(actions.delete) },
+        ]);
+        return;
+      }
       // quantize acts on the selection: select the clip's notes first (the clip stays selected)
       const ids = new Set(clip.eventIds);
       const noteIds = track.events.filter((ev) => ev.kind === 'note' && ids.has(ev.id)).map((ev) => ev.id);
@@ -524,6 +590,10 @@ export function Arrangement() {
       ctxMenu.open(e, [
         { label: 'ピアノロールで開く', action: () => store.updateSettings({ selectedTrackId: track.id, activePanel: track.displayMode === 'drum' ? 'drum' : 'piano-roll', editorCollapsed: false }) },
         { label: '名前と色…', action: () => setClipEdit(clip) },
+        { separator: true, label: '' },
+        { label: 'コピー', shortcut: `${MOD}C`, action: actions.copy },
+        { label: '切り取り', shortcut: `${MOD}X`, action: run(actions.cut) },
+        { label: 'この位置のクリップを全トラックで選択', action: () => selectClipsAt(tick, track.id) },
         { separator: true, label: '' },
         { label: `クオンタイズ（${gridLabel(settings.grid)}）`, action: withNotes(actions.quantize), disabled: noteIds.length === 0, reason: 'クリップにノートがありません' },
         { label: 'クオンタイズ…', action: withNotes(actions.quantizeDialog), disabled: noteIds.length === 0, reason: 'クリップにノートがありません' },
@@ -549,10 +619,21 @@ export function Arrangement() {
               store.run(r.command);
               store.setSelection({ ...store.getState().selection, clipIds: new Set([r.clipId]) });
             }) },
-            { label: 'ここに貼り付け', disabled: !clipboard, reason: 'コピーしたノートがありません', action: run(() => {
-              const r = clipboard && pasteEvents(store.project, track.id, tick, clipboard);
+            { label: 'ここに貼り付け', disabled: !clipboard, reason: 'コピーしたノートやクリップがありません', action: run(() => {
+              if (!clipboard) return;
+              if (clipboard.clips) {
+                // copied regions return to their own tracks; a track that is gone falls back to the clicked one
+                const r = pasteClips(store.project, tick, clipboard, (c) => (store.project.tracks.some((x) => x.id === c.trackId) ? c.trackId : track.id));
+                if (r) {
+                  store.run(r.command);
+                  store.setSelection({ ...store.getState().selection, eventIds: new Set(), clipIds: new Set(r.clipIds) });
+                }
+                return;
+              }
+              const r = pasteEvents(store.project, track.id, tick, clipboard);
               if (r) store.run(r.command, { select: r.ids });
             }) },
+            { label: 'この位置のクリップを全トラックで選択', action: () => selectClipsAt(tick, track.id), disabled: !project.clips.some((c) => tick >= c.startTick && tick < c.endTick), reason: 'この位置にクリップがありません' },
           ]
         : []),
     ]);

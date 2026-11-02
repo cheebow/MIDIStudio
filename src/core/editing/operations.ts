@@ -250,6 +250,36 @@ export function moveClip(project: MidiProject, clipId: string, deltaTick: number
   return cmd(label, { tracks: replaceTracks(project, new Map([[track.id, newTrack]])), clips });
 }
 
+/** Moves several clips by the same delta (clamped so the earliest stays at tick 0 or later), as one command. */
+export function moveClips(project: MidiProject, clipIds: Iterable<string>, deltaTick: number, label = 'クリップを移動'): Command | null {
+  const sel = new Set(clipIds);
+  const clips = project.clips.filter((c) => sel.has(c.id));
+  if (clips.length === 0) return null;
+  const delta = Math.max(deltaTick, -Math.min(...clips.map((c) => c.startTick)));
+  if (delta === 0) return null;
+  return compose(project, label, clips.map((c) => (p) => moveClip(p, c.id, delta, label)));
+}
+
+/** Deletes several clips as one command. */
+export function deleteClips(project: MidiProject, clipIds: Iterable<string>, opts: { deleteEvents: boolean } = { deleteEvents: true }, label = 'クリップを削除'): Command | null {
+  return compose(project, label, [...clipIds].map((id) => (p) => deleteClip(p, id, opts, label)));
+}
+
+/** Runs steps one after another on the intermediate project and merges their patches into one command. */
+function compose(project: MidiProject, label: string, steps: readonly ((p: MidiProject) => Command | null)[]): Command | null {
+  let p = project;
+  const patch: ProjectPatch = {};
+  let any = false;
+  for (const step of steps) {
+    const c = step(p);
+    if (!c) continue;
+    p = { ...p, ...c.patch };
+    Object.assign(patch, c.patch);
+    any = true;
+  }
+  return any ? cmd(label, patch) : null;
+}
+
 function dropReleaseOrder(n: NoteEvent): NoteEvent {
   const { releaseOrder: _r, ...rest } = n;
   void _r;

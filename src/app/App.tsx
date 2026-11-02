@@ -11,8 +11,10 @@ import { parseProjectFile, serializeProject } from '../core/project-io/projectFi
 import { createStarterProject } from '../core/model/defaults';
 import type { MidiProject } from '../core/model/types';
 import type { ImportIssue } from '../core/smf/types';
-import { addEvents, addTrack, channelInsertIndex, deleteClip, deleteEvents, duplicateEvents, duplicateTrack, moveEvents, removeTrack, splitClip, updateEvents } from '../core/editing/operations';
-import { copyEvents, pasteEvents } from '../core/editing/clipboard';
+import { addEvents, addTrack, channelInsertIndex, deleteClips, deleteEvents, duplicateEvents, duplicateTrack, moveEvents, removeTrack, splitClip, updateEvents } from '../core/editing/operations';
+import { copyClips, copyEvents, duplicateClips, pasteClips, pasteEvents } from '../core/editing/clipboard';
+import type { Command } from '../core/editing/history';
+import type { Selection } from '../core/editing/selection';
 import { quantizeNotes } from '../core/editing/quantize';
 import { gridLabel, gridTicks, GRID_DIVISIONS } from '../core/timing/grid';
 import { downloadBytes, safeFileName } from '../storage/files';
@@ -325,37 +327,64 @@ export default function App() {
       setError(errorText(e));
     }
   };
+  const clipsOnly = (sel: Selection) => sel.eventIds.size === 0 && sel.clipIds.size > 0;
+  const runSelectingClips = (command: Command, clipIds: string[]) => {
+    store.run(command);
+    store.setSelection({ ...store.getState().selection, eventIds: new Set(), clipIds: new Set(clipIds) });
+  };
   const actions: AppActions = {
     undo: () => store.undo(),
     redo: () => store.redo(),
-    copy: () => store.setClipboard(copyEvents(store.project, store.getState().selection.eventIds)),
+    // Copy / cut / paste / duplicate / delete act on the selected notes, or, when only clips
+    // (regions) are selected in the track view, on those clips as a group (ADR-057).
+    copy: () => {
+      const sel = store.getState().selection;
+      store.setClipboard(clipsOnly(sel) ? copyClips(store.project, sel.clipIds) : copyEvents(store.project, sel.eventIds));
+    },
     cut: () => {
-      const ids = store.getState().selection.eventIds;
-      store.setClipboard(copyEvents(store.project, ids));
-      store.run(deleteEvents(store.project, ids, '切り取り'));
+      const sel = store.getState().selection;
+      if (clipsOnly(sel)) {
+        store.setClipboard(copyClips(store.project, sel.clipIds));
+        store.run(deleteClips(store.project, sel.clipIds, { deleteEvents: true }, '切り取り'));
+        return;
+      }
+      store.setClipboard(copyEvents(store.project, sel.eventIds));
+      store.run(deleteEvents(store.project, sel.eventIds, '切り取り'));
     },
     paste: () =>
       tryRun(() => {
         const clip = store.getState().clipboard;
         const t = currentTrack(store.project);
         if (!clip || !t) return;
-        const r = pasteEvents(store.project, t.id, Math.round(transport.getPosition().tick), clip);
+        const tick = Math.round(transport.getPosition().tick);
+        if (clip.clips) {
+          // regions go back to their own tracks; a track that is gone falls back to the selected one
+          const r = pasteClips(store.project, tick, clip, (c) => (store.project.tracks.some((x) => x.id === c.trackId) ? c.trackId : t.id));
+          if (r) runSelectingClips(r.command, r.clipIds);
+          return;
+        }
+        const r = pasteEvents(store.project, t.id, tick, clip);
         if (r) store.run(r.command, { select: r.ids });
       }),
     duplicate: () =>
       tryRun(() => {
-        const ids = store.getState().selection.eventIds;
-        const clip = copyEvents(store.project, ids);
+        const sel = store.getState().selection;
+        if (clipsOnly(sel)) {
+          const r = duplicateClips(store.project, sel.clipIds);
+          if (r) runSelectingClips(r.command, r.clipIds);
+          return;
+        }
+        const clip = copyEvents(store.project, sel.eventIds);
         if (!clip) return;
-        const r = duplicateEvents(store.project, ids, clip.span);
+        const r = duplicateEvents(store.project, sel.eventIds, clip.span);
         if (r) store.run(r.command, { select: r.ids });
       }),
     delete: () => {
       const sel = store.getState().selection;
-      if (sel.eventIds.size > 0 || sel.clipIds.size === 0) return store.run(deleteEvents(store.project, sel.eventIds));
-      // nothing but clips selected (arrangement view): delete the regions with their notes
+      if (!clipsOnly(sel)) return store.run(deleteEvents(store.project, sel.eventIds));
+      // nothing but clips selected (arrangement view): delete the regions with their notes, one undo step
       tryRun(() => {
-        for (const id of sel.clipIds) store.run(deleteClip(store.project, id, { deleteEvents: true }));
+        store.run(deleteClips(store.project, sel.clipIds, { deleteEvents: true }));
         store.setSelection({ ...store.getState().selection, clipIds: new Set() });
       });
     },

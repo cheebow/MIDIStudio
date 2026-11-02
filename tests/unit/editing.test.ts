@@ -8,6 +8,8 @@ import {
   addTrack,
   createClip,
   deleteClip,
+  deleteClips,
+  moveClips,
   updateClip,
   deleteEvents,
   duplicateClip,
@@ -26,6 +28,7 @@ import {
   type NewEvent,
 } from '../../src/core/editing/operations';
 import { EMPTY_SELECTION, pruneSelection, selectEvents } from '../../src/core/editing/selection';
+import { copyClips, duplicateClips, pasteClips } from '../../src/core/editing/clipboard';
 import { exportSmfBytes } from '../../src/core/project-io/exportSmf';
 import { openMidiFile } from '../../src/core/project-io/midiFile';
 import { build, cc, meta, off, on } from '../fixtures/songs';
@@ -627,3 +630,97 @@ describe('humanize and velocity edits (ADR-050)', () => {
     expect(s.history.past.length).toBe(6);
   });
 });
+
+describe('clip groups (ADR-057): copy / paste / duplicate / move / delete several clips at once', () => {
+  function setup() {
+    const s = new Session(createEmptyProject());
+    s.run(addTrack(s.project, { name: 'B', channel: 1 }).command);
+    const [a, b] = s.project.tracks;
+    s.run(addEvents(s.project, a.id, [note(0, 60), note(480, 62)])!.command);
+    s.run(addEvents(s.project, b.id, [note(960, 40, 960), { kind: 'cc', tick: 960, controller: 7, value: 100 }])!.command);
+    const ca = createClip(s.project, a.id, 0, 960);
+    s.run(ca.command);
+    const cb = createClip(s.project, b.id, 960, 1920, 'clip B');
+    s.run(cb.command);
+    s.run(updateClip(s.project, cb.clipId, { name: 'bass', color: '#123456' }));
+    return { s, a, b, ids: [ca.clipId, cb.clipId] };
+  }
+  const ticks = (s: Session, i: number) => s.project.tracks[i].events.map((e) => e.tick);
+
+  it('copyClips keeps each clip relative to the earliest start, with its track, name and colour; events stay flat too', () => {
+    const { s, a, b, ids } = setup();
+    const data = copyClips(s.project, ids)!;
+    expect(data.span).toBe(1920);
+    expect(data.clips!.map((c) => [c.trackId, c.trackIndex, c.startTick, c.endTick, c.name, c.color])).toEqual([
+      [a.id, 0, 0, 960, undefined, undefined],
+      [b.id, 1, 960, 1920, 'bass', '#123456'],
+    ]);
+    expect(data.clips![1].events.map((e) => e.tick)).toEqual([960, 960]);
+    expect(data.events).toHaveLength(4); // a note editor can still paste the same clipboard
+    expect(copyClips(s.project, [])).toBeNull();
+  });
+
+  it('pasteClips rebuilds the regions on the chosen tracks at the tick, as one undo step', () => {
+    const { s, a, b, ids } = setup();
+    const data = copyClips(s.project, ids)!;
+    const r = pasteClips(s.project, 3840, data, (c) => c.trackId)!;
+    s.run(r.command);
+    expect(r.clipIds).toHaveLength(2);
+    expect(s.project.clips.map((c) => [c.trackId, c.startTick, c.endTick])).toEqual([
+      [a.id, 0, 960],
+      [b.id, 960, 1920],
+      [a.id, 3840, 4800],
+      [b.id, 4800, 5760],
+    ]);
+    expect(ticks(s, 0)).toEqual([0, 480, 3840, 4320]);
+    expect(ticks(s, 1)).toEqual([960, 960, 4800, 4800]);
+    const pasted = s.project.clips[3];
+    expect(pasted.name).toBe('bass');
+    expect(pasted.eventIds).toHaveLength(2);
+    s.undo();
+    expect(s.project.clips).toHaveLength(2);
+    expect(ticks(s, 0)).toEqual([0, 480]);
+    // a clip whose target track is missing is skipped; none → null
+    expect(pasteClips(s.project, 0, data, () => 'nope')).toBeNull();
+    expect(pasteClips(s.project, 0, data, (c) => (c.trackIndex === 0 ? a.id : undefined))!.clipIds).toHaveLength(1);
+    // the flat events still paste into one track
+    s.run(pasteEvents(s.project, a.id, 7680, data)!.command);
+    expect(ticks(s, 0)).toEqual([0, 480, 7680, 8160, 8640, 8640]);
+  });
+
+  it('duplicateClips puts the group right after itself, or at a delta and a lane offset (clamped)', () => {
+    const { s, a, b, ids } = setup();
+    s.run(duplicateClips(s.project, ids)!.command);
+    expect(s.project.clips.slice(2).map((c) => [c.trackId, c.startTick])).toEqual([
+      [a.id, 1920],
+      [b.id, 2880],
+    ]);
+    s.undo();
+    s.run(duplicateClips(s.project, ids, { deltaTick: 480, trackOffset: 1 })!.command);
+    // both land on the last track (offset clamped), shifted by 480
+    expect(s.project.clips.slice(2).map((c) => [c.trackId, c.startTick])).toEqual([
+      [b.id, 480],
+      [b.id, 1440],
+    ]);
+    expect(ticks(s, 1)).toEqual([480, 960, 960, 960, 1440, 1440]);
+  });
+
+  it('moveClips moves the group together, never before tick 0; deleteClips removes them in one step', () => {
+    const { s, ids } = setup();
+    s.run(moveClips(s.project, ids, -5000)); // clamped so the earliest clip stays at 0: nothing moves
+    expect(s.project.clips.map((c) => c.startTick)).toEqual([0, 960]);
+    s.run(moveClips(s.project, ids, 480));
+    expect(s.project.clips.map((c) => c.startTick)).toEqual([480, 1440]);
+    expect(ticks(s, 0)).toEqual([480, 960]);
+    expect(ticks(s, 1)).toEqual([1440, 1440]);
+    s.run(deleteClips(s.project, ids, { deleteEvents: true }));
+    expect(s.project.clips).toHaveLength(0);
+    expect(ticks(s, 0)).toEqual([]);
+    expect(ticks(s, 1)).toEqual([]);
+    s.undo();
+    expect(s.project.clips).toHaveLength(2);
+    expect(ticks(s, 1)).toEqual([1440, 1440]);
+    expect(deleteClips(s.project, [])).toBeNull();
+  });
+});
+
