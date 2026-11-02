@@ -221,7 +221,7 @@ export function Arrangement() {
       ctx.moveTo(0, y + TRACK_H + 0.5);
       ctx.lineTo(viewW, y + TRACK_H + 0.5);
       ctx.stroke();
-      drawTrackClips(ctx, project, track, y, t0, t1, pxPerTick, scrollX, selection.clipIds, th.accent, th.noteSelected, th.text);
+      drawTrackClips(ctx, project, track, y, t0, t1, pxPerTick, scrollX, selection.clipIds, th);
     });
     drawMarkerLines(ctx, marks, pxPerTick, scrollX, viewW, HEAD_H, h, th);
     // ruler + tempo lane on top (fixed while the lanes scroll vertically)
@@ -767,45 +767,101 @@ export function Arrangement() {
   );
 }
 
-function drawTrackClips(
-  ctx: CanvasRenderingContext2D,
-  project: MidiProject,
-  track: MidiTrack,
-  y: number,
-  t0: number,
-  t1: number,
-  pxPerTick: number,
-  scrollX: number,
-  selectedClips: ReadonlySet<string>,
-  accent: string,
-  selectedColor: string,
-  text: string,
-) {
+/** rounded-rectangle path (own helper so every tested browser draws the same) */
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+  ctx.lineTo(x + w, y + h - rr);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+  ctx.lineTo(x + rr, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+  ctx.lineTo(x, y + rr);
+  ctx.quadraticCurveTo(x, y, x + rr, y);
+  ctx.closePath();
+}
+
+/** `#rrggbb` with an alpha (0..1); other colour formats are returned unchanged */
+function withAlpha(color: string, alpha: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!m) return color;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+
+/** relative luminance of `#rrggbb` (0..1); 0.5 when the format is unknown */
+function luminance(color: string): number {
+  const m = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!m) return 0.5;
+  const n = parseInt(m[1], 16);
+  const ch = (v: number) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * ch((n >> 16) & 255) + 0.7152 * ch((n >> 8) & 255) + 0.0722 * ch(n & 255);
+}
+
+const CLIP_PAD = 3;
+const CLIP_HEAD = 13;
+const CLIP_RADIUS = 4;
+
+/**
+ * Clips as DAW-style regions: a rounded block in the clip colour with a solid name strip on top,
+ * the notes drawn inside in the same colour (drum tracks as dots), the selected ones with an
+ * accent outline and a soft glow, a muted track faded. Events outside any clip stay visible.
+ */
+function drawTrackClips(ctx: CanvasRenderingContext2D, project: MidiProject, track: MidiTrack, y: number, t0: number, t1: number, pxPerTick: number, scrollX: number, selectedClips: ReadonlySet<string>, th: ReturnType<typeof readTheme>) {
   const clips = project.clips.filter((c) => c.trackId === track.id && c.endTick >= t0 && c.startTick <= t1);
-  const inClip = new Set(clips.flatMap((c) => c.eventIds));
+  const clipOf = new Map<string, MidiClip>();
+  for (const c of clips) for (const id of c.eventIds) clipOf.set(id, c);
+  const faded = track.mute || (project.tracks.some((t) => t.solo) && !track.solo);
+  const top = y + CLIP_PAD;
+  const h = TRACK_H - CLIP_PAD * 2;
+  const dark = luminance(th.panel) < 0.5;
+  ctx.save();
+  if (faded) ctx.globalAlpha = 0.45;
   for (const c of clips) {
     const x = c.startTick * pxPerTick - scrollX;
-    const w = Math.max(2, (c.endTick - c.startTick) * pxPerTick);
+    const w = Math.max(3, (c.endTick - c.startTick) * pxPerTick);
     const color = c.color ?? track.color;
-    ctx.fillStyle = color + '33';
-    ctx.fillRect(x, y + 3, w, TRACK_H - 6);
-    // header strip with the region name (DAW-style)
-    ctx.fillStyle = color + 'aa';
-    ctx.fillRect(x, y + 3, w, 12);
+    const selected = selectedClips.has(c.id);
+    // body
+    roundRect(ctx, x, top, w, h, CLIP_RADIUS);
+    ctx.fillStyle = withAlpha(color, selected ? (dark ? 0.34 : 0.26) : dark ? 0.22 : 0.16);
+    ctx.fill();
+    // name strip (clipped to the rounded top)
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, y + 3, w, 12);
+    roundRect(ctx, x, top, w, h, CLIP_RADIUS);
     ctx.clip();
-    ctx.fillStyle = text;
-    ctx.font = '10px system-ui, sans-serif';
-    ctx.fillText(c.name ?? track.name, x + 4, y + 9.5);
+    ctx.fillStyle = withAlpha(color, 0.92);
+    ctx.fillRect(x, top, w, CLIP_HEAD);
+    if (w > 18) {
+      ctx.fillStyle = luminance(color) > 0.55 ? '#1d2330' : '#ffffff';
+      ctx.font = '600 10px system-ui, sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(c.name ?? track.name, x + 5, top + CLIP_HEAD / 2 + 0.5, w - 8);
+    }
     ctx.restore();
-    ctx.strokeStyle = selectedClips.has(c.id) ? selectedColor : color;
-    ctx.lineWidth = selectedClips.has(c.id) ? 2 : 1;
-    ctx.strokeRect(x + 0.5, y + 3.5, w - 1, TRACK_H - 7);
-    ctx.lineWidth = 1;
+    // outline (+ glow when selected)
+    roundRect(ctx, x + 0.5, top + 0.5, w - 1, h - 1, CLIP_RADIUS);
+    if (selected) {
+      ctx.save();
+      ctx.shadowColor = withAlpha(th.noteSelected, 0.7);
+      ctx.shadowBlur = 6;
+      ctx.strokeStyle = th.noteSelected;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      ctx.strokeStyle = withAlpha(color, 0.75);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
   }
-  // Mini notes (events outside any clip are drawn too, so nothing is hidden).
+  ctx.lineWidth = 1;
+  // Mini notes: inside a clip in the clip colour, outside any clip in the accent colour (nothing is hidden).
   let lo = 127;
   let hi = 0;
   for (const e of track.events) if (e.kind === 'note') {
@@ -813,13 +869,19 @@ function drawTrackClips(
     hi = Math.max(hi, e.pitch);
   }
   const range = Math.max(12, hi - lo + 1);
+  const bodyTop = top + CLIP_HEAD + 3;
+  const bodyH = h - CLIP_HEAD - 6;
+  const drums = track.displayMode === 'drum';
   for (const e of track.events) {
     if (e.kind !== 'note' || e.tick > t1 || e.tick + e.durationTicks < t0) continue;
+    const c = clipOf.get(e.id);
     const nx = e.tick * pxPerTick - scrollX;
-    const ny = y + 18 + ((hi - e.pitch) / range) * (TRACK_H - 24); // below the header strip
-    ctx.fillStyle = inClip.has(e.id) ? track.color : accent + '88';
-    ctx.fillRect(nx, ny, Math.max(1, e.durationTicks * pxPerTick), 2);
+    const ny = bodyTop + ((hi - e.pitch) / range) * (bodyH - 3);
+    ctx.fillStyle = c ? withAlpha(c.color ?? track.color, 0.95) : withAlpha(th.accent, 0.55);
+    if (drums) ctx.fillRect(nx, ny, 3, 3);
+    else ctx.fillRect(nx, ny, Math.max(2, e.durationTicks * pxPerTick - 0.5), 3);
   }
+  ctx.restore();
 }
 
 /** pointer movement before a header press becomes a reorder drag */
