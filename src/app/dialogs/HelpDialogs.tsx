@@ -18,6 +18,10 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
               バージョン {__APP_VERSION__} ・ MIT ライセンス © 2026 cheebow ・{' '}
               <a href={REPOSITORY_URL} target="_blank" rel="noreferrer">
                 GitHub
+              </a>{' '}
+              ・{' '}
+              <a href={`${REPOSITORY_URL}/blob/main/CHANGELOG.md`} target="_blank" rel="noreferrer">
+                変更履歴
               </a>
             </p>
           </div>

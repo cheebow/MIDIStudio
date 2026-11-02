@@ -131,3 +131,14 @@ BASE_PATH=/MIDIStudio/ npm run build        # GitHub Pages のサブパスの例
 - SoundFont は自サイトのコピーを配信する（GeneralUser GS のライセンスにより作者のダウンロードファイルへの直リンクは不可）。
 - 受入状況は `docs/ACCEPTANCE_REPORT.md`。
 
+### 版を上げる（公開のたびに）
+
+main へ push するたびに版を上げる。番号は `package.json` の `version` が正本で、ビルド時に `__APP_VERSION__` として「MIDI Studio について」に出る。
+
+```bash
+npm version minor --no-git-tag-version   # 操作や挙動が変わるとき。直すだけなら patch
+# CHANGELOG.md に利用者向けの言葉で変更を書く（ADR 番号を添える）
+git add -A && git commit -m "v0.3.0"
+git tag v0.3.0 && git push origin main --tags
+```
+
