@@ -1,0 +1,104 @@
+/* Shared look of the static pages (about.html, help.html): the app's colours, light / dark by the OS. */
+:root {
+  --bg: #eef0f3;
+  --panel: #ffffff;
+  --text: #1d2330;
+  --muted: #5d6677;
+  --border: #d5d9e0;
+  --accent: #2f6fdb;
+  --accent-text: #ffffff;
+  --selection: rgba(47, 111, 219, 0.14);
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121418;
+    --panel: #1b1e24;
+    --text: #e4e7ec;
+    --muted: #9aa3b2;
+    --border: #323844;
+    --accent: #6c9cf0;
+    --accent-text: #0e1420;
+    --selection: rgba(108, 156, 240, 0.14);
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  line-height: 1.7;
+}
+a { color: var(--accent); }
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.nav .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text); text-decoration: none; }
+.nav a.item { color: var(--muted); text-decoration: none; }
+.nav a.item[aria-current] { color: var(--text); font-weight: 600; }
+.nav .spacer { flex: 1; }
+.nav .github { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+main { max-width: 900px; margin: 0 auto; padding: 48px 20px 64px; }
+.note { font-size: 0.85rem; color: var(--muted); }
+footer { max-width: 900px; margin: 0 auto; padding: 0 20px 40px; font-size: 0.85rem; color: var(--muted); border-top: 1px solid var(--border); }
+footer p { margin: 12px 0 0; }
+
+/* about */
+.hero { text-align: center; }
+.hero .logo { width: 88px; height: 88px; }
+.hero h1 { margin: 12px 0 6px; font-size: 2.4rem; letter-spacing: 0.02em; }
+.hero .tagline { margin: 0 0 22px; font-size: 1.1rem; color: var(--muted); }
+.cta {
+  display: inline-block;
+  padding: 12px 28px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.cta:hover { filter: brightness(1.08); }
+.hero .sub { margin: 10px 0 0; font-size: 0.85rem; color: var(--muted); }
+.shot { margin: 32px 0 0; }
+.shot img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; display: block; }
+.shot figcaption { margin-top: 6px; font-size: 0.8rem; color: var(--muted); text-align: center; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin: 40px 0 0; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; }
+.card h2 { margin: 0 0 6px; font-size: 1.05rem; color: var(--accent); }
+.card p { margin: 0; font-size: 0.95rem; }
+section.list { margin-top: 44px; }
+section.list h2 { font-size: 1.3rem; margin: 0 0 10px; }
+section.list ul { padding-left: 1.2em; margin: 0; }
+section.list li { margin: 4px 0; }
+
+/* help */
+main.help-page { max-width: 1040px; display: grid; grid-template-columns: 200px 1fr; gap: 32px; align-items: start; }
+.help-toc { position: sticky; top: 56px; }
+.help-toc h1 { margin: 0 0 8px; font-size: 1.3rem; }
+.help-toc .toc { list-style: none; margin: 0; padding: 0; }
+.help-toc .toc li { margin: 2px 0; }
+.help-toc .toc a { display: block; padding: 3px 8px; border-radius: 5px; color: var(--text); text-decoration: none; }
+.help-toc .toc a:hover { background: var(--selection); }
+.help-section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; scroll-margin-top: 64px; }
+.help-section h2 { margin: 0 0 8px; font-size: 1.2rem; }
+.help-section h4 { margin: 14px 0 4px; font-size: 0.95rem; }
+.help-section ul { padding-left: 1.2em; }
+.help-section li { margin: 4px 0; }
+.help-section table.summary { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+.help-section table.summary td, .help-section table.summary th { padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.help-section table.summary td:first-child { white-space: nowrap; }
+.help-key { display: inline-block; padding: 0 5px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; background: var(--bg); font: 0.85em system-ui, sans-serif; }
+@media (max-width: 760px) {
+  main.help-page { grid-template-columns: 1fr; }
+  .help-toc { position: static; }
+}

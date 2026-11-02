@@ -170,6 +170,13 @@ test('ADR-055: the about page is served next to the app and links into it; /?hel
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('MIDI Studio');
   await expect(page.getByRole('link', { name: 'ブラウザで使う' })).toHaveAttribute('href', './');
   await expect(page.getByRole('img', { name: /MIDI Studio の画面/ })).toBeVisible();
-  await page.getByRole('link', { name: 'ヘルプ' }).click();
+  // the static help page: every in-app section, readable without starting the app
+  await page.getByRole('navigation', { name: 'サイト' }).getByRole('link', { name: 'ヘルプ' }).click();
+  await expect(page).toHaveURL(/help\.html$/);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('ヘルプ');
+  await expect(page.locator('section.help-section')).toHaveCount(14);
+  await expect(page.locator('#shortcuts')).toContainText('再生 / 一時停止');
+  // ./?help still opens the in-app help
+  await page.goto('/?help');
   await expect(page.getByTestId('help-dialog')).toBeVisible();
 });
