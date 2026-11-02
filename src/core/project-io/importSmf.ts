@@ -448,7 +448,8 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
     tracks,
     clips,
     loop: { enabled: false, startTick: 0, endTick: Math.max(lastTick, smf.ppq * 4) },
-    settings: { ...defaultViewSettings(smf.ppq), selectedTrackId: tracks[0]?.id },
+    // start on the first track that has notes (a file often opens with an empty conductor-only MTrk)
+    settings: { ...defaultViewSettings(smf.ppq), selectedTrackId: (tracks.find((t) => t.events.some((e) => e.kind === 'note')) ?? tracks[0])?.id },
     inputPresets: defaultInputPresets(),
     nextOriginOrder: counter,
     ...(conductorEnd !== undefined ? { conductorEndOfTrackTick: conductorEnd } : {}),
