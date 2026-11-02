@@ -629,7 +629,7 @@ export default function App() {
             {!settings.editorCollapsed && (settings.activePanel === 'piano-roll' || settings.activePanel === 'drum') && (
               <span className="editor-tools">
                 <span className="segmented" role="group" aria-label="ツール">
-                  <button aria-label="選択" aria-pressed={state.tool === 'select'} className={`icon-btn${state.tool === 'select' ? ' on' : ''}`} onClick={() => store.setTool('select')} title="選択ツール (V): クリックで選択、ドラッグで移動・範囲選択">
+                  <button aria-label="選択" aria-pressed={state.tool === 'select'} className={`icon-btn${state.tool === 'select' ? ' on' : ''}`} onClick={() => store.setTool('select')} title="選択ツール (V): クリックで選択、ドラッグで移動・範囲選択" data-testid="tool-select">
                     <SelectIcon />
                   </button>
                   <button aria-label="描画" aria-pressed={state.tool === 'draw'} className={`icon-btn${state.tool === 'draw' ? ' on' : ''}`} onClick={() => store.setTool('draw')} title="描画ツール (P): クリックで入力（ドラムではもう一度クリックで削除）" data-testid="tool-draw">

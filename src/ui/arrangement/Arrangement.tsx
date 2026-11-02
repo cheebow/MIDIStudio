@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { arrangementZoomPatch } from '../zoom';
 import { draggedLoop, hitLoop, loopCursor, loopSnap, type LoopDrag } from '../loopDrag';
-import { createClip, deleteClip, duplicateClip, moveClips, reorderTracks, resizeClip, splitClip, updateClip, updateTrack } from '../../core/editing/operations';
+import { adoptFreeEvents, createClip, deleteClip, duplicateClip, freeEventsInClip, moveClips, reorderTracks, resizeClip, splitClip, updateClip, updateTrack } from '../../core/editing/operations';
 import { duplicateClips, pasteClips, pasteEvents } from '../../core/editing/clipboard';
 import { MOD_LABEL as MOD } from '../platform';
 import { isSecondaryClick, useContextMenu } from '../menu/ContextMenu';
@@ -595,6 +595,7 @@ export function Arrangement() {
       // quantize acts on the selection: select the clip's notes first (the clip stays selected)
       const ids = new Set(clip.eventIds);
       const noteIds = track.events.filter((ev) => ev.kind === 'note' && ids.has(ev.id)).map((ev) => ev.id);
+      const free = freeEventsInClip(store.project, clip.id).length;
       const withNotes = (fn: () => void) => () => {
         store.setSelection({ ...store.getState().selection, eventIds: new Set(noteIds) });
         fn();
@@ -612,6 +613,7 @@ export function Arrangement() {
         { label: 'ヒューマナイズ…', action: withNotes(actions.humanizeDialog), disabled: noteIds.length === 0, reason: 'クリップにノートがありません' },
         { label: 'ベロシティ…', action: withNotes(actions.velocityDialog), disabled: noteIds.length === 0, reason: 'クリップにノートがありません' },
         { separator: true, label: '' },
+        { label: `範囲内の外れたノートを取り込む${free ? `（${free} 個）` : ''}`, action: run(() => store.run(adoptFreeEvents(store.project, clip.id))), disabled: free === 0, reason: 'クリップの範囲内に、クリップに属していないイベントはありません' },
         { label: 'ここで分割', action: run(() => store.run(splitClip(store.project, clip.id, tick))), disabled: tick <= clip.startTick || tick >= clip.endTick, reason: 'クリップの内側で右クリックしてください' },
         { label: '複製（すぐ後ろへ）', action: run(() => store.run(duplicateClip(store.project, clip.id, clip.endTick).command)) },
         { separator: true, label: '' },

@@ -21,7 +21,7 @@ test('E02: a kick entered in the drum editor is note 36 and the same event is ed
   expect(notesOf(await exportedSmf(page))).toEqual(['0:36']);
 
   await page.getByRole('tab', { name: 'ピアノロール' }).click();
-  await page.getByRole('button', { name: '選択', exact: true }).click();
+  await page.getByTestId('tool-select').click();
   const p = await rollPoint(page, 0, 36);
   await page.mouse.click(p.x + 2, p.y);
   await page.keyboard.press('ArrowUp');

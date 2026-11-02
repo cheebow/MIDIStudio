@@ -6,7 +6,9 @@ import { canRedo, createHistory, execute, historyWeight, redo, undo, type Comman
 import {
   addEvents,
   addTrack,
+  adoptFreeEvents,
   createClip,
+  freeEventsInClip,
   deleteClip,
   deleteClips,
   moveClips,
@@ -179,6 +181,37 @@ describe('clips (E03 / E04, REQ-PRJ-06)', () => {
     s.run(c.command);
     return { s, clipId: c.clipId };
   }
+
+  it('ADR-059: events added inside a clip later (recording, drawing, step input) join that clip; outside stay free', () => {
+    const { s, clipId } = setup();
+    const before = s.project.clips[0].eventIds.length;
+    const r = addEvents(s.project, s.track.id, [note(960, 67), { kind: 'cc', tick: 1919, controller: 1, value: 10 }, note(1920, 69), note(2400, 71)])!;
+    s.run(r.command);
+    const clip = s.project.clips.find((c) => c.id === clipId)!;
+    expect(clip.eventIds.length).toBe(before + 2); // the note at 960 and the CC at 1919 (onset inside [0, 1920))
+    expect(clip.eventIds).toEqual(expect.arrayContaining(r.ids.slice(0, 2)));
+    expect(clip.eventIds).not.toEqual(expect.arrayContaining(r.ids.slice(2)));
+    expect(clip).toMatchObject({ startTick: 0, endTick: 1920 }); // the range is not extended
+    s.undo();
+    expect(s.project.clips[0].eventIds.length).toBe(before);
+  });
+
+  it('ADR-059: adoptFreeEvents takes in the free events inside the range only; nothing to adopt → null', () => {
+    const { s, clipId } = setup();
+    expect(adoptFreeEvents(s.project, clipId)).toBeNull();
+    // an older project: two of the clip's notes were added before clips adopted events, so they are free
+    const [a, b] = [s.notes[1].id, s.notes[2].id];
+    const r = addEvents(s.project, s.track.id, [note(2400, 60)])!; // outside the clip, stays free either way
+    s.run(r.command);
+    s.run({ label: 'detach', patch: { clips: s.project.clips.map((c) => (c.id === clipId ? { ...c, eventIds: c.eventIds.filter((id) => id !== a && id !== b) } : c)) } });
+    expect(freeEventsInClip(s.project, clipId)).toEqual([a, b]);
+    s.run(adoptFreeEvents(s.project, clipId));
+    expect(freeEventsInClip(s.project, clipId)).toEqual([]);
+    expect(s.project.clips[0].eventIds).toEqual(expect.arrayContaining([a, b]));
+    expect(s.project.clips[0].eventIds).not.toContain(r.ids[0]);
+    s.undo();
+    expect(freeEventsInClip(s.project, clipId)).toEqual([a, b]);
+  });
 
   it('moving a clip moves all its events (CC included) and keeps durations', () => {
     const { s, clipId } = setup();

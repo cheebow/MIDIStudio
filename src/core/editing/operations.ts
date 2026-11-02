@@ -84,6 +84,17 @@ export function addEvents(project: MidiProject, trackId: TrackId, events: readon
   const patch: ProjectPatch = { tracks: replaceTracks(project, new Map([[trackId, newTrack]])), nextOriginOrder: next };
   if (opts.clipId) {
     patch.clips = project.clips.map((c) => (c.id === opts.clipId ? extendClip({ ...c, eventIds: [...c.eventIds, ...ids] }, created) : c));
+  } else {
+    // No clip named: an event whose onset lands inside a clip of this track joins that clip (the first one in
+    // project order when clips overlap), so recorded / drawn / pasted material belongs to the region it was
+    // put into and the clip's quantize, move and delete act on it. Events outside every clip stay free (ADR-059).
+    const own = project.clips.filter((c) => c.trackId === trackId);
+    const joined = new Map<string, string[]>();
+    for (const e of created) {
+      const c = own.find((x) => x.startTick <= e.tick && e.tick < x.endTick);
+      if (c) joined.set(c.id, [...(joined.get(c.id) ?? []), e.id]);
+    }
+    if (joined.size) patch.clips = project.clips.map((c) => (joined.has(c.id) ? { ...c, eventIds: [...c.eventIds, ...joined.get(c.id)!] } : c));
   }
   return { command: cmd(opts.label ?? 'イベントを追加', patch), ids };
 }
@@ -225,6 +236,25 @@ export function createClip(project: MidiProject, trackId: TrackId, startTick: nu
   const eventIds = track.events.filter((e) => e.tick >= startTick && e.tick < endTick && !inClip.has(e.id)).map((e) => e.id);
   const clip: MidiClip = { id: newId('clp'), trackId, startTick, endTick, eventIds };
   return { command: cmd(label, { clips: [...project.clips, clip] }), clipId: clip.id };
+}
+
+/**
+ * Events of the clip's track whose onset is inside its range but that belong to no clip (ADR-059: material
+ * added before clips adopted new events automatically, or left behind by an older project).
+ */
+export function freeEventsInClip(project: MidiProject, clipId: string): string[] {
+  const clip = project.clips.find((c) => c.id === clipId);
+  if (!clip) throw new EditError(`clip ${clipId} not found`);
+  const track = findTrack(project, clip.trackId);
+  const inClip = new Set(project.clips.filter((c) => c.trackId === clip.trackId).flatMap((c) => c.eventIds));
+  return track.events.filter((e) => e.tick >= clip.startTick && e.tick < clip.endTick && !inClip.has(e.id)).map((e) => e.id);
+}
+
+/** Makes the free events inside the clip's range members of the clip. */
+export function adoptFreeEvents(project: MidiProject, clipId: string, label = '範囲内のノートをクリップに取り込む'): Command | null {
+  const ids = freeEventsInClip(project, clipId);
+  if (ids.length === 0) return null;
+  return cmd(label, { clips: project.clips.map((c) => (c.id === clipId ? { ...c, eventIds: [...c.eventIds, ...ids] } : c)) });
 }
 
 /** Moves a clip and all its events (CC / Program / SysEx included) by deltaTick. */
