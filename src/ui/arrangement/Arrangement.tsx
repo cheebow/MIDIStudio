@@ -61,7 +61,7 @@ interface HeaderDrag {
 export function Arrangement() {
   const { store, transport, recorder, reportError } = useServices();
   const actions = useEditActions();
-  const { project, selection } = useEditorState();
+  const { project, selection, tool } = useEditorState();
   const settings = project.settings;
   const scrollRef = useRef<HTMLDivElement>(null);
   const follow = usePlayheadFollow();
@@ -162,7 +162,8 @@ export function Arrangement() {
   const scrollX = scrollLeft - leadPx;
   useZoomAnchor(scrollRef, pxPerTick, leadPx, viewW);
   const totalW = end * pxPerTick + leadPx;
-  const height = HEAD_H + project.tracks.length * TRACK_H;
+  // the canvas fills the view even with few tracks, so a rubber band can start below the last track (ADR-057)
+  const height = Math.max(HEAD_H + project.tracks.length * TRACK_H, viewH);
   const snapGrid = useMemo(() => (settings.snapEnabled ? gridTicks(ppq, { division: 4, kind: 'straight' }) : null), [ppq, settings.snapEnabled]);
   const selectedTrackId = selectedTrack(project)?.id;
 
@@ -387,7 +388,16 @@ export function Arrangement() {
     }
     const i = Math.floor((y - HEAD_H + scrollY) / TRACK_H);
     const track = project.tracks[i];
-    if (!track) return;
+    const add = e.shiftKey || e.metaKey || e.ctrlKey;
+    if (!track) {
+      // below the last track: a rubber band can still start here (selection tool)
+      if (tool !== 'draw') {
+        const t = tickAt(x);
+        const row = rowAt(y);
+        setDrag({ kind: 'marquee', tick0: t, row0: row, tick1: t, row1: row, add });
+      }
+      return;
+    }
     store.updateSettings({ selectedTrackId: track.id });
     const edge = hitClipEdge(x, y);
     if (edge) {
@@ -400,20 +410,21 @@ export function Arrangement() {
       // Shift / Ctrl / ⌘ + click toggles the clip in the selection; a plain click on an already
       // selected clip keeps the group so the drag moves all of them. Selecting regions clears the
       // note selection so Delete / copy act on the regions.
-      const toggle = e.shiftKey || e.metaKey || e.ctrlKey;
-      const ids = new Set(toggle || selection.clipIds.has(clip.id) ? selection.clipIds : []);
-      if (toggle && ids.has(clip.id)) ids.delete(clip.id);
+      const ids = new Set(add || selection.clipIds.has(clip.id) ? selection.clipIds : []);
+      if (add && ids.has(clip.id)) ids.delete(clip.id);
       else ids.add(clip.id);
       store.setSelection({ ...selection, eventIds: new Set(), clipIds: ids, trackIds: new Set([track.id]) });
       if (ids.has(clip.id)) setDrag({ kind: 'clip', clip, ids: [...ids], startX: x, dx: 0, duplicate: e.altKey, trackOffset: 0, startY: y });
-    } else if (e.shiftKey || e.metaKey || e.ctrlKey) {
-      const t = tickAt(x);
-      const row = rowAt(y);
-      setDrag({ kind: 'marquee', tick0: t, row0: row, tick1: t, row1: row, add: true });
-    } else {
+    } else if (tool === 'draw') {
+      // the draw tool (P) creates a clip; the selection tool (V) drags a rubber band over the clips
       store.setSelection({ ...selection, clipIds: new Set(), trackIds: new Set([track.id]) });
       const t = snap(tickAt(x));
       setDrag({ kind: 'create', trackId: track.id, startTick: t, endTick: t });
+    } else {
+      if (!add) store.setSelection({ ...selection, clipIds: new Set(), trackIds: new Set([track.id]) });
+      const t = tickAt(x);
+      const row = rowAt(y);
+      setDrag({ kind: 'marquee', tick0: t, row0: row, tick1: t, row1: row, add });
     }
   }
 
@@ -434,7 +445,7 @@ export function Arrangement() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     if (!drag) {
-      e.currentTarget.style.cursor = y < RULER_H ? loopCursor(hitLoop(x, y, project.loop, pxPerTick, scrollX, RULER_H)) || 'default' : y >= HEAD_H && hitClipEdge(x, y) ? 'ew-resize' : 'default';
+      e.currentTarget.style.cursor = y < RULER_H ? loopCursor(hitLoop(x, y, project.loop, pxPerTick, scrollX, RULER_H)) || 'default' : y >= HEAD_H && hitClipEdge(x, y) ? 'ew-resize' : y >= HEAD_H && tool === 'draw' && !hitClip(x, y) ? 'crosshair' : 'default';
       return;
     }
     if (drag.kind === 'loop') setDrag({ ...drag, preview: draggedLoop(drag.origin, drag.hit, (x - drag.startX) / pxPerTick, loopSnap(sig, e.shiftKey), sig.ticksPerBeat(0)) });

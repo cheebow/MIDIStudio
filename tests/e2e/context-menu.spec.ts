@@ -88,7 +88,7 @@ test('track view: a clip can be quantized from its right-click menu (its notes o
   await page.getByRole('button', { name: 'キャンセル' }).click();
 });
 
-test('ADR-057: Shift+click / Shift+drag select clips across tracks; ⌘D, copy → paste here and Delete act on the group', async ({ page }) => {
+test('ADR-057: Shift+click / rubber band select clips across tracks; ⌘D, copy → paste here and Delete act on the group', async ({ page }) => {
   await page.goto('/');
   // two tracks, one clip each (0..480)
   await importMidi(page, build(1, 480, [program(0, 0, 0), on(0, 0, 60), off(480, 0, 60)], [on(0, 1, 64), off(480, 1, 64)]));
@@ -111,13 +111,11 @@ test('ADR-057: Shift+click / Shift+drag select clips across tracks; ⌘D, copy �
   ]);
   await page.keyboard.press(`${mod}+z`);
   expect((await sorted()).length).toBe(2);
-  // Shift+drag a rubber band from empty space over both lanes, then copy and paste at bar 3 (tick 3840)
-  await page.keyboard.down('Shift');
-  await page.mouse.move(box.x + bar * 2 + 10, box.y + 50 + 48 + 40);
+  // drag a rubber band (selection tool) from below the last track over both lanes, then copy and paste at bar 3 (tick 3840)
+  await page.mouse.move(box.x + bar * 2 + 10, box.y + 50 + 48 * 2 + 20);
   await page.mouse.down();
   await page.mouse.move(p.x - 4, box.y + 50 + 4, { steps: 4 });
   await page.mouse.up();
-  await page.keyboard.up('Shift');
   await page.keyboard.press(`${mod}+c`);
   await page.mouse.click(box.x + bar * 3 + 10, p.y, { button: 'right' });
   await page.getByTestId('context-menu').getByRole('menuitem', { name: 'ここに貼り付け' }).click();
@@ -137,5 +135,14 @@ test('ADR-057: Shift+click / Shift+drag select clips across tracks; ⌘D, copy �
   expect(await sorted()).toEqual([]);
   await page.keyboard.press(`${mod}+v`);
   expect((await sorted()).length).toBe(2);
+  // with the draw tool (P) a drag on empty space creates a clip instead: the new clip at bar 5 can be deleted on its own
+  await page.keyboard.press('p');
+  await page.mouse.move(box.x + bar * 5 + 4, p.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + bar * 6 - 4, p.y, { steps: 4 });
+  await page.mouse.up();
+  await page.mouse.click(box.x + bar * 5 + 40, p.y, { button: 'right' });
+  await expect(page.getByTestId('context-menu').getByRole('menuitem', { name: /削除（中のノートごと）/ })).toBeVisible();
+  await page.keyboard.press('Escape');
 });
 
