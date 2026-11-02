@@ -180,3 +180,21 @@ test('ADR-055: the about page is served next to the app and links into it; /?hel
   await page.goto('/?help');
   await expect(page.getByTestId('help-dialog')).toBeVisible();
 });
+
+test('ADR-056: the beginner\'s guide is a static page and an in-app dialog with the same chapters', async ({ page }) => {
+  await page.goto('/tutorial.html');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('入門');
+  const chapters = page.locator('section.help-section');
+  await expect(chapters).toHaveCount(10);
+  await expect(chapters.first()).toContainText('演奏の指示');
+  await expect(page.locator('#first-notes')).toContainText('Space');
+  await page.getByRole('navigation', { name: 'サイト' }).getByRole('link', { name: 'ヘルプ' }).click();
+  await expect(page).toHaveURL(/help\.html$/);
+  await page.goto('/');
+  await menu(page, 'ヘルプ', /入門/);
+  const dialog = page.getByTestId('tutorial-dialog');
+  await expect(dialog.getByRole('heading', { level: 3 })).toHaveText('MIDI とは');
+  await expect(dialog.getByRole('navigation', { name: '目次' }).getByRole('button')).toHaveCount(10);
+  await dialog.getByRole('button', { name: '7. 保存と書き出し' }).click();
+  await expect(dialog.getByRole('heading', { level: 3 })).toHaveText('7. 保存と書き出し');
+});

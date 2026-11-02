@@ -96,6 +96,8 @@ main.help-page { max-width: 1040px; display: grid; grid-template-columns: 200px 
 .help-toc .toc li { margin: 2px 0; }
 .help-toc .toc a { display: block; padding: 3px 8px; border-radius: 5px; color: var(--text); text-decoration: none; }
 .help-toc .toc a:hover { background: var(--selection); }
+.help-body .lead { margin: 0 0 16px; color: var(--muted); }
+.help-section ol { padding-left: 1.4em; }
 .help-section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; scroll-margin-top: 64px; }
 .help-section h2 { margin: 0 0 8px; font-size: 1.2rem; }
 .help-section h4 { margin: 14px 0 4px; font-size: 0.95rem; }

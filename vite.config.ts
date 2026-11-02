@@ -5,21 +5,22 @@ import react from '@vitejs/plugin-react';
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
 
 /**
- * Static help page (ADR-055): the in-app help sections rendered to HTML, served on the fly at
- * /help.html by the dev server. The build writes dist/help.html with scripts/build-help.mjs.
+ * Static pages (ADR-055 / 056): the in-app help and the beginner's guide rendered to HTML, served on
+ * the fly at /help.html and /tutorial.html by the dev server. The build writes them to dist/ with
+ * scripts/build-pages.mjs.
  */
-function helpPage(): Plugin {
-  const render = async (loader: { ssrLoadModule(url: string): Promise<Record<string, unknown>> }) => {
-    const mod = await loader.ssrLoadModule('/src/site/renderHelp.tsx');
-    return (mod.renderHelpHtml as () => string)();
-  };
+function staticPages(): Plugin {
+  const pages: Record<string, string> = { '/help.html': 'renderHelpHtml', '/tutorial.html': 'renderTutorialHtml' };
   return {
-    name: 'help-page',
+    name: 'static-pages',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        if (!req.url?.split('?')[0].endsWith('/help.html')) return next();
+        const path = req.url?.split('?')[0] ?? '';
+        const fn = Object.entries(pages).find(([suffix]) => path.endsWith(suffix))?.[1];
+        if (!fn) return next();
         try {
-          const html = await render(server);
+          const mod = await server.ssrLoadModule('/src/site/renderHelp.tsx');
+          const html = (mod[fn] as () => string)();
           res.setHeader('Content-Type', 'text/html; charset=utf-8');
           res.end(html);
         } catch (e) {
@@ -34,7 +35,7 @@ function helpPage(): Plugin {
 export default defineConfig({
   base: process.env.BASE_PATH ?? '/',
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
-  plugins: [react(), helpPage()],
+  plugins: [react(), staticPages()],
   worker: { format: 'es' },
   build: {
     // spessasynth_lib (~620 kB) is a separate chunk loaded on first audio start.

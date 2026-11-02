@@ -15,8 +15,9 @@ import { ExportWavDialog } from '../../ui/export/ExportWavDialog';
 import { useEditorState, useServices } from '../store/context';
 import { AboutDialog } from './HelpDialogs';
 import { HelpDialog } from '../help/HelpDialog';
+import { TUTORIAL_CHAPTERS } from '../help/tutorial';
 
-export type DialogKind = null | 'issues' | 'recent' | 'shortcuts' | 'about' | 'compat' | 'diagnostics' | 'keys' | 'record' | 'midi' | 'sysex' | 'quantize' | 'humanize' | 'velocity' | 'wav' | 'help' | { confirm: string; onYes: () => void };
+export type DialogKind = null | 'issues' | 'recent' | 'shortcuts' | 'about' | 'compat' | 'diagnostics' | 'keys' | 'record' | 'midi' | 'sysex' | 'quantize' | 'humanize' | 'velocity' | 'wav' | 'help' | 'tutorial' | { confirm: string; onYes: () => void };
 
 export function AppDialogs({ dialog, setDialog, issues, recent, openRecent, midi, onMidiChange, features, soundFont }: { dialog: DialogKind; setDialog: (d: DialogKind) => void; issues: ImportIssue[]; recent: ProjectSummary[]; openRecent: (id: string) => void; midi: MidiInputAdapter; onMidiChange: () => void; features: BrowserFeatures; soundFont: ArrayBuffer | null }) {
   const { store, input, adapter } = useServices();
@@ -100,6 +101,8 @@ export function AppDialogs({ dialog, setDialog, issues, recent, openRecent, midi
       );
     case 'help':
       return <HelpDialog onClose={close} />;
+    case 'tutorial':
+      return <HelpDialog title="入門" sections={TUTORIAL_CHAPTERS} testId="tutorial-dialog" onClose={close} />;
     case 'shortcuts':
       return <HelpDialog section="shortcuts" onClose={close} />;
     case 'compat':

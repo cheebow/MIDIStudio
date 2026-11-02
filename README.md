@@ -4,7 +4,7 @@
 
 DAW のような視覚的な編集と、レコンポーザのような数値入力を 1 つのアプリで。MIDI ファイルを読み込み、編集し、内蔵の GM/GS 互換音源で鳴らします。曲データも音源もブラウザの中だけで扱い、外部に送信しません。
 
-紹介ページ: https://cheebow.github.io/MIDIStudio/about.html （アプリ: https://cheebow.github.io/MIDIStudio/ ）
+紹介ページ: https://cheebow.github.io/MIDIStudio/about.html ・ 入門: https://cheebow.github.io/MIDIStudio/tutorial.html ・ ヘルプ: https://cheebow.github.io/MIDIStudio/help.html （アプリ: https://cheebow.github.io/MIDIStudio/ ）
 
 ![MIDI Studio の画面。上にトラックビュー、下にピアノロール](public/images/daw.jpg)
 

@@ -255,6 +255,7 @@ export function buildMenus(d: MenuDeps): Menu[] {
       label: 'ヘルプ',
       items: [
         { label: '使い方…', shortcut: 'F1', action: () => d.setDialog('help') },
+        { label: '入門（はじめての方へ）…', action: () => d.setDialog('tutorial') },
         { label: 'キーボードショートカット…', action: () => d.setDialog('shortcuts') },
         { label: 'GM / GS について…', action: () => d.setDialog('compat') },
         sep,
