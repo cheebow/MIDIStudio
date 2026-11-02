@@ -595,3 +595,11 @@ UI 側とコア／再生側を分けてコード全体を読み直し、確認�
 - **見送った案**: Markdown をビルド時に取り込む（表や kbd の見た目を揃えやすい JSX で十分）。別ページ（GitHub Pages）のマニュアル（まずアプリ内で完結）。
 - **互換性影響**: なし。
 - **検証**: E2E `smoke.spec.ts`（F1 で開く、目次で節を切り替える、ショートカットの節、About にバージョンと GitHub のリンク）。
+
+## ADR-055 — 紹介ページ（about.html）と GitHub Pages への公開（2026-11-02）
+
+- **背景**: アプリの外から読める紹介ページが欲しい（RoboScript の about.html のようなもの）。
+- **決定**: `public/about.html` を静的ページとして置く（ビルドで `dist/about.html` にそのまま入る）。ナビ（紹介 / ヘルプ / 使う / GitHub）、ロゴとタグライン、「ブラウザで使う」、スクリーンショット、特徴のカード、できることの一覧、注意（開発中、GS は実機の再現ではない）、ライセンスと商標。配色はアプリと同じ変数で、OS の設定に合わせてライト／ダーク。「ヘルプ」は `./?help` でアプリを開き、起動ダイアログのあとにヘルプを出す（別の静的ヘルプを二重に保守しない）。公開は `.github/workflows/pages.yml`（main への push で SoundFont を取得して `BASE_PATH=/MIDIStudio/` でビルドし、GitHub Pages へ）。リポジトリ設定で Pages の Source を GitHub Actions にすると有効になる。
+- **見送った案**: ヘルプの静的 HTML をビルド時に生成する（内容は JSX のまま、必要になれば `renderToStaticMarkup` で作れる）。英語版（まず日本語のみ）。
+- **互換性影響**: なし。`public/images/screenshot.jpg` は README のものと同じ画像。
+- **検証**: E2E `smoke.spec.ts`（about.html の見出しと「ブラウザで使う」のリンク、`/?help` でヘルプが開く）。

@@ -76,7 +76,7 @@ npm run dev               # http://localhost:5173
 | `npm run lint` | ESLint。`src/core` から React・DOM・SpessaSynth・IndexedDB を使うとエラー |
 | `npm run test` | Vitest（node 環境。DOM・AudioWorklet・SF2 なしで動く unit / integration） |
 | `npm run test:e2e` | Playwright（Chromium / Firefox / WebKit。ビルドして preview サーバーで実行） |
-| `npm run build` | 本番ビルド。GitHub Pages 等のサブパスでは `BASE_PATH=/MIDIStudio/ npm run build` |
+| `npm run build` | 本番ビルド。GitHub Pages 等のサブパスでは `BASE_PATH=/MIDIStudio/ npm run build`。`.github/workflows/pages.yml` が main への push で同じ手順を実行し Pages に公開する（リポジトリ設定で Pages の Source を GitHub Actions にする） |
 
 ### ディレクトリ
 

@@ -164,3 +164,12 @@ test('ADR-054: F1 opens the help with a table of contents; the About dialog show
   await expect(about).toContainText(/バージョン \d+\.\d+\.\d+/);
   await expect(about.getByRole('link', { name: 'GitHub' })).toHaveAttribute('href', 'https://github.com/cheebow/MIDIStudio');
 });
+
+test('ADR-055: the about page is served next to the app and links into it; /?help opens the help', async ({ page }) => {
+  await page.goto('/about.html');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('MIDI Studio');
+  await expect(page.getByRole('link', { name: 'ブラウザで使う' })).toHaveAttribute('href', './');
+  await expect(page.getByRole('img', { name: /MIDI Studio の画面/ })).toBeVisible();
+  await page.getByRole('link', { name: 'ヘルプ' }).click();
+  await expect(page.getByTestId('help-dialog')).toBeVisible();
+});

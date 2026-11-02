@@ -1,5 +1,5 @@
 // MIDI Studio main window (UI_DESIGN 1). All editors share one EditorStore and one Transport.
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { audioBlockers, detectFeatures } from '../playback/featureDetect';
 import { SpessaAdapter } from '../playback/SpessaAdapter';
 import { WORKLET_URL } from '../playback/SoundFontLoader';
@@ -197,6 +197,14 @@ export default function App() {
   const { audioPhase, progress, report, soundBankName, soundBankBytes, prefetchState, startPrefetch, ensureAudio, loadBank, setup, startAll } = audio;
   // Startup dialog (ADR-049): song / sound / MIDI choices and the first gesture, in one place.
   const [startupOpen, setStartupOpen] = useState(() => startupDialogWanted());
+  // about.html links to ./?help: open the help once the startup dialog is answered (or at once without it)
+  const wantsHelp = useRef(typeof location !== 'undefined' && new URLSearchParams(location.search).has('help'));
+  useEffect(() => {
+    if (wantsHelp.current && !startupOpen) {
+      wantsHelp.current = false;
+      setDialog('help');
+    }
+  }, [startupOpen]);
   const showStartup = startupOpen && blockers.length === 0 && setup.midi !== 'unknown';
   useEffect(() => audio.setMidiHold(showStartup), [audio, showStartup]);
   const onStartup = (c: StartupChoice) => {
