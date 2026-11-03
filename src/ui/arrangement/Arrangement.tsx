@@ -21,6 +21,7 @@ import { useAnimationLoop, useDragState, useElementSize, usePlayheadFollow, useS
 import { useThemeVersion } from '../../app/theme';
 import { PencilIcon, SelectIcon } from '../icons';
 import { selectedTrack } from '../../core/model/selectedTrack';
+import { pointerOf, useDragAutoScroll, type PointerLike } from '../dragAutoScroll';
 
 const RULER_H = 24;
 /** tempo lane under the bar ruler */
@@ -42,6 +43,9 @@ function songEnd(p: MidiProject): number {
 /** half width in px of the grab zone at a clip edge */
 const EDGE_PX = 4;
 
+// Pointer positions kept in a drag (startX / startY of a clip move and of a loop drag) are content
+// px: x from tick 0, y from the top of the canvas plus the vertical scroll, so a drag survives the
+// view scrolling under it (ADR-071). The other drags keep ticks and track rows.
 type Drag =
   /** moving the selected clips; `clip` is the one under the pointer, `ids` every clip that moves (ADR-057) */
   | { kind: 'clip'; clip: MidiClip; ids: string[]; startX: number; dx: number; duplicate: boolean; trackOffset: number; startY: number }
@@ -73,6 +77,8 @@ export function Arrangement() {
   const [scrollY, setScrollY] = useState(0);
   const { w: viewW, h: viewH } = useElementSize(scrollRef);
   const [drag, dragRef, setDrag] = useDragState<Drag>();
+  /** last pointer of the active drag, re-applied when the view scrolls under it (ADR-071) */
+  const lastPointer = useRef<PointerLike | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [headerDrag, setHeaderDragState] = useState<HeaderDrag | null>(null);
   const headerDragRef = useRef<HeaderDrag | null>(null);
@@ -170,6 +176,17 @@ export function Arrangement() {
   const selectedTrackId = selectedTrack(project)?.id;
 
   const tickAt = (x: number) => Math.max(0, (x + scrollX) / pxPerTick);
+  // Edge auto-scroll while dragging (ADR-071). Not for a seek on the ruler: the playhead follow
+  // pages the view on its own there. A loop drag scrolls sideways only.
+  const trackPointer = useDragAutoScroll(scrollRef, canvasRef, drag !== null && drag.kind !== 'seek', { top: HEAD_H, vertical: drag?.kind !== 'loop' });
+  /** content px (see Drag) from a client point, read from the live scroll position */
+  const contentPoint = (clientX: number, clientY: number) => {
+    const el = scrollRef.current;
+    const r = canvasRef.current?.getBoundingClientRect();
+    return { cx: clientX - (r?.left ?? 0) + (el?.scrollLeft ?? scrollLeft) - leadPx, cy: clientY - (r?.top ?? 0) + (el?.scrollTop ?? scrollY) };
+  };
+  const tickAtContent = (cx: number) => Math.max(0, cx / pxPerTick);
+  const rowAtContent = (cy: number) => (cy - HEAD_H) / TRACK_H;
   const snap = (tk: number) => (snapGrid ? snapTick(tk, snapGrid).tick : Math.round(tk));
 
   // Static layer: ruler, lanes, clips. Redrawn when the project / view changes.
@@ -348,7 +365,9 @@ export function Arrangement() {
     const i = Math.floor((y - HEAD_H + scrollY) / TRACK_H);
     const track = project.tracks[i];
     if (!track) return null;
-    const tk = tickAt(x);
+    // unclamped: the margin before bar 1 is empty space, not tick 0 of a clip that starts there
+    const tk = (x + scrollX) / pxPerTick;
+    if (tk < 0) return null;
     return project.clips.find((c) => c.trackId === track.id && tk >= c.startTick && tk < c.endTick) ?? null;
   }
 
@@ -380,10 +399,13 @@ export function Arrangement() {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+    const { cx, cy } = contentPoint(e.clientX, e.clientY);
     e.currentTarget.setPointerCapture(e.pointerId);
+    lastPointer.current = pointerOf(e);
+    trackPointer(e.clientX, e.clientY);
     if (y < HEAD_H) {
       const hit = y < RULER_H ? hitLoop(x, y, project.loop, pxPerTick, scrollX, RULER_H) : null;
-      if (hit) setDrag({ kind: 'loop', hit, startX: x, origin: project.loop, preview: project.loop });
+      if (hit) setDrag({ kind: 'loop', hit, startX: cx, origin: project.loop, preview: project.loop });
       else {
         transport.seek(snap(tickAt(x)));
         setDrag({ kind: 'seek' });
@@ -418,7 +440,7 @@ export function Arrangement() {
       if (add && ids.has(clip.id)) ids.delete(clip.id);
       else ids.add(clip.id);
       store.setSelection({ ...selection, eventIds: new Set(), clipIds: ids, trackIds: new Set([track.id]) });
-      if (ids.has(clip.id)) setDrag({ kind: 'clip', clip, ids: [...ids], startX: x, dx: 0, duplicate: e.altKey, trackOffset: 0, startY: y });
+      if (ids.has(clip.id)) setDrag({ kind: 'clip', clip, ids: [...ids], startX: cx, dx: 0, duplicate: e.altKey, trackOffset: 0, startY: cy });
     } else if (tool === 'draw') {
       // the draw tool (P) creates a clip; the selection tool (V) drags a rubber band over the clips
       store.setSelection({ ...selection, clipIds: new Set(), trackIds: new Set([track.id]) });
@@ -448,24 +470,34 @@ export function Arrangement() {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    if (!drag) {
-      e.currentTarget.style.cursor = y < RULER_H ? loopCursor(hitLoop(x, y, project.loop, pxPerTick, scrollX, RULER_H)) || 'default' : y >= HEAD_H && hitClipEdge(x, y) ? 'ew-resize' : y >= HEAD_H && tool === 'draw' && !hitClip(x, y) ? 'crosshair' : 'default';
+    if (drag) {
+      lastPointer.current = pointerOf(e);
+      trackPointer(e.clientX, e.clientY);
+      applyDrag(lastPointer.current);
       return;
     }
-    if (drag.kind === 'loop') setDrag({ ...drag, preview: draggedLoop(drag.origin, drag.hit, (x - drag.startX) / pxPerTick, loopSnap(sig, e.shiftKey), sig.ticksPerBeat(0)) });
-    else if (drag.kind === 'seek') transport.seek(snap(tickAt(x)));
-    else if (drag.kind === 'create') setDrag({ ...drag, endTick: snap(tickAt(x)) });
-    else if (drag.kind === 'marquee') setDrag({ ...drag, tick1: tickAt(x), row1: rowAt(y) });
+    e.currentTarget.style.cursor = y < RULER_H ? loopCursor(hitLoop(x, y, project.loop, pxPerTick, scrollX, RULER_H)) || 'default' : y >= HEAD_H && hitClipEdge(x, y) ? 'ew-resize' : y >= HEAD_H && tool === 'draw' && !hitClip(x, y) ? 'crosshair' : 'default';
+  }
+
+  /** Updates the active drag for a pointer (also called when the view scrolls under a still pointer). */
+  function applyDrag(p: PointerLike) {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const { cx, cy } = contentPoint(p.clientX, p.clientY);
+    if (drag.kind === 'loop') setDrag({ ...drag, preview: draggedLoop(drag.origin, drag.hit, (cx - drag.startX) / pxPerTick, loopSnap(sig, p.shiftKey), sig.ticksPerBeat(0)) });
+    else if (drag.kind === 'seek') transport.seek(snap(tickAtContent(cx)));
+    else if (drag.kind === 'create') setDrag({ ...drag, endTick: snap(tickAtContent(cx)) });
+    else if (drag.kind === 'marquee') setDrag({ ...drag, tick1: tickAtContent(cx), row1: rowAtContent(cy) });
     else if (drag.kind === 'resize') {
-      const tk = snap(tickAt(x));
+      const tk = snap(tickAtContent(cx));
       // the clip keeps at least one tick
       const tick = drag.edge === 'start' ? Math.max(0, Math.min(drag.clip.endTick - 1, tk)) : Math.max(drag.clip.startTick + 1, tk);
       setDrag({ ...drag, tick });
     } else {
-      const raw = (x - drag.startX) / pxPerTick;
+      const raw = (cx - drag.startX) / pxPerTick;
       const newStart = Math.max(0, snap(drag.clip.startTick + raw));
-      const trackOffset = Math.round((y - drag.startY) / TRACK_H); // up / down moves (or, with Alt, copies) to another track (ADR-062)
-      setDrag({ ...drag, dx: newStart - drag.clip.startTick, duplicate: drag.duplicate || e.altKey, trackOffset });
+      const trackOffset = Math.round((cy - drag.startY) / TRACK_H); // up / down moves (or, with Alt, copies) to another track (ADR-062)
+      setDrag({ ...drag, dx: newStart - drag.clip.startTick, duplicate: drag.duplicate || p.altKey, trackOffset });
     }
   }
 
@@ -722,6 +754,7 @@ export function Arrangement() {
       <div className="arrangement-scroll" ref={scrollRef} onScroll={(e) => {
           setScrollX(e.currentTarget.scrollLeft);
           setScrollY(e.currentTarget.scrollTop);
+          if (dragRef.current && lastPointer.current) applyDrag(lastPointer.current);
         }}>
         <div style={{ width: totalW, height }} className="arrangement-spacer">
           <div className="sticky-canvas" style={{ width: viewW, height: Math.max(HEAD_H, Math.min(height, viewH)) }}>

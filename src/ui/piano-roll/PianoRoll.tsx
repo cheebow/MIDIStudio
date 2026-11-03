@@ -341,7 +341,8 @@ export function PianoRoll() {
   const pitchAt = (cy: number) => Math.max(0, Math.min(127, 127 - Math.floor((cy - RULER_H) / ROW_H)));
 
   function hit(x: number, y: number): { note: NoteEvent; edge: boolean } | null {
-    const t = toTick(x);
+    const t = (x + view.x) / pxPerTick; // unclamped: the margin before bar 1 is empty space, not tick 0
+    if (t < 0) return null;
     const p = toPitch(y);
     for (let i = notes.length - 1; i >= 0; i--) {
       const n = notes[i];
