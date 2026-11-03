@@ -6,17 +6,20 @@ import { useEffect, useRef, type RefObject } from 'react';
 
 /** Width of the band inside each edge where the auto-scroll starts. */
 export const AUTO_SCROLL_EDGE_PX = 24;
-/** Fastest scroll, in px per frame (reached a little past the edge). */
-export const AUTO_SCROLL_MAX_PX = 40;
+/** Speed gained per px the pointer goes into the edge band (and past it), in px per second. */
+export const AUTO_SCROLL_RAMP = 12;
+/** Fastest scroll, in px per second (reached well past the edge). */
+export const AUTO_SCROLL_MAX_PX_PER_S = 800;
 
 /**
- * Scroll speed (px per frame, signed) for a pointer at `pos` on an axis whose visible area is
+ * Scroll speed (px per second, signed) for a pointer at `pos` on an axis whose visible area is
  * [start, end]: 0 in the middle, growing as the pointer nears an edge and keeps growing past it.
+ * Per second, not per frame, so a 120 Hz display scrolls as fast as a 60 Hz one.
  */
-export function edgeScrollSpeed(pos: number, start: number, end: number, edge = AUTO_SCROLL_EDGE_PX, max = AUTO_SCROLL_MAX_PX): number {
+export function edgeScrollSpeed(pos: number, start: number, end: number, edge = AUTO_SCROLL_EDGE_PX, max = AUTO_SCROLL_MAX_PX_PER_S): number {
   if (end - start <= edge * 2) return 0; // too small to have a calm middle
-  // about 20 px per frame at the edge itself (a maximised window cannot go much further), then up to `max`
-  const speed = (depth: number) => Math.min(max, Math.ceil(depth * 0.8));
+  // about 290 px/s at the edge itself (a maximised window cannot go much further), up to `max` ~40 px past it
+  const speed = (depth: number) => Math.min(max, depth * AUTO_SCROLL_RAMP);
   if (pos < start + edge) return -speed(start + edge - pos);
   if (pos > end - edge) return speed(pos - (end - edge));
   return 0;
@@ -55,16 +58,28 @@ export function useDragAutoScroll(scrollRef: RefObject<HTMLElement | null>, area
       return;
     }
     let raf = 0;
-    const frame = () => {
+    let last = performance.now();
+    // fractions of a px carried to the next frame (scroll positions are whole px in some browsers)
+    const carry = { x: 0, y: 0 };
+    const frame = (now: number) => {
+      const dt = Math.min(0.1, Math.max(0, (now - last) / 1000)); // a stalled tab does not jump on return
+      last = now;
       const el = scrollRef.current;
       const area = areaRef.current;
       const p = pointer.current;
       if (el && area && p && armed.current) {
         const r = area.getBoundingClientRect();
-        const dx = edgeScrollSpeed(p.x, r.left, r.right);
-        const dy = vertical ? edgeScrollSpeed(p.y, r.top + top, r.bottom) : 0;
+        carry.x += edgeScrollSpeed(p.x, r.left, r.right) * dt;
+        carry.y += vertical ? edgeScrollSpeed(p.y, r.top + top, r.bottom) * dt : 0;
+        const dx = Math.trunc(carry.x);
+        const dy = Math.trunc(carry.y);
+        carry.x -= dx;
+        carry.y -= dy;
         if (dx) el.scrollLeft += dx;
         if (dy) el.scrollTop += dy;
+      } else {
+        carry.x = 0;
+        carry.y = 0;
       }
       raf = requestAnimationFrame(frame);
     };
