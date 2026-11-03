@@ -19,12 +19,28 @@ describe('list key ownership (LIST-06)', () => {
     expect(intent('step-drums', k('1', { code: 'Numpad1' }))).toBeNull();
   });
 
-  it('↑↓ move rows except in the piano modes (octave shift); Shift extends the selection', () => {
-    expect(intent('edit-shortcuts', k('ArrowDown', { code: 'ArrowDown' }))).toEqual({ type: 'row', delta: 1, extend: false });
+  it('↑↓ move rows in every mode; Shift extends the selection; the piano modes keep the octave on ⌥↑↓', () => {
+    for (const m of MODES) expect(intent(m, k('ArrowDown', { code: 'ArrowDown' }))).toEqual({ type: 'row', delta: 1, extend: false });
     expect(intent('edit-shortcuts', k('ArrowUp', { code: 'ArrowUp', shiftKey: true }))).toEqual({ type: 'row', delta: -1, extend: true });
-    expect(intent('drum-performance', k('ArrowDown', { code: 'ArrowDown' }))).toEqual({ type: 'row', delta: 1, extend: false });
-    expect(intent('piano-performance', k('ArrowDown', { code: 'ArrowDown' }))).toBeNull();
-    expect(intent('step-piano', k('ArrowUp', { code: 'ArrowUp' }))).toBeNull();
+    expect(intent('piano-performance', k('ArrowUp', { code: 'ArrowUp', altKey: true }))).toEqual({ type: 'octave', delta: 1 });
+    expect(intent('step-piano', k('ArrowDown', { code: 'ArrowDown', altKey: true }))).toEqual({ type: 'octave', delta: -1 });
+    expect(intent('drum-performance', k('ArrowUp', { code: 'ArrowUp', altKey: true }))).toEqual({ type: 'nudge', delta: 1, big: true });
+  });
+
+  it('the insert letters work on the grid itself in the edit mode only', () => {
+    expect(intent('edit-shortcuts', k('n'))).toEqual({ type: 'insert', kind: 'note' });
+    expect(intent('edit-shortcuts', k('C'))).toEqual({ type: 'insert', kind: 'cc' });
+    expect(intent('edit-shortcuts', k('p'))).toEqual({ type: 'insert', kind: 'program' });
+    expect(intent('edit-shortcuts', k('b'))).toEqual({ type: 'insert', kind: 'pitch-bend' });
+    expect(intent('edit-shortcuts', k('a'))).toEqual({ type: 'insert', kind: 'channel-pressure' });
+    expect(intent('edit-shortcuts', k('y'))).toEqual({ type: 'insert', kind: 'poly-pressure' });
+    expect(intent('edit-shortcuts', k('s'))).toEqual({ type: 'insert', kind: 'sysex' });
+    expect(intent('edit-shortcuts', k('m'))).toEqual({ type: 'insert', kind: 'meta' });
+    expect(intent('edit-shortcuts', k('N', { shiftKey: true }))).toBeNull();
+    expect(intent('edit-shortcuts', k('q'))).toBeNull(); // quantize stays global
+    expect(intent('piano-performance', k('n'))).toBeNull();
+    expect(intent('drum-performance', k('n'))).toBeNull();
+    expect(intent('step-piano', k('c'))).toBeNull();
   });
 
   it('←→ move columns except in the step modes (rest / back); Tab is sustain in the piano mode', () => {
@@ -55,7 +71,6 @@ describe('list key ownership (LIST-06)', () => {
     expect(intent('piano-performance', k('-', { code: 'Minus' }))).toBeNull();
     expect(intent('edit-shortcuts', k('ArrowUp', { code: 'ArrowUp', altKey: true }))).toEqual({ type: 'nudge', delta: 1, big: true });
     expect(intent('edit-shortcuts', k('ArrowDown', { code: 'ArrowDown', altKey: true }))).toEqual({ type: 'nudge', delta: -1, big: true });
-    expect(intent('piano-performance', k('ArrowUp', { code: 'ArrowUp', altKey: true }))).toBeNull();
   });
 
   it('Enter / F2 edit, ⌘Enter repeats, ⌥Enter / Insert open the insert menu, ⌘-shortcuts stay global', () => {
@@ -70,6 +85,7 @@ describe('list key ownership (LIST-06)', () => {
       expect(intent(m, k(' ', { code: 'Space' }))).toBeNull();
       expect(intent(m, k('Escape', { code: 'Escape' }))).toBeNull();
       expect(intent(m, k('l'))).toBeNull();
+      expect(intent(m, k('q'))).toBeNull();
     }
     expect(intent('edit-shortcuts', k('Enter', { code: 'Enter', ctrlKey: true }), false)).toEqual({ type: 'repeat-last' }); // Windows / Linux
     expect(intent('edit-shortcuts', k('z', { ctrlKey: true }), false)).toBeNull();

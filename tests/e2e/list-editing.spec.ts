@@ -110,6 +110,20 @@ test('LIST-10: Insert ▾ adds a CC at the cursor (access key), the SysEx dialog
   expect(after.slice(i, i + 4)).toEqual([101, 100, 6, 38]);
 });
 
+test('LIST-10: on the grid itself N / C / P insert without opening the menu (edit mode)', async ({ page }) => {
+  await openList(page);
+  await rowByName(page, /^G4$/).locator('[data-col="name"]').click();
+  await page.keyboard.press('c');
+  await expect(page.getByRole('textbox', { name: /を入力/ })).toHaveCount(0);
+  await expect(page.locator('.lc.cursor')).toHaveAttribute('data-col', 'name');
+  await page.keyboard.press('n');
+  await page.keyboard.press('b');
+  const smf = await exportedSmf(page);
+  expect(noteOns(smf).length).toBe(4);
+  expect(piano(smf).filter((e) => e.kind === 'channel' && (e.status & 0xf0) === 0xe0 && e.tick === 0).length).toBe(1);
+  expect(ccs(smf).length).toBe(4);
+});
+
 test('LIST-09: the batch dialog changes the selected rows', async ({ page }) => {
   await openList(page);
   await rowByName(page, /^C4$/).locator('[data-col="vel"]').click();

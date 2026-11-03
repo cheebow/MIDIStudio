@@ -18,7 +18,14 @@ export type ListKeyIntent =
   | { type: 'repeat-last' }
   | { type: 'delete' }
   | { type: 'insert-menu' }
+  /** a letter of the insert menu pressed on the grid itself (edit mode): insert at once */
+  | { type: 'insert'; kind: 'note' | 'cc' | 'program' | 'pitch-bend' | 'channel-pressure' | 'poly-pressure' | 'sysex' | 'meta' }
+  /** ⌥↑↓ in the piano modes, where ↑↓ move rows: shift the PC-keyboard octave instead */
+  | { type: 'octave'; delta: number }
   | { type: 'context-menu' };
+
+/** letters that insert while the grid has focus in the edit mode (the same as the insert menu's access keys) */
+export const INSERT_LETTERS: Record<string, Extract<ListKeyIntent, { type: 'insert' }>['kind']> = { n: 'note', c: 'cc', p: 'program', b: 'pitch-bend', a: 'channel-pressure', y: 'poly-pressure', s: 'sysex', m: 'meta' };
 
 export interface ListKey {
   key: string;
@@ -48,8 +55,8 @@ export function listKeyIntent(mode: InputMode, k: ListKey, isMusical: (code: str
     case 'ArrowDown':
     case 'ArrowUp': {
       const delta = k.key === 'ArrowDown' ? 1 : -1;
-      if (k.altKey) return mode === 'edit-shortcuts' || mode === 'drum-performance' || mode === 'step-drums' ? { type: 'nudge', delta: -delta, big: true } : null;
-      if (isPiano(mode)) return null; // octave shift
+      // the list in front of the user wins: ↑↓ move rows in every mode; the piano modes keep the octave on ⌥↑↓
+      if (k.altKey) return isPiano(mode) ? { type: 'octave', delta: -delta } : { type: 'nudge', delta: -delta, big: true };
       return { type: 'row', delta, extend: k.shiftKey };
     }
     case 'ArrowRight':
@@ -90,6 +97,8 @@ export function listKeyIntent(mode: InputMode, k: ListKey, isMusical: (code: str
     if (k.key === '+' || k.key === '=' || k.code === 'NumpadAdd') return { type: 'nudge', delta: 1, big: false };
     if (k.key === '-' || k.code === 'NumpadSubtract') return { type: 'nudge', delta: -1, big: false };
     if (/^[0-9./]$/.test(k.key)) return { type: 'edit-typed', text: k.key };
+    const kind = !k.shiftKey ? INSERT_LETTERS[k.key.toLowerCase()] : undefined;
+    if (kind && k.key.length === 1) return { type: 'insert', kind };
   }
   return null;
 }

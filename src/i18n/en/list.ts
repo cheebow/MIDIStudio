@@ -84,7 +84,7 @@ export const EN_LIST: Record<string, string> = {
   // --- ListEditor
   '挿入 ▾': 'Insert ▾',
   '鍵盤を弾くと現在行の K# が変わります。次に K# のある行へ進むかどうか。': 'Playing a key changes the K# of the current row. Whether to move on to the next row with a K#.',
-  '鍵盤を弾くと現在行の K# を書き換えます（録音中は録音が優先）。': 'Playing a key rewrites the K# of the current row (recording takes precedence while a take runs).',
+  '鍵盤を弾くと現在行の K# を書き換えます。同時に押した音は和音として入ります（録音中は録音が優先）。': 'Playing a key rewrites the K# of the current row; keys held together go in as a chord (recording takes precedence while a take runs).',
   'この行にはノート番号がありません（鍵盤入力は K# のある行で使います）。': 'This row has no note number (keyboard entry works on rows with a K#).',
   'フィルター中は ST を編集できません（表示されていないイベントを誤って動かさないため）。すべての種類を表示してください。': 'ST cannot be edited while a filter is on (so hidden events are not moved by mistake). Show every kind first.',
   '録音中: 鍵盤は録音され、リストの行は変わりません。': 'Recording: keys are recorded; the list rows do not change.',
@@ -99,7 +99,7 @@ export const EN_LIST: Record<string, string> = {
   'この列に前回の値がありません。': 'This column has no previous value yet.',
   '入力は現在行だけに適用しました。複数行は右クリックの「選択行の一括変更…」を使ってください。': 'Applied to the current row only. For several rows use "Change selected rows…" in the right-click menu.',
   'Enter で移動': 'Enter moves to',
-  'カーソル位置にイベントを挿入（Insert / {alt}Enter）。メニューの頭文字でも選べます。': 'Insert an event at the cursor (Insert / {alt}Enter). The first letter picks a menu item.',
+  'カーソル位置にイベントを挿入（Insert / {alt}Enter）。編集モードならリスト上で N / C / P / B / A / Y / S / M を押すだけでも入ります。': 'Insert an event at the cursor (Insert / {alt}Enter). In the edit mode, pressing N / C / P / B / A / Y / S / M on the list inserts at once.',
   'Meta…': 'Meta…',
   'raw イベントは編集できません（内容をそのまま保持します）。': 'Raw events cannot be edited (their bytes are kept as they are).',
   'SysEx…': 'SysEx…',

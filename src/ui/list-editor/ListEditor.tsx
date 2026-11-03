@@ -6,7 +6,9 @@
 // the octave keys and the step keys keep working while the list has focus.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { t } from '../../i18n';
-import { deleteEvents, duplicateEvents, updateEvents } from '../../core/editing/operations';
+import { addEvents, deleteEvents, duplicateEvents, updateEvents, type NewEvent } from '../../core/editing/operations';
+import { CAPTURE_IDLE, captureInserted, captureStep, type CaptureState } from '../../core/list/listCapture';
+import { shiftOctave } from '../../input/KeyboardRouter';
 import { formatTicks, listRows, type ListRow, type ListUnit, type RowCategory } from '../../core/list/listRows';
 import { parseTicksInput, setAbsoluteTick, setGateTime, setRowChannel, setRowKey, setRowValue, setStepTime } from '../../core/list/listEdit';
 import { applyNameInput, convertEventKinds, type ConvertTarget } from '../../core/list/listConvert';
@@ -150,31 +152,56 @@ export function ListEditor() {
     }
   }, [stepMode, stepSnap.cursor, ticks]);
 
-  // Pitch capture: in the PC-keyboard / pad modes a played key writes the K# of the current row
-  // (Recomposer style). The Recorder owns the input while a take runs; step modes write their own notes.
+  // Pitch capture (core/list/listCapture.ts): a played key writes the K# of the current row, more
+  // keys held with it become a chord at the same position, and releasing them moves on. Works in
+  // the PC-keyboard / pad modes and, from an external MIDI keyboard, in the edit mode too. The
+  // Recorder owns the input while a take runs; step modes write their own notes.
+  const captureRef = useRef<CaptureState>(CAPTURE_IDLE);
   useEffect(
     () =>
       input.addSink((e) => {
-        if (e.type !== 'note-on') return;
+        if (e.type !== 'note-on' && e.type !== 'note-off') return;
         const L = latest.current;
-        if (!L.focused || !(L.mode === 'piano-performance' || L.mode === 'drum-performance') || L.phase !== 'idle' || !L.track) return;
+        const allowed = L.focused && L.mode !== 'step-piano' && L.mode !== 'step-drums' && L.phase === 'idle' && !!L.track;
         const r = L.rows[L.cursor.row];
-        if (!r) return;
-        if (r.key === null) {
-          setMessage(t('この行にはノート番号がありません（鍵盤入力は K# のある行で使います）。'));
-          return;
-        }
-        try {
-          const changes = L.settings.list.captureVelocity && r.event.kind === 'note' ? { pitch: e.pitch, velocity: e.velocity } : { pitch: e.pitch };
-          const cmd = updateEvents(store.project, [{ id: r.id, changes }], 'ノート番号を変更');
-          if (cmd) store.run(cmd, { select: [r.id] });
-          setMessage(null);
-          if (L.settings.list.captureAdvance) {
-            const next = L.rows.findIndex((x, i) => i > L.cursor.row && x.key !== null);
-            if (next >= 0) moveCursorRef.current(next);
+        const step = captureStep(captureRef.current, e.type === 'note-on' ? { type: 'note-on', pitch: e.pitch, velocity: e.velocity } : { type: 'note-off', pitch: e.pitch }, r ? { id: r.id, tick: r.tick, key: r.key } : null, allowed);
+        captureRef.current = step.state;
+        for (const a of step.actions) {
+          try {
+            if (a.type === 'no-key-row') setMessage(t('この行にはノート番号がありません（鍵盤入力は K# のある行で使います）。'));
+            else if (a.type === 'set-key') {
+              const src = L.rows.find((x) => x.id === a.rowId)?.event;
+              const changes = L.settings.list.captureVelocity && src?.kind === 'note' ? { pitch: a.pitch, velocity: a.velocity } : { pitch: a.pitch };
+              const cmd = updateEvents(store.project, [{ id: a.rowId, changes }], 'ノート番号を変更');
+              if (cmd) store.run(cmd, { select: [a.rowId], mergeKey: `list-chord:${a.rowId}` });
+              setMessage(null);
+            } else if (a.type === 'insert') {
+              const src = store.project.tracks.flatMap((x) => x.events).find((x) => x.id === a.likeRowId);
+              const chord = captureRef.current.anchor?.ids ?? [];
+              const already = store.project.tracks.flatMap((x) => x.events).some((x) => chord.includes(x.id) && (x.kind === 'note' || x.kind === 'poly-pressure') && x.pitch === a.pitch);
+              if (!src || already || !L.track) continue;
+              const ch = 'channelOverride' in src && src.channelOverride !== undefined ? { channelOverride: src.channelOverride } : {};
+              const ev: NewEvent | null =
+                src.kind === 'note'
+                  ? { kind: 'note', tick: a.tick, ...ch, pitch: a.pitch, velocity: L.settings.list.captureVelocity ? a.velocity : src.velocity, durationTicks: src.durationTicks, releaseVelocity: 64 }
+                  : src.kind === 'poly-pressure'
+                    ? { kind: 'poly-pressure', tick: a.tick, ...ch, pitch: a.pitch, pressure: src.pressure }
+                    : null;
+              if (!ev) continue;
+              const res = addEvents(store.project, L.track.id, [ev], { label: 'ノートを挿入' });
+              if (!res) continue;
+              captureRef.current = captureInserted(captureRef.current, res.ids[0]);
+              store.run(res.command, { select: [...chord, ...res.ids], mergeKey: `list-chord:${a.likeRowId}` });
+            } else if (a.type === 'advance' && L.settings.list.captureAdvance) {
+              const rows = latest.current.rows;
+              let last = -1;
+              for (const id of a.afterIds) last = Math.max(last, rows.findIndex((x) => x.id === id));
+              const next = rows.findIndex((x, i) => i > last && x.key !== null);
+              if (next >= 0) moveCursorRef.current(next);
+            }
+          } catch (err) {
+            setMessage((err as Error).message);
           }
-        } catch (err) {
-          setMessage((err as Error).message);
         }
       }),
     [input, store],
@@ -513,6 +540,13 @@ export function ListEditor() {
       case 'insert-menu':
         ctxMenu.open({ ...cursorPoint(), preventDefault: () => undefined }, insertMenuItems());
         break;
+      case 'insert':
+        if (intent.kind === 'sysex' || intent.kind === 'meta') setBytesDialog({ mode: 'insert', kind: intent.kind, tick: insertTick() });
+        else doInsert(intent.kind);
+        break;
+      case 'octave':
+        store.setInputPresets(shiftOctave(project.inputPresets, intent.delta));
+        break;
       case 'context-menu':
         if (cur) ctxMenu.open({ ...cursorPoint(), preventDefault: () => undefined }, rowMenuItems(cur));
         break;
@@ -554,7 +588,7 @@ export function ListEditor() {
         ))}
         <button
           aria-haspopup="menu"
-          title={t('カーソル位置にイベントを挿入（Insert / {alt}Enter）。メニューの頭文字でも選べます。', { alt: IS_MAC ? '⌥' : 'Alt+' })}
+          title={t('カーソル位置にイベントを挿入（Insert / {alt}Enter）。編集モードならリスト上で N / C / P / B / A / Y / S / M を押すだけでも入ります。', { alt: IS_MAC ? '⌥' : 'Alt+' })}
           onClick={(e) => {
             const r = e.currentTarget.getBoundingClientRect();
             ctxMenu.open({ clientX: r.left, clientY: r.bottom + 2, preventDefault: () => undefined }, insertMenuItems());
@@ -575,7 +609,7 @@ export function ListEditor() {
             <option value="stay">{t('動かない')}</option>
           </select>
         </label>
-        {performing && (
+        {!stepMode && (
           <>
             <label className="note" title={t('鍵盤を弾くと現在行の K# が変わります。次に K# のある行へ進むかどうか。')}>
               <input type="checkbox" checked={settings.list.captureAdvance} onChange={(e) => setList({ captureAdvance: e.target.checked })} /> {t('鍵盤入力後に次の行へ')}
@@ -591,7 +625,7 @@ export function ListEditor() {
       </div>
       {filtered && <div className="list-notice">{t('フィルター中: ST は表示されていないイベントも含めた次のイベントまでの距離です。ST の編集はすべて表示したときだけできます。')}</div>}
       {editing && mode !== 'edit-shortcuts' && <div className="list-notice">{t('セル入力中（鍵盤は鳴りません）')}</div>}
-      {!editing && performing && focused && <div className="list-notice">{recState.phase === 'idle' ? t('鍵盤を弾くと現在行の K# を書き換えます（録音中は録音が優先）。') : t('録音中: 鍵盤は録音され、リストの行は変わりません。')}</div>}
+      {!editing && performing && focused && <div className="list-notice">{recState.phase === 'idle' ? t('鍵盤を弾くと現在行の K# を書き換えます。同時に押した音は和音として入ります（録音中は録音が優先）。') : t('録音中: 鍵盤は録音され、リストの行は変わりません。')}</div>}
       {message && (
         <div className="list-notice warn-text" role="status" data-testid="list-message">
           {message}

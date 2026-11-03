@@ -714,3 +714,10 @@ UI 側とコア／再生側を分けてコード全体を読み直し、確認�
 - **見送った案**: フォーカスで切り替わる `list-cell-edit` モード（上記）。複数行の ST を同時に編集（リップルが連鎖して予測できない）。既存の各ダイアログを 1 つの巨大ダイアログに統合（増やさず再利用）。Shift で ×10（JIS で `+` 自体が Shift を使う）。
 - **互換性影響**: `settings.list` は省略可能で、古い楽曲は既定値で開く。`InputMode` から `list-cell-edit` が消えた（設定や楽曲には保存されていない）。`noteName` は `core/list/noteNames.ts` に移動（`listRows.ts` から re-export）。
 - **検証**: unit `list-names.test.ts`（LIST-01）、`list-convert.test.ts`（LIST-02/03）、`list-keys.test.ts`（LIST-06）、`list-nudge.test.ts`（LIST-04/12）、`list-transform.test.ts`（LIST-09）。E2E `list-editing.spec.ts`（LIST-04/05/09/10/11/12）、`list-keys.spec.ts`（LIST-06）、`list-input.spec.ts`（LIST-07/08）、既存の `list-visual.spec.ts` は変更なしで緑。外部 MIDI 鍵盤からの取り込みは同じ `addSink` 経路だが実機では未検証。
+
+> **追記（2026-11-03、最初の試用の指摘）**
+> - **文字キーで直接挿入**: 編集モードでグリッドにフォーカスがあれば、挿入メニューを開かずに N / C / P / B / A / Y / S / M でそのまま挿入する（メニューの頭文字と同じ）。この 8 文字はリストにフォーカスがある間、1 文字の DAW ショートカット（P = 描画ツール、S = ソロ、M = ミュート）より優先する。ミュート / ソロ / ツールはトラックヘッダー・ツールバー・フォーカスがリストの外にあるときのキーで操作できる。
+> - **鍵盤モードでも ↑↓ は行移動**: 目の前のリストを動かせないのは不自然だった。PC 鍵盤のオクターブはリスト内では ⌥/Alt+↑↓（ツールバーの Oct− / Oct+ も従来どおり）。ステップ（鍵盤）も同じ。
+> - **編集モードでも取り込む**: 鍵盤からの K# 取り込みはステップモード以外のすべてのモードで働く。編集モードで note-on を出すのは外部 MIDI 鍵盤（と画面パッド）だけなので、文字キーのショートカットとは衝突しない。
+> - **和音**: 取り込みは `core/list/listCapture.ts` の状態機械で行う。最初の鍵は現在行の K# を書き換え（即時）、それを押さえたまま押した鍵は同じ位置に新しいノート（元の行の GT / VEL / チャンネルを引き継ぐ）として挿入される。全部離した時点で、和音の後ろにある次の K# 行へ進む。和音は 1 回の取り消し（`mergeKey: list-chord:{行 id}`）。同じ音高の重複は入れない。
+> - 検証: unit `list-keys.test.ts`（↑↓ / ⌥↑↓ / 挿入文字）、`list-capture.test.ts`（単音・和音・K# のない行・受け付けない状態）。E2E `list-keys.spec.ts`、`list-input.spec.ts`（和音 → 同 tick に 3 音、1 回の Undo）、`list-editing.spec.ts`（C / N / B で直接挿入）。

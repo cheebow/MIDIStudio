@@ -28,7 +28,8 @@ export const SHORTCUTS_EN: [string, string][] = [
   [`${ALT}K / ${ALT}P`, 'PC keyboard / drum pad input mode (again to go back to editing)'],
   ['Keyboard mode: ↑ ↓ / Tab', 'Octave / sustain while held'],
   ['Step input: → ← - Backspace', 'Rest / back / tie / undo the last step'],
-  ['List: + - / ⌥↑↓ / ⌘Enter / Insert', 'Step a value by 1 / by 10 / repeat the last value / insert menu'],
+  ['List: + - / ⌥↑↓ / ⌘Enter / Insert', 'Step a value by 1 / by 10 (octave in the keyboard mode) / repeat the last value / insert menu'],
+  ['List: N C P B A Y S M', 'Insert Note / CC / Program / Pitch Bend / Ch. Pressure / Poly Pressure / SysEx / Meta (edit mode)'],
   ['Esc', 'Back to edit mode, clear the selection'],
   ['F1', 'This help'],
   ['↑ ↓ / ← → (piano roll)', 'Move a semitone (Shift: an octave) / move by one grid step'],
@@ -140,8 +141,8 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
           <li>Move with ↑↓←→ / Tab, start editing with Enter or a digit, confirm with Enter, cancel with Esc. Shift+↑↓ selects several rows. “Enter moves to” chooses where the cursor goes after confirming.</li>
           <li>The NOTE column takes note names (C4, F#3) or CC7 / PC5 / PB / CP / PP C4. Writing CC7 on a note row turns that row into a CC (same position).</li>
           <li>+ / - step by 1, ⌥↑↓ (Alt+↑↓) by 10 (one octave for K#), and numeric cells can be dragged vertically. ⌘Enter (Ctrl+Enter) repeats the last value.</li>
-          <li>“Insert ▾” (Insert / ⌥Enter) adds anything else; the first letter picks an item (C for CC, P for Program…). “Sets” hold Bank + Program, RPN, NRPN and GS Reset. SysEx can be built from GS templates.</li>
-          <li>In the keyboard mode (⌥K) with the list focused, a played key goes into the K# of the current row and the cursor moves on (Recomposer-style entry). During step input the cursor follows the step position.</li>
+          <li>“Insert ▾” (Insert / ⌥Enter) adds anything else; in the edit mode, pressing N / C / P / B / A / Y / S / M on the list inserts at once (the menu’s access keys). “Sets” hold Bank + Program, RPN, NRPN and GS Reset. SysEx can be built from GS templates.</li>
+          <li>With the list focused, a key played in the keyboard mode (⌥K) or on an external MIDI keyboard goes into the K# of the current row; keys held together go in as a chord at the same position, and releasing them moves the cursor on (Recomposer-style entry). In the keyboard mode the octave is ⌥↑↓ inside the list. During step input the cursor follows the step position.</li>
           <li>Right-click for type conversion, transpose, quantize and “Change selected rows…” (shift, GT, channel, value, K#).</li>
           <li>Changing ST moves the events after it (ripple). GT changes only that note.</li>
           <li>Units can be ticks or ♩=48 (Recomposer style). Values that do not divide evenly are shown as fractions.</li>
