@@ -98,6 +98,9 @@ main.help-page { max-width: 1040px; display: grid; grid-template-columns: 200px 
 .help-toc .toc a:hover { background: var(--selection); }
 .help-body .lead { margin: 0 0 16px; color: var(--muted); }
 .help-section ol { padding-left: 1.4em; }
+.help-fig { margin: 14px 0 20px; }
+.help-fig img { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; }
+.help-fig figcaption { margin-top: 6px; font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
 .help-section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; scroll-margin-top: 64px; }
 .help-section h2 { margin: 0 0 8px; font-size: 1.2rem; }
 .help-section h4 { margin: 14px 0 4px; font-size: 0.95rem; }
