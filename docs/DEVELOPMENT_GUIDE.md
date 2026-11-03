@@ -149,6 +149,7 @@ npm run shots:tutorial     # Chromium で日本語・英語の 20 枚を public/
 - `develop`: 日々の作業の合流先。GitHub の既定ブランチなので PR は自動的にここへ向く。
 - `main`: 公開版。push すると `.github/workflows/pages.yml` が GitHub Pages に配信する。直接コミットせず、`develop` からのマージだけを入れる。
 - 作業は `develop` から切ったブランチで行い、PR を `develop` に出す。
+- `develop` と `main` は GitHub のルールセット「Protect develop and main」で**削除と強制 push を禁止**している（2026-11-03〜）。`git push --force` や履歴の書き換えはできないので、間違えたコミットは `git revert` で戻す。PR 必須・ステータスチェック必須は付けていない（公開の版上げコミットを `develop` に直接 push するため。テストの CI もまだない）。ルールは GitHub の Settings › Rules › Rulesets で確認・変更できる。
 
 ### 版を上げて公開する（develop → main）
 
@@ -161,6 +162,11 @@ npm version minor --no-git-tag-version   # 操作や挙動が変わるとき。�
 git add -A && git commit -m "v0.3.0" && git push
 git switch main && git pull && git merge --ff-only develop   # 公開 = develop を main に取り込む
 git tag v0.3.0 && git push origin main --tags
+# GitHub の Release を作る（本文は CHANGELOG.md のその版の節）
+awk '/^## 0\.3\.0 /{f=1;next} /^## /{f=0} f' CHANGELOG.md > /tmp/notes.md
+gh release create v0.3.0 --title "MIDI Studio 0.3.0" --notes-file /tmp/notes.md
 git switch develop
 ```
+
+公開のたびに、タグに対応する GitHub の Release も作る（タグだけでは Releases の一覧に出ない）。題は「MIDI Studio X.Y.Z」、本文は CHANGELOG のその版の節をそのまま使う。
 
