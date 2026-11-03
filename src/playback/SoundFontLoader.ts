@@ -4,6 +4,20 @@ import { t } from '../i18n';
 export const DEFAULT_SOUNDFONT_URL = `${import.meta.env.BASE_URL}soundfonts/GeneralUser-GS.sf2`;
 export const WORKLET_URL = `${import.meta.env.BASE_URL}spessasynth_processor.min.js`;
 
+/**
+ * Largest sound bank the app reads (ADR-070). The engine keeps several copies of it (the main
+ * synth, the preview synth and the WAV renderer), so a much larger file would exhaust the tab's
+ * memory and crash it instead of failing with a message. Big GM banks are well below this.
+ */
+export const MAX_SOUND_BANK_BYTES = 512 * 1024 * 1024;
+
+/** Why a sound bank of `bytes` is not read, or null when the size is fine. */
+export function soundBankSizeError(bytes: number): string | null {
+  if (bytes <= MAX_SOUND_BANK_BYTES) return null;
+  const mib = (n: number) => Math.round(n / 1024 / 1024);
+  return t('SoundFont が大きすぎます（{size} MiB、上限 {max} MiB）。ブラウザのメモリが足りなくなるため読み込みません。', { size: mib(bytes), max: mib(MAX_SOUND_BANK_BYTES) });
+}
+
 export class SoundFontFetchError extends Error {
   constructor(
     readonly kind: 'not-found' | 'http' | 'network',

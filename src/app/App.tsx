@@ -736,7 +736,7 @@ export default function App() {
 
         <input ref={setMidiInput} type="file" hidden accept=".mid,.midi,.rmi,.kar" data-testid="midi-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) void importMidi(f); e.target.value = ''; }} />
         <input ref={setProjectInput} type="file" hidden accept=".midstudio,.json" data-testid="project-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) void openProject(f); e.target.value = ''; }} />
-        <input ref={setSf2Input} type="file" hidden accept=".sf2,.sf3,.dls" onChange={(e) => { const f = e.target.files?.[0]; if (f) { adapter.unlock(); void loadBank(() => f.arrayBuffer(), f.name); } e.target.value = ''; }} />
+        <input ref={setSf2Input} type="file" hidden accept=".sf2,.sf3,.dls" onChange={(e) => { const f = e.target.files?.[0]; if (f) { adapter.unlock(); void loadBank(() => f.arrayBuffer(), f.name, f.size); } e.target.value = ''; }} />
 
         {showStartup && (
           <StartupDialog

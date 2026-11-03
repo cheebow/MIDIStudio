@@ -244,6 +244,7 @@ export const EN_CORE: Record<string, string> = {
   '{message}（{where}バイト位置 {offset}）': '{message} ({where}byte offset {offset})',
   // playback/SoundFontLoader.ts
   '標準 SoundFont を取得できませんでした（ネットワーク/CORS）: {url}': 'Could not fetch the default SoundFont (network/CORS): {url}',
+  'SoundFont が大きすぎます（{size} MiB、上限 {max} MiB）。ブラウザのメモリが足りなくなるため読み込みません。': 'The SoundFont is too large ({size} MiB, limit {max} MiB). It is not loaded because the browser would run out of memory.',
   '標準 SoundFont が見つかりません（404）: {url}。開発環境では "npm run fetch-soundfont" を実行するか、ローカル SF2 を読み込んでください。': 'The default SoundFont was not found (404): {url}. In development, run "npm run fetch-soundfont" or load a local SF2.',
   '標準 SoundFont の取得に失敗しました（HTTP {status}）': 'Failed to fetch the default SoundFont (HTTP {status})',
   // playback/SpessaAdapter.ts

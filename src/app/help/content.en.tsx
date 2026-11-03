@@ -242,7 +242,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
           <li>Sample songs: File › Sample songs (also in the startup dialog). VISION (GS Version) and Merry X'mas For You! (composed and produced by cheebow; for listening and editing).</li>
           <li>Import MIDI: SMF format 0 / 1. Notes, CCs, SysEx and unknown events are kept, never dropped. Export MIDI: format 1.</li>
           <li>Export WAV renders with the built-in sound engine (mute / solo apply, the loop is ignored).</li>
-          <li>Choose SoundFont uses your own .sf2 / .sf3 / .dls as the sound bank.</li>
+          <li>Choose SoundFont uses your own .sf2 / .sf3 / .dls as the sound bank (up to 512 MiB; a larger file is not loaded because the browser would run out of memory).</li>
         </ul>
       </>
     ),
