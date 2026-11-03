@@ -2,7 +2,8 @@
 // ST = delta to the next event of the same track in time order, counting ALL events (also those
 // hidden by a filter). GT = Note On -> Note Off ticks. Nothing here rounds: display units are exact.
 import { base64ToBytes } from '../model/base64';
-import type { MidiEvent, MidiProject, MidiTrack } from '../model/types';
+import type { ConductorEvent, MidiEvent, MidiProject, MidiTrack } from '../model/types';
+import { bpmFromUs } from '../timing/tempoMap';
 import { compareEvents } from '../events/order';
 import { TimeSignatureMap } from '../timing/timeSignatureMap';
 import { formatClassic48 } from '../timing/classic48';
@@ -10,21 +11,24 @@ import { CC_NAMES } from '../gm/ccNames';
 import { GM_PROGRAMS } from '../gm/instruments';
 import { drumName, findDrumMap } from '../gm/drumMaps';
 import { decodeGs } from '../gs/gsSysex';
+import { noteName } from './noteNames';
 import { t } from '../../i18n';
 
 export type ListUnit = 'native' | 'classic48';
-export type RowCategory = 'note' | 'cc' | 'program' | 'pitch-bend' | 'pressure' | 'sysex' | 'meta' | 'raw';
+/** 'conductor' rows (tempo / time signature / key / marker) come from project.conductor, not the track (ADR-066 追記) */
+export type RowCategory = 'note' | 'cc' | 'program' | 'pitch-bend' | 'pressure' | 'sysex' | 'meta' | 'raw' | 'conductor';
 
 export interface ListRow {
   id: string;
-  event: MidiEvent;
+  /** the track event, or a conductor event for 'conductor' rows */
+  event: MidiEvent | ConductorEvent;
   category: RowCategory;
-  /** index in the full (unfiltered) time-ordered list */
+  /** index in the full (unfiltered) time-ordered list of the track (a conductor row repeats the index of the track row before it) */
   index: number;
   tick: number;
   /** 1-based bar */
   meas: number;
-  /** 1-based order of the row within its bar (among rows of the same view) */
+  /** 1-based order of the row within its bar (among track rows of the same view); 0 for conductor rows */
   step: number;
   /** "C4", "CC7", "PC49", "PB", "SysEx" ... */
   name: string;
@@ -39,14 +43,7 @@ export interface ListRow {
   detail: string;
 }
 
-const NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const NOTE_FLAT = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
-/**
- * Absolute note name ("C4", "F#4"). Black keys are named with sharps, or with flats ("Bb4") under a
- * flat key signature (sharpsFlats < 0). The name is never shortened by the key signature: a list
- * row must name the sounding pitch by itself.
- */
-export const noteName = (p: number, sharpsFlats = 0) => `${(sharpsFlats < 0 ? NOTE_FLAT : NOTE)[p % 12]}${Math.floor(p / 12) - 1}`;
+export { noteName } from './noteNames';
 
 /** Key signature (sharps > 0 / flats < 0) in effect at a tick, from the conductor; 0 when none. */
 export function keySignatureLookup(project: MidiProject): (tick: number) => number {
@@ -66,7 +63,8 @@ export function keySignatureLookup(project: MidiProject): (tick: number) => numb
   };
 }
 
-const META_NAMES: Record<number, string> = { 0x01: 'Text', 0x02: 'Copyright', 0x03: 'Track Name', 0x04: 'Instrument', 0x05: 'Lyric', 0x06: 'Marker', 0x07: 'Cue', 0x20: 'Channel Prefix', 0x21: 'Port', 0x54: 'SMPTE Offset', 0x7f: 'Sequencer Specific' };
+/** Track-level meta event names (conductor metas live in project.conductor). */
+export const META_NAMES: Record<number, string> = { 0x01: 'Text', 0x02: 'Copyright', 0x03: 'Track Name', 0x04: 'Instrument', 0x05: 'Lyric', 0x06: 'Marker', 0x07: 'Cue', 0x20: 'Channel Prefix', 0x21: 'Port', 0x54: 'SMPTE Offset', 0x7f: 'Sequencer Specific' };
 
 function hex(bytes: Uint8Array | null, max = 12): string {
   if (!bytes) return '';
@@ -136,8 +134,39 @@ export function sortedTrackEvents(track: MidiTrack): MidiEvent[] {
   return [...track.events].sort(compareEvents);
 }
 
+export const isConductorEvent = (e: MidiEvent | ConductorEvent): e is ConductorEvent => e.kind === 'tempo' || e.kind === 'time-signature' || e.kind === 'key-signature' || e.kind === 'marker';
+export const isConductorRow = (r: ListRow): boolean => r.category === 'conductor';
+
+const MAJOR_KEYS = ['C♭', 'G♭', 'D♭', 'A♭', 'E♭', 'B♭', 'F', 'C', 'G', 'D', 'A', 'E', 'B', 'F♯', 'C♯'];
+const MINOR_KEYS = ['A♭', 'E♭', 'B♭', 'F', 'C', 'G', 'D', 'A', 'E', 'B', 'F♯', 'C♯', 'G♯', 'D♯', 'A♯'];
+export function keySignatureName(sharpsFlats: number, minor: boolean): string {
+  const i = Math.max(-7, Math.min(7, sharpsFlats)) + 7;
+  return minor ? `${MINOR_KEYS[i]} minor` : `${MAJOR_KEYS[i]} major`;
+}
+
+/** Display of a conductor event as a list row (VEL = BPM for tempo; everything else in DETAIL). */
+function describeConductor(c: ConductorEvent): Pick<ListRow, 'name' | 'key' | 'gtTicks' | 'value' | 'detail'> {
+  switch (c.kind) {
+    case 'tempo': {
+      const bpm = Math.round(bpmFromUs(c.usPerQuarter) * 100) / 100;
+      return { name: 'Tempo', key: null, gtTicks: null, value: bpm, detail: `${bpm.toFixed(2)} BPM` };
+    }
+    case 'time-signature':
+      return { name: 'TS', key: null, gtTicks: null, value: null, detail: `${c.numerator}/${c.denominator}` };
+    case 'key-signature':
+      return { name: 'Key', key: null, gtTicks: null, value: null, detail: keySignatureName(c.sharpsFlats, c.minor) };
+    case 'marker':
+      return { name: 'Marker', key: null, gtTicks: null, value: null, detail: c.text };
+  }
+}
+
+export interface ListRowsOptions {
+  /** interleave the conductor events (tempo / time signature / key / marker) in time order; they never enter ST */
+  conductor?: boolean;
+}
+
 /** All rows of a track (time order). `visible` filters the view; ST still counts hidden events. */
-export function listRows(project: MidiProject, track: MidiTrack, visible?: ReadonlySet<RowCategory>, sig?: TimeSignatureMap): ListRow[] {
+export function listRows(project: MidiProject, track: MidiTrack, visible?: ReadonlySet<RowCategory>, sig?: TimeSignatureMap, opts: ListRowsOptions = {}): ListRow[] {
   const map = sig ?? new TimeSignatureMap(project.ppq, project.conductor.filter((c) => c.kind === 'time-signature'));
   const events = sortedTrackEvents(track);
   const dmap = track.displayMode === 'drum' ? findDrumMap(track.drumMapId, project.drumMaps) : null;
@@ -174,7 +203,21 @@ export function listRows(project: MidiProject, track: MidiTrack, visible?: Reado
     }
     rows.push({ id: e.id, event: e, category, index, tick: e.tick, meas, step, stTicks: next ? next.tick - e.tick : null, ...d });
   });
-  return rows;
+  if (!opts.conductor || project.conductor.length === 0) return rows;
+  // merge the conductor events in time order; at the same tick they come first (as the conductor track does in an SMF)
+  const cond = [...project.conductor].sort(compareEvents);
+  const out: ListRow[] = [];
+  let i = 0;
+  let lastIndex = -1;
+  for (const c of cond) {
+    while (i < rows.length && rows[i].tick < c.tick) {
+      lastIndex = rows[i].index;
+      out.push(rows[i++]);
+    }
+    out.push({ id: c.id, event: c, category: 'conductor', index: lastIndex, tick: c.tick, meas: map.tickToBarBeat(c.tick).bar, step: 0, stTicks: null, ...describeConductor(c) });
+  }
+  while (i < rows.length) out.push(rows[i++]);
+  return out;
 }
 
 export function formatTicks(ticks: number | null, unit: ListUnit, ppq: number): string {

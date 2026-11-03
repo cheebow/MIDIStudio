@@ -4,11 +4,12 @@
 // - Absolute tick edit moves only that event.
 // Display units are converted back exactly or refused (no silent rounding: C15 / E07).
 import type { Command } from '../editing/history';
-import { EditError, updateEvents } from '../editing/operations';
+import { EditError, rewriteEvents, updateEvents, type NewEvent } from '../editing/operations';
 import type { MidiProject } from '../model/types';
 import { classic48ToTicks } from '../timing/classic48';
 import { sortedTrackEvents, type ListUnit } from './listRows';
 import { setGsValue } from '../gs/gsProject';
+import { hasChannel } from '../events/order';
 import { t } from '../../i18n';
 
 export type ParsedTicks = { ok: true; ticks: number } | { ok: false; message: string };
@@ -76,4 +77,29 @@ export function setRowValue(project: MidiProject, eventId: string, value: number
 
 export function setRowKey(project: MidiProject, eventId: string, key: number): Command | null {
   return updateEvents(project, [{ id: eventId, changes: { pitch: key } }], 'ノート番号を変更');
+}
+
+/**
+ * CH column: sets the channel override (0..15) of channel events, or clears it (null = follow the
+ * track). An override equal to the track channel is stored as "none". Rows without a channel
+ * (SysEx / meta / raw) are skipped; when nothing in the selection has one, that is an error.
+ */
+export function setRowChannel(project: MidiProject, ids: Iterable<string>, channel: number | null): Command | null {
+  if (channel !== null && !(Number.isInteger(channel) && channel >= 0 && channel < 16)) throw new EditError(t('チャンネルは 1〜16 です。'));
+  let applicable = 0;
+  const cmd = rewriteEvents(
+    project,
+    ids,
+    (e, track) => {
+      if (!hasChannel(e)) return null;
+      applicable++;
+      const { channelOverride: old, ...rest } = e as typeof e & { channelOverride?: number };
+      const wanted = channel === null || channel === track.channel ? undefined : channel;
+      if (old === wanted) return null;
+      return (wanted === undefined ? rest : { ...rest, channelOverride: wanted }) as NewEvent;
+    },
+    'チャンネルを変更',
+  );
+  if (applicable === 0) throw new EditError(t('チャンネルを持たない行です。'));
+  return cmd;
 }

@@ -50,7 +50,7 @@ test('ADR-044: DAW-style single-key shortcuts work in the edit mode; the mode sw
   // the switch buttons and Esc
   await setInputMode(page, 'drum-performance');
   await expect(mode).toContainText('ドラムパッド');
-  await page.keyboard.press('Alt+p');
+  await page.keyboard.press('Alt+r');
   await expect(mode).toContainText('入力: 編集');
   await setInputMode(page, 'step-piano');
   await expect(mode).toContainText('ステップ（鍵盤）');

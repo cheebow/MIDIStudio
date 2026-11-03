@@ -112,6 +112,9 @@ npm run dev               # http://localhost:5173
 | E02, E09, I02, I03, I06（UI） | `tests/e2e/drum-input.spec.ts` |
 | E05, E06, E07, E12, P06〜P08（計算） | `tests/unit/list.test.ts` |
 | E05, E06, E07, E12, P02（ビジュアルモード）（UI） | `tests/e2e/list-visual.spec.ts` |
+| LIST-01〜03（音名・種類変更・挿入・CH） | `tests/unit/list-names.test.ts`, `tests/unit/list-convert.test.ts` |
+| LIST-04, 06, 09, 12（増減・キー所有・一括変更） | `tests/unit/list-nudge.test.ts`, `tests/unit/list-keys.test.ts`, `tests/unit/list-transform.test.ts` |
+| LIST-04〜12（UI） | `tests/e2e/list-editing.spec.ts`, `tests/e2e/list-keys.spec.ts`, `tests/e2e/list-input.spec.ts` |
 | I08〜I12, I15 | `tests/unit/recording.test.ts`, `tests/integration/recording-flow.test.ts` |
 | I13, I14（擬似 MIDI 機器） | `tests/unit/midi-input.test.ts` |
 | I01, I03, I08, I11, I13（UI） | `tests/e2e/recording.spec.ts` |

@@ -1,7 +1,7 @@
 // Global shortcuts (UI_DESIGN 9, ADR-044). Musical keys are routed first (performance modes), then
 // the editor shortcuts. Nothing fires while typing, inside a dialog or in a menu; browser / OS
 // reserved keys are not taken. Single-letter DAW shortcuts work only in the edit mode: in the
-// performance modes the same keys are an instrument (INPUT_RECORDING 7); ⌥K / ⌥P switch modes
+// performance modes the same keys are an instrument (INPUT_RECORDING 7); ⌥K / ⌥R switch modes
 // from anywhere, Esc always returns to the edit mode.
 import { useEffect } from 'react';
 import type { EditorStore } from '../store/EditorStore';
@@ -101,7 +101,8 @@ export function useGlobalShortcuts(d: ShortcutDeps): void {
         return;
       }
       // Mode switches work in every mode (the router ignores keys with Alt / Option).
-      if (e.altKey && !mod && !e.shiftKey && (e.code === 'KeyK' || e.code === 'KeyP')) {
+      // ⌥R (rhythm) for the pads: ⌥P is the list's "insert Program Change" (ADR-066 追記) and Alt+D is the browser's address bar
+      if (e.altKey && !mod && !e.shiftKey && (e.code === 'KeyK' || e.code === 'KeyR')) {
         handled();
         toggleMode(e.code === 'KeyK' ? 'piano-performance' : 'drum-performance');
         return;

@@ -205,6 +205,37 @@ export function updateEvents(project: MidiProject, updates: ReadonlyArray<{ id: 
   return cmd(label, { tracks: replaceTracks(project, changed), clips: refreshClipBounds(project.clips, changed) });
 }
 
+/**
+ * Rewrites whole events (kind changes included) while keeping each event's id and originOrder, so
+ * selection, clip membership and the stable order at the same tick survive (ADR-066). `fn` returns
+ * the new event body or null to leave the event alone.
+ */
+export function rewriteEvents(project: MidiProject, ids: Iterable<string>, fn: (e: MidiEvent, track: MidiTrack) => NewEvent | null, label = 'イベントを変更'): Command | null {
+  const wanted = new Set(ids);
+  if (wanted.size === 0) return null;
+  const changed = new Map<TrackId, MidiTrack>();
+  for (const t of project.tracks) {
+    let touched = false;
+    const events = t.events.map((e) => {
+      if (!wanted.has(e.id)) return e;
+      const body = fn(e, t);
+      if (!body) return e;
+      touched = true;
+      const next = { ...body, id: e.id, originOrder: e.originOrder } as MidiEvent;
+      assertValidEvent(next);
+      return next;
+    });
+    if (touched) changed.set(t.id, { ...t, events: sortEvents(events) });
+  }
+  if (changed.size === 0) return null;
+  return cmd(label, { tracks: replaceTracks(project, changed), clips: refreshClipBounds(project.clips, changed) });
+}
+
+/** Replaces one event with another body (normally of a different kind), keeping its id and originOrder. */
+export function replaceEvent(project: MidiProject, id: string, next: NewEvent, label = '種類を変更'): Command | null {
+  return rewriteEvents(project, [id], () => next, label);
+}
+
 /** Clip bounds grow to contain their (possibly moved) events; they never shrink implicitly. */
 function refreshClipBounds(clips: readonly MidiClip[], changed: Map<TrackId, MidiTrack>): MidiClip[] {
   return clips.map((c) => {

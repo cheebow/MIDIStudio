@@ -213,7 +213,7 @@ export const EN_APP: Record<string, string> = {
   鍵盤: 'Keys',
   'PC 鍵盤で演奏（{alt}K で切り替え）: 下段 Z〜M が C4〜B4、上段 Q〜I が C5〜C6。1 文字のショートカットは無効になります。': 'Play with the PC keyboard ({alt}K toggles): Z–M = C4–B4, Q–I = C5–C6. Single-letter shortcuts are off.',
   パッド: 'Pads',
-  'ドラムパッド（{alt}P で切り替え）: 文字キーとテンキーで叩きます。1 文字のショートカットは無効になります。': 'Drum pads ({alt}P toggles): hit them with letter keys and the numeric keypad. Single-letter shortcuts are off.',
+  'ドラムパッド（{alt}R で切り替え）: 文字キーとテンキーで叩きます。1 文字のショートカットは無効になります。': 'Drum pads ({alt}R toggles): hit them with letter keys and the numeric keypad. Single-letter shortcuts are off.',
   'ステップ入力: 鍵盤かドラムを選びます。→ で休符、← で戻る、- でタイ、Backspace で直前を取り消し': 'Step entry: choose keyboard or drums. → rest, ← back, - tie, Backspace undoes the last step',
   'ステップ（ドラム）— 選択中はドラムトラックではありません': 'Step (drums) — the selected track is not a drum track',
   'ステップ ▾': 'Step ▾',

@@ -185,12 +185,23 @@ export interface ProjectViewSettings {
   quantize: QuantizeSettings;
   /** last values of the humanize dialog (ADR-050) */
   humanize: HumanizeSettings;
+  /** list editor preferences (ADR-066) */
+  list: ListSettings;
   /** layout: height of the bottom editor panel in px (null = automatic), collapsed state */
   editorHeight: number | null;
   editorCollapsed: boolean;
   /** controller lane under the piano roll / drum editor */
   laneHeight: number;
   laneCollapsed: boolean;
+}
+
+export interface ListSettings {
+  /** where the cursor goes after Enter confirms a cell */
+  enterMoves: 'down' | 'right' | 'stay';
+  /** PC / MIDI keyboard in the list: advance to the next row with a note number after a key */
+  captureAdvance: boolean;
+  /** also write the played velocity into VEL */
+  captureVelocity: boolean;
 }
 
 export interface RecordingSettings {

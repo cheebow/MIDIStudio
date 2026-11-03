@@ -4,7 +4,7 @@
 import { base64ToBytes } from '../model/base64';
 import { isValidPort } from '../model/ports';
 import { defaultInputPresets, defaultViewSettings } from '../model/defaults';
-import type { HumanizeSettings, MidiProject, ProjectViewSettings, QuantizeSettings, RecordingSettings, TmSettings } from '../model/types';
+import type { HumanizeSettings, ListSettings, MidiProject, ProjectViewSettings, QuantizeSettings, RecordingSettings, TmSettings } from '../model/types';
 import { SMF_LIMITS } from '../smf/types';
 import { t } from '../../i18n';
 import { adoptLooseNotes } from '../editing/operations';
@@ -127,6 +127,12 @@ function sanitizeSettings(raw: unknown, d: ProjectViewSettings, trackIds: Readon
     gatePercent: num(recRaw.gatePercent, 1, 100, d.recording.gatePercent),
     drumAutoAdvance: bool(recRaw.drumAutoAdvance, d.recording.drumAutoAdvance),
   };
+  const listRaw = isObject(r.list) ? r.list : {};
+  const list: ListSettings = {
+    enterMoves: oneOf(listRaw.enterMoves, ['down', 'right', 'stay'] as const, d.list.enterMoves),
+    captureAdvance: bool(listRaw.captureAdvance, d.list.captureAdvance),
+    captureVelocity: bool(listRaw.captureVelocity, d.list.captureVelocity),
+  };
   return {
     ...(typeof r.selectedTrackId === 'string' && trackIds.has(r.selectedTrackId) ? { selectedTrackId: r.selectedTrackId } : {}),
     activePanel: oneOf(r.activePanel, ['piano-roll', 'drum', 'list', 'mixer', 'tempo'] as const, d.activePanel),
@@ -145,6 +151,7 @@ function sanitizeSettings(raw: unknown, d: ProjectViewSettings, trackIds: Readon
     recording,
     quantize,
     humanize,
+    list,
     editorHeight: typeof r.editorHeight === 'number' && Number.isFinite(r.editorHeight) && r.editorHeight >= 80 ? r.editorHeight : null,
     editorCollapsed: bool(r.editorCollapsed, d.editorCollapsed),
     laneHeight: num(r.laneHeight, 40, 320, d.laneHeight),

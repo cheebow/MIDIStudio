@@ -30,6 +30,7 @@ export function defaultViewSettings(ppq: number): ProjectViewSettings {
     recording: { mode: 'overdub', loopTakes: 'merge', punch: false, countInBars: 1, armFollowsSelection: false, quantize: false, latencyMs: 0, stepTicks: ppq % 2 === 0 ? ppq / 2 : ppq, gatePercent: 90, drumAutoAdvance: false },
     quantize: { grid: { division: 16, kind: 'straight' }, strength: 100, swing: 50, lengths: 'keep' },
     humanize: { timingTicks: Math.max(1, Math.round(ppq / 32)), velocity: 10, lengthPercent: 10 },
+    list: { enterMoves: 'down', captureAdvance: true, captureVelocity: false },
   };
 }
 
