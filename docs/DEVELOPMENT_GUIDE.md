@@ -162,6 +162,11 @@ npm version minor --no-git-tag-version   # 操作や挙動が変わるとき。�
 git add -A && git commit -m "v0.3.0" && git push
 git switch main && git pull && git merge --ff-only develop   # 公開 = develop を main に取り込む
 git tag v0.3.0 && git push origin main --tags
+# GitHub の Release を作る（本文は CHANGELOG.md のその版の節）
+awk '/^## 0\.3\.0 /{f=1;next} /^## /{f=0} f' CHANGELOG.md > /tmp/notes.md
+gh release create v0.3.0 --title "MIDI Studio 0.3.0" --notes-file /tmp/notes.md
 git switch develop
 ```
+
+公開のたびに、タグに対応する GitHub の Release も作る（タグだけでは Releases の一覧に出ない）。題は「MIDI Studio X.Y.Z」、本文は CHANGELOG のその版の節をそのまま使う。
 
