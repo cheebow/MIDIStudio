@@ -31,6 +31,7 @@ import { errorText } from './errorText';
 import { TransportBar } from './TransportBar';
 import { InputModeSwitch } from './InputModeSwitch';
 import { useThemePref } from './theme';
+import { useLocale } from '../i18n/react';
 import { pianoRollZoomPatch } from '../ui/zoom';
 import { MOD_LABEL } from '../ui/platform';
 import { decodeShiftJis } from './textDecode';
@@ -109,6 +110,7 @@ export default function App() {
 
   const recState = useSyncExternalStore(recorder.subscribe, recorder.getState);
   const theme = useThemePref();
+  const lang = useLocale(); // the shell is keyed on it: a language change re-mounts the UI with the new texts
 
   // Transport follows committed content changes only (view settings do not reload the engine).
   useEffect(() => {
@@ -517,7 +519,7 @@ export default function App() {
   return (
     <ServicesContext.Provider value={services}>
       <EditActionsContext.Provider value={actions}>
-      <div className="shell">
+      <div className="shell" key={lang}>
         <MenuBar menus={menus} />
         <header className="toolbar">
           <TransportBar

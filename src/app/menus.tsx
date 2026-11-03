@@ -15,6 +15,7 @@ import type { Menu, MenuItem } from '../ui/menu/MenuBar';
 import { ALT_LABEL as ALT, IS_MAC, MOD_LABEL as MOD } from '../ui/platform';
 import { arrangementZoomPatch, pianoRollZoomPatch } from '../ui/zoom';
 import { setThemePref, type ThemePref } from './theme';
+import { LOCALE_NAMES, LOCALES, locale, setLocale, t } from '../i18n';
 import type { EditorStore } from './store/EditorStore';
 import type { AppActions } from './store/context';
 import type { Recorder } from './recording/Recorder';
@@ -164,6 +165,10 @@ export function buildMenus(d: MenuDeps): Menu[] {
             { label: 'ライト', checked: d.theme === 'light', action: () => setThemePref('light') },
             { label: 'ダーク', checked: d.theme === 'dark', action: () => setThemePref('dark') },
           ],
+        },
+        {
+          label: t('言語'),
+          items: LOCALES.map((l) => ({ label: LOCALE_NAMES[l], checked: locale() === l, action: () => setLocale(l) })),
         },
       ],
     },
