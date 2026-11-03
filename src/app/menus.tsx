@@ -29,6 +29,8 @@ export interface MenuDeps {
   clipboard: ClipboardData | null;
   hasSelection: boolean;
   hasClipSelection: boolean;
+  /** two or more selected clips share a track (ADR-065) */
+  canMergeClips: boolean;
   selectedTrack: MidiTrack | undefined;
   inputMode: InputMode;
   sustain: boolean;
@@ -125,7 +127,13 @@ export function buildMenus(d: MenuDeps): Menu[] {
             { label: t('ベロシティ…'), action: actions.velocityDialog, disabled: !selectedTrack, reason: t('トラックがありません') },
           ],
         },
-        { label: t('クリップ'), items: [{ label: t('再生位置で分割'), action: actions.splitAtCursor }] },
+        {
+          label: t('クリップ'),
+          items: [
+            { label: t('再生位置で分割'), action: actions.splitAtCursor },
+            { label: t('結合'), shortcut: `${MOD}J`, action: actions.mergeClips, disabled: !d.canMergeClips, reason: t('同じトラックのクリップを 2 つ以上選択してください') },
+          ],
+        },
       ],
     },
     {

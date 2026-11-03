@@ -149,3 +149,40 @@ test('ADR-057: Shift+click / rubber band select clips across tracks; ⌘D, copy 
   await page.keyboard.press('Escape');
 });
 
+test('ADR-065: two clips on a track merge into one via the right-click menu or ⌘J; Delete then removes both notes', async ({ page }) => {
+  await page.goto('/');
+  await importMidi(page, build(1, 480, [program(0, 0, 0), on(0, 0, 60), off(480, 0, 60), on(1440, 0, 64), off(960, 0, 64)])); // notes at 0 and 1920 (2 beats long): one clip 0..2880
+  const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
+  const box = (await page.getByTestId('arrangement-canvas').boundingBox())!;
+  const bar = 96;
+  const p = await firstClip(page);
+  // split at bar 2 (tick 1920) via the menu, then select both halves and merge
+  await page.mouse.click(box.x + bar * 2 + 2, p.y, { button: 'right' });
+  await page.getByTestId('context-menu').getByRole('menuitem', { name: 'ここで分割' }).click();
+  await page.mouse.click(p.x, p.y);
+  await page.keyboard.down('Shift');
+  await page.mouse.click(box.x + bar * 2 + 20, p.y);
+  await page.keyboard.up('Shift');
+  await page.mouse.click(p.x, p.y, { button: 'right' });
+  await page.getByTestId('context-menu').getByRole('menuitem', { name: /^結合/ }).click();
+  // one clip again: deleting it removes both notes (before the merge, Delete on the first half would leave the second note)
+  await page.mouse.click(p.x, p.y);
+  await page.keyboard.press('Delete');
+  expect(notesOf(await exportedSmf(page))).toEqual([]);
+  await page.keyboard.press(`${mod}+z`);
+  await page.keyboard.press(`${mod}+z`); // undo the merge: two clips
+  await page.mouse.click(p.x, p.y);
+  await page.keyboard.press('Delete');
+  expect(notesOf(await exportedSmf(page))).toEqual([{ tick: 1920, pitch: 64 }]);
+  await page.keyboard.press(`${mod}+z`);
+  // ⌘J does the same from the keyboard
+  await page.mouse.click(p.x, p.y);
+  await page.keyboard.down('Shift');
+  await page.mouse.click(box.x + bar * 2 + 20, p.y);
+  await page.keyboard.up('Shift');
+  await page.keyboard.press(`${mod}+j`);
+  await page.mouse.click(p.x, p.y);
+  await page.keyboard.press('Delete');
+  expect(notesOf(await exportedSmf(page))).toEqual([]);
+});
+

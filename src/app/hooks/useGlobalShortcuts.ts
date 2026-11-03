@@ -168,6 +168,9 @@ export function useGlobalShortcuts(d: ShortcutDeps): void {
       } else if (mod && k === 'd') {
         handled();
         actions.duplicate();
+      } else if (mod && k === 'j' && !e.shiftKey) {
+        handled();
+        actions.mergeClips(); // ⌘J: merge the selected clips (ADR-065)
       } else if (mod && k === 'a') {
         handled();
         actions.selectAll();

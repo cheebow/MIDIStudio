@@ -34,6 +34,8 @@ export interface EditActions {
   velocityDialog: () => void;
   transpose: (semitones: number) => void;
   noteLength: () => void;
+  /** merges the selected clips of each track into one (track view menu, ⌘J; ADR-065) */
+  mergeClips: () => void;
 }
 
 /** Every command the menus and shortcuts can run (the editors only need EditActions). */

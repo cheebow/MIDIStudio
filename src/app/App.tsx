@@ -11,7 +11,7 @@ import { parseProjectFile, serializeProject } from '../core/project-io/projectFi
 import { createStarterProject } from '../core/model/defaults';
 import type { MidiProject } from '../core/model/types';
 import type { ImportIssue } from '../core/smf/types';
-import { addEvents, addTrack, channelInsertIndex, deleteClips, deleteEvents, duplicateEvents, duplicateTrack, moveEvents, removeTrack, splitClip, updateEvents } from '../core/editing/operations';
+import { addEvents, addTrack, channelInsertIndex, deleteClips, deleteEvents, duplicateEvents, duplicateTrack, moveEvents, removeTrack, mergeClips, splitClip, updateEvents } from '../core/editing/operations';
 import { copyClips, copyEvents, duplicateClips, pasteClips, pasteEvents } from '../core/editing/clipboard';
 import type { Command } from '../core/editing/history';
 import type { Selection } from '../core/editing/selection';
@@ -60,6 +60,17 @@ import { selectedTrack as currentTrack } from '../core/model/selectedTrack';
 const db = new ProjectStore();
 const AUTOSAVE_DELAY_MS = 1500;
 
+
+/** two or more of the selected clips lie on the same track (merge is possible, ADR-065) */
+function canMergeClips(clipIds: ReadonlySet<string>, project: MidiProject): boolean {
+  const seen = new Set<string>();
+  for (const c of project.clips) {
+    if (!clipIds.has(c.id)) continue;
+    if (seen.has(c.trackId)) return true;
+    seen.add(c.trackId);
+  }
+  return false;
+}
 
 export default function App() {
   const features = useMemo(() => detectFeatures(globalThis as never), []);
@@ -437,6 +448,16 @@ export default function App() {
           ),
         ),
       ),
+    mergeClips: () =>
+      tryRun(() => {
+        const ids = [...store.getState().selection.clipIds];
+        const r = mergeClips(store.project, ids);
+        if (!r) return;
+        store.run(r);
+        // the surviving clips stay selected
+        const alive = new Set(store.project.clips.map((c) => c.id));
+        store.setSelection({ ...store.getState().selection, clipIds: new Set(ids.filter((id) => alive.has(id))) });
+      }),
     splitAtCursor: () =>
       tryRun(() => {
         const tick = Math.round(transport.getPosition().tick);
@@ -475,6 +496,7 @@ export default function App() {
     clipboard: state.clipboard,
     hasSelection: !noSel,
     hasClipSelection: selection.clipIds.size > 0,
+    canMergeClips: canMergeClips(state.selection.clipIds, project),
     selectedTrack,
     inputMode: inputState.mode,
     sustain: input.sustain,

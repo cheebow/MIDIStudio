@@ -390,6 +390,37 @@ export function splitClip(project: MidiProject, clipId: string, tick: number, la
 }
 
 /**
+ * Merges the selected clips of each track into one clip (ADR-065): the earliest clip grows to the
+ * latest end and takes the events of the others; free events whose onset falls inside the new range
+ * join too (as when a clip is extended). Clips of other tracks, and tracks with only one selected
+ * clip, are left alone. Nothing is moved or cut, so the MIDI content does not change.
+ */
+export function mergeClips(project: MidiProject, clipIds: Iterable<string>, label = 'クリップを結合'): Command | null {
+  const sel = new Set(clipIds);
+  const byTrack = new Map<TrackId, MidiClip[]>();
+  for (const c of project.clips) if (sel.has(c.id)) byTrack.set(c.trackId, [...(byTrack.get(c.trackId) ?? []), c]);
+  const groups = [...byTrack.values()].filter((g) => g.length >= 2);
+  if (groups.length === 0) return null;
+  const removed = new Set<string>();
+  const merged = new Map<string, MidiClip>();
+  for (const g of groups) {
+    const sorted = [...g].sort((a, b) => a.startTick - b.startTick || a.endTick - b.endTick);
+    const first = sorted[0];
+    const startTick = first.startTick;
+    const endTick = Math.max(...sorted.map((c) => c.endTick));
+    const track = findTrack(project, first.trackId);
+    const others = new Set(project.clips.filter((c) => c.trackId === first.trackId && !sel.has(c.id)).flatMap((c) => c.eventIds));
+    const own = new Set(sorted.flatMap((c) => c.eventIds));
+    // the merged clip's events in track order: its own, plus free events now inside the range
+    const eventIds = track.events.filter((e) => own.has(e.id) || (!others.has(e.id) && e.tick >= startTick && e.tick < endTick)).map((e) => e.id);
+    merged.set(first.id, { ...first, startTick, endTick, eventIds });
+    for (const c of sorted.slice(1)) removed.add(c.id);
+  }
+  const clips = project.clips.filter((c) => !removed.has(c.id)).map((c) => merged.get(c.id) ?? c);
+  return cmd(label, { clips });
+}
+
+/**
  * Changes a clip's range without moving or cutting any event (non-destructive trim / extend,
  * ADR-040). Events whose onset leaves the range leave the clip but stay on the track; free events
  * (in no other clip) whose onset is inside the new range join it, as in createClip. The MIDI
