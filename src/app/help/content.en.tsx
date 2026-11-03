@@ -25,11 +25,11 @@ export const SHORTCUTS_EN: [string, string][] = [
   ['Q / Shift+Q', 'Quantize (to the edit grid) / quantize dialog'],
   ['T', 'Visual mode (Esc closes it)'],
   ['R', 'Start / stop real-time recording'],
-  [`${ALT}K / ${ALT}P`, 'PC keyboard / drum pad input mode (again to go back to editing)'],
+  [`${ALT}K / ${ALT}R`, 'PC keyboard / drum pad input mode (again to go back to editing)'],
   ['Keyboard mode: ↑ ↓ / Tab', 'Octave / sustain while held'],
   ['Step input: → ← - Backspace', 'Rest / back / tie / undo the last step'],
   ['List: + - / ⌥↑↓ / ⌘Enter / Insert', 'Step a value by 1 / by 10 (octave in the keyboard mode) / repeat the last value / insert menu'],
-  ['List: N C P B A Y S M', 'Insert Note / CC / Program / Pitch Bend / Ch. Pressure / Poly Pressure / SysEx / Meta (edit mode)'],
+  [`List: ${ALT}N C P B A Y S M`, 'Insert Note / CC / Program / Pitch Bend / Ch. Pressure / Poly Pressure / SysEx / Meta (in every mode)'],
   ['Esc', 'Back to edit mode, clear the selection'],
   ['F1', 'This help'],
   ['↑ ↓ / ← → (piano roll)', 'Move a semitone (Shift: an octave) / move by one grid step'],
@@ -138,10 +138,10 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
           </tbody>
         </table>
         <ul>
-          <li>Move with ↑↓←→ / Tab, start editing with Enter or a digit, confirm with Enter, cancel with Esc. Shift+↑↓ selects several rows. “Enter moves to” chooses where the cursor goes after confirming.</li>
+          <li>Move with ↑↓←→ / Tab, start editing with Enter or a digit (Enter opens the cell with its value selected, so typing replaces it), confirm with Enter, cancel with Esc. Shift+↑↓ selects several rows. “Enter moves to” chooses where the cursor goes after confirming.</li>
           <li>The NOTE column takes note names (C4, F#3) or CC7 / PC5 / PB / CP / PP C4. Writing CC7 on a note row turns that row into a CC (same position).</li>
           <li>+ / - step by 1, ⌥↑↓ (Alt+↑↓) by 10 (one octave for K#), and numeric cells can be dragged vertically. ⌘Enter (Ctrl+Enter) repeats the last value.</li>
-          <li>“Insert ▾” (Insert / ⌥Enter) adds anything else; in the edit mode, pressing N / C / P / B / A / Y / S / M on the list inserts at once (the menu’s access keys). “Sets” hold Bank + Program, RPN, NRPN and GS Reset. SysEx can be built from GS templates.</li>
+          <li>“Insert ▾” (Insert / ⌥Enter) adds anything else; ⌥N / ⌥C / ⌥P / ⌥B / ⌥A / ⌥Y / ⌥S / ⌥M (Alt+letter) insert without the menu, even in the keyboard mode (the menu’s access keys). “Sets” hold Bank + Program, RPN, NRPN and GS Reset. SysEx can be built from GS templates.</li>
           <li>With the list focused, a key played in the keyboard mode (⌥K) or on an external MIDI keyboard goes into the K# of the current row; keys held together go in as a chord at the same position, and releasing them moves the cursor on (Recomposer-style entry). In the keyboard mode the octave is ⌥↑↓ inside the list. During step input the cursor follows the step position.</li>
           <li>Right-click for type conversion, transpose, quantize and “Change selected rows…” (shift, GT, channel, value, K#).</li>
           <li>Changing ST moves the events after it (ripple). GT changes only that note.</li>
@@ -210,7 +210,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
       <>
         <h4>Input modes</h4>
         <ul>
-          <li>“Edit / Keys / Pads / Step” in the toolbar. In Edit the letter keys are shortcuts; in Keys and Pads they are instruments. Switch with <K>{ALT}K</K> / <K>{ALT}P</K>, back to Edit with <K>Esc</K>.</li>
+          <li>“Edit / Keys / Pads / Step” in the toolbar. In Edit the letter keys are shortcuts; in Keys and Pads they are instruments. Switch with <K>{ALT}K</K> / <K>{ALT}R</K>, back to Edit with <K>Esc</K>.</li>
           <li>Keys: the bottom row Z–M is C4–B4, the top row Q–I is C5–C6 (the same physical keys on JIS and US layouts). <K>↑↓</K> changes the octave, <K>Tab</K> held is sustain, Shift held is an accent.</li>
           <li>Pads: drums on the letter keys and the numeric keypad. Change the assignment in Tools › Key bindings.</li>
           <li>MIDI keyboard: choose “Use” at startup, or connect it in MIDI › MIDI input settings.</li>

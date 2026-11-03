@@ -99,7 +99,7 @@ export const EN_LIST: Record<string, string> = {
   'この列に前回の値がありません。': 'This column has no previous value yet.',
   '入力は現在行だけに適用しました。複数行は右クリックの「選択行の一括変更…」を使ってください。': 'Applied to the current row only. For several rows use "Change selected rows…" in the right-click menu.',
   'Enter で移動': 'Enter moves to',
-  'カーソル位置にイベントを挿入（Insert / {alt}Enter）。編集モードならリスト上で N / C / P / B / A / Y / S / M を押すだけでも入ります。': 'Insert an event at the cursor (Insert / {alt}Enter). In the edit mode, pressing N / C / P / B / A / Y / S / M on the list inserts at once.',
+  'カーソル位置にイベントを挿入（Insert / {alt}Enter）。{alt}N / C / P / B / A / Y / S / M ならどのモードでもメニューなしで入ります。': 'Insert an event at the cursor (Insert / {alt}Enter). {alt}N / C / P / B / A / Y / S / M insert without the menu in every mode.',
   'Meta…': 'Meta…',
   'raw イベントは編集できません（内容をそのまま保持します）。': 'Raw events cannot be edited (their bytes are kept as they are).',
   'SysEx…': 'SysEx…',

@@ -243,7 +243,7 @@ export function buildMenus(d: MenuDeps): Menu[] {
           items: [
             { label: t('編集（ショートカット）'), checked: d.inputMode === 'edit-shortcuts', action: () => d.setMode('edit-shortcuts'), shortcut: 'Esc' },
             { label: t('PC キーボード演奏'), checked: d.inputMode === 'piano-performance', action: () => d.setMode('piano-performance'), shortcut: `${ALT}K` },
-            { label: t('ドラムパッド'), checked: d.inputMode === 'drum-performance', action: () => d.setMode('drum-performance'), shortcut: `${ALT}P` },
+            { label: t('ドラムパッド'), checked: d.inputMode === 'drum-performance', action: () => d.setMode('drum-performance'), shortcut: `${ALT}R` },
             { label: t('ステップ（鍵盤）'), checked: d.inputMode === 'step-piano', action: () => d.setMode('step-piano') },
             { label: t('ステップ（ドラム）'), checked: d.inputMode === 'step-drums', action: () => d.setMode('step-drums') },
           ],

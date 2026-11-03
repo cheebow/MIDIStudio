@@ -72,7 +72,8 @@ export function ListEditor() {
   const performing = mode === 'piano-performance' || mode === 'drum-performance';
   const [visibleCats, setVisibleCats] = useState<Set<RowCategory>>(new Set(ALL_CATS));
   const [cursor, setCursor] = useState<{ row: number; col: Col }>({ row: 0, col: 'st' });
-  const [editing, setEditing] = useState<{ text: string } | null>(null);
+  /** `selectAll`: opened with Enter / F2 / double-click, so typing replaces the value; a typed digit starts after itself */
+  const [editing, setEditing] = useState<{ text: string; selectAll: boolean } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [scroll, setScroll] = useState({ top: 0, h: 300 });
   const [playRows, setPlayRows] = useState<[number, number] | null>(null);
@@ -331,7 +332,7 @@ export function ListEditor() {
       setMessage(why);
       return;
     }
-    setEditing({ text: initial ?? cellText(cur, cursor.col) });
+    setEditing(initial === undefined ? { text: cellText(cur, cursor.col), selectAll: true } : { text: initial, selectAll: false });
   }
 
   function repeatLast() {
@@ -588,7 +589,7 @@ export function ListEditor() {
         ))}
         <button
           aria-haspopup="menu"
-          title={t('カーソル位置にイベントを挿入（Insert / {alt}Enter）。編集モードならリスト上で N / C / P / B / A / Y / S / M を押すだけでも入ります。', { alt: IS_MAC ? '⌥' : 'Alt+' })}
+          title={t('カーソル位置にイベントを挿入（Insert / {alt}Enter）。{alt}N / C / P / B / A / Y / S / M ならどのモードでもメニューなしで入ります。', { alt: IS_MAC ? '⌥' : 'Alt+' })}
           onClick={(e) => {
             const r = e.currentTarget.getBoundingClientRect();
             ctxMenu.open({ clientX: r.left, clientY: r.bottom + 2, preventDefault: () => undefined }, insertMenuItems());
@@ -703,7 +704,10 @@ export function ListEditor() {
                               autoFocus
                               value={editing.text}
                               aria-label={t('{col} を入力', { col: t(COL_LABEL[c]) })}
-                              onChange={(e) => setEditing({ text: e.target.value })}
+                              onFocus={(e) => {
+                                if (editing.selectAll) e.currentTarget.select();
+                              }}
+                              onChange={(e) => setEditing({ text: e.target.value, selectAll: false })}
                               onKeyDown={(e) => {
                                 e.stopPropagation();
                                 if (e.key === 'Enter') commit(editing.text, e.shiftKey ? 'shift-enter' : 'enter');

@@ -27,20 +27,24 @@ describe('list key ownership (LIST-06)', () => {
     expect(intent('drum-performance', k('ArrowUp', { code: 'ArrowUp', altKey: true }))).toEqual({ type: 'nudge', delta: 1, big: true });
   });
 
-  it('the insert letters work on the grid itself in the edit mode only', () => {
-    expect(intent('edit-shortcuts', k('n'))).toEqual({ type: 'insert', kind: 'note' });
-    expect(intent('edit-shortcuts', k('C'))).toEqual({ type: 'insert', kind: 'cc' });
-    expect(intent('edit-shortcuts', k('p'))).toEqual({ type: 'insert', kind: 'program' });
-    expect(intent('edit-shortcuts', k('b'))).toEqual({ type: 'insert', kind: 'pitch-bend' });
-    expect(intent('edit-shortcuts', k('a'))).toEqual({ type: 'insert', kind: 'channel-pressure' });
-    expect(intent('edit-shortcuts', k('y'))).toEqual({ type: 'insert', kind: 'poly-pressure' });
-    expect(intent('edit-shortcuts', k('s'))).toEqual({ type: 'insert', kind: 'sysex' });
-    expect(intent('edit-shortcuts', k('m'))).toEqual({ type: 'insert', kind: 'meta' });
-    expect(intent('edit-shortcuts', k('N', { shiftKey: true }))).toBeNull();
-    expect(intent('edit-shortcuts', k('q'))).toBeNull(); // quantize stays global
-    expect(intent('piano-performance', k('n'))).toBeNull();
-    expect(intent('drum-performance', k('n'))).toBeNull();
-    expect(intent('step-piano', k('c'))).toBeNull();
+  it('⌥/Alt + letter inserts in every mode (by physical key); plain letters stay shortcuts / instruments', () => {
+    const alt = (key: string, code: string) => k(key, { code, altKey: true });
+    for (const m of MODES) {
+      expect(intent(m, alt('˜', 'KeyN'))).toEqual({ type: 'insert', kind: 'note' }); // macOS Option+N types a dead key
+      expect(intent(m, alt('ç', 'KeyC'))).toEqual({ type: 'insert', kind: 'cc' });
+      expect(intent(m, alt('p', 'KeyP'))).toEqual({ type: 'insert', kind: 'program' });
+      expect(intent(m, alt('b', 'KeyB'))).toEqual({ type: 'insert', kind: 'pitch-bend' });
+      expect(intent(m, alt('a', 'KeyA'))).toEqual({ type: 'insert', kind: 'channel-pressure' });
+      expect(intent(m, alt('y', 'KeyY'))).toEqual({ type: 'insert', kind: 'poly-pressure' });
+      expect(intent(m, alt('s', 'KeyS'))).toEqual({ type: 'insert', kind: 'sysex' });
+      expect(intent(m, alt('m', 'KeyM'))).toEqual({ type: 'insert', kind: 'meta' });
+      expect(intent(m, alt('k', 'KeyK'))).toBeNull(); // ⌥K / ⌥R switch modes globally
+      expect(intent(m, alt('r', 'KeyR'))).toBeNull();
+      expect(intent(m, k('n'))).toBeNull(); // plain letters are never the list's
+      expect(intent(m, k('m'))).toBeNull();
+      expect(intent(m, k('c'))).toBeNull();
+    }
+    expect(intent('edit-shortcuts', k('N', { code: 'KeyN', shiftKey: true, altKey: true }))).toBeNull();
   });
 
   it('←→ move columns except in the step modes (rest / back); Tab is sustain in the piano mode', () => {

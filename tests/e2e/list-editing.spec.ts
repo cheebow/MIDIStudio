@@ -110,18 +110,30 @@ test('LIST-10: Insert ▾ adds a CC at the cursor (access key), the SysEx dialog
   expect(after.slice(i, i + 4)).toEqual([101, 100, 6, 38]);
 });
 
-test('LIST-10: on the grid itself N / C / P insert without opening the menu (edit mode)', async ({ page }) => {
+test('LIST-10: ⌥C / ⌥N / ⌥B insert without opening the menu, also in the keyboard mode; Enter opens a cell with its value selected', async ({ page }) => {
   await openList(page);
   await rowByName(page, /^G4$/).locator('[data-col="name"]').click();
-  await page.keyboard.press('c');
+  await page.keyboard.press('Alt+KeyC');
   await expect(page.getByRole('textbox', { name: /を入力/ })).toHaveCount(0);
   await expect(page.locator('.lc.cursor')).toHaveAttribute('data-col', 'name');
-  await page.keyboard.press('n');
-  await page.keyboard.press('b');
+  await page.keyboard.press('Alt+KeyN');
+  await page.getByTestId('input-mode-piano-performance').click();
+  await rowByName(page, /^G4$/).locator('[data-col="name"]').click();
+  await page.keyboard.press('Alt+KeyB'); // works while the letters are an instrument
+  await page.keyboard.press('Escape');
   const smf = await exportedSmf(page);
   expect(noteOns(smf).length).toBe(4);
   expect(piano(smf).filter((e) => e.kind === 'channel' && (e.status & 0xf0) === 0xe0 && e.tick === 0).length).toBe(1);
   expect(ccs(smf).length).toBe(4);
+  // Enter opens the NOTE cell with "G4" selected: typing replaces it in one go
+  await rowByName(page, /^G4$/).locator('[data-col="name"]').click();
+  await page.keyboard.press('Enter');
+  const input = page.getByRole('textbox', { name: /を入力/ });
+  await expect(input).toHaveValue('G4');
+  expect(await input.evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd])).toEqual([0, 2]);
+  await page.keyboard.type('A4');
+  await page.keyboard.press('Enter');
+  await expect(rowByName(page, /^A4$/)).toBeVisible();
 });
 
 test('LIST-09: the batch dialog changes the selected rows', async ({ page }) => {

@@ -1,6 +1,6 @@
 // Input-mode switch in the toolbar (INPUT_RECORDING 7, ADR-044): one visible control that says
 // whether the letter keys are shortcuts or an instrument (one highlight colour for every mode), so
-// "why does V not select?" is answered by the status bar; Esc and ⌥K / ⌥P switch without the mouse.
+// "why does V not select?" is answered by the status bar; Esc and ⌥K / ⌥R switch without the mouse.
 import type { InputMode } from '../input/KeyboardRouter';
 import { useContextMenu } from '../ui/menu/ContextMenu';
 import { ALT_LABEL } from '../ui/platform';
@@ -22,7 +22,7 @@ export function InputModeSwitch({ mode, setMode, drumTrack }: { mode: InputMode;
     <span className={`segmented input-mode-switch${performing ? ' performing' : ''}`} role="group" aria-label={t('入力モード')} title={performing ? t('文字キーは演奏に使われています。1 文字のショートカットは無効です。') : t('文字キーはショートカットとして働きます。')}>
       {button('edit-shortcuts', t('編集'), t('編集モード: 文字キーはショートカット（V / P / Q / L / M / S など）。どのモードからも Esc で戻ります。'), 'Esc')}
       {button('piano-performance', t('鍵盤'), t('PC 鍵盤で演奏（{alt}K で切り替え）: 下段 Z〜M が C4〜B4、上段 Q〜I が C5〜C6。1 文字のショートカットは無効になります。', { alt: ALT_LABEL }), `${ALT_LABEL}K`)}
-      {button('drum-performance', t('パッド'), t('ドラムパッド（{alt}P で切り替え）: 文字キーとテンキーで叩きます。1 文字のショートカットは無効になります。', { alt: ALT_LABEL }), `${ALT_LABEL}P`)}
+      {button('drum-performance', t('パッド'), t('ドラムパッド（{alt}R で切り替え）: 文字キーとテンキーで叩きます。1 文字のショートカットは無効になります。', { alt: ALT_LABEL }), `${ALT_LABEL}R`)}
       <button
         type="button"
         className={STEP.has(mode) ? 'on' : ''}

@@ -18,14 +18,17 @@ export type ListKeyIntent =
   | { type: 'repeat-last' }
   | { type: 'delete' }
   | { type: 'insert-menu' }
-  /** a letter of the insert menu pressed on the grid itself (edit mode): insert at once */
+  /** ⌥/Alt + a letter of the insert menu, pressed on the grid itself: insert at once */
   | { type: 'insert'; kind: 'note' | 'cc' | 'program' | 'pitch-bend' | 'channel-pressure' | 'poly-pressure' | 'sysex' | 'meta' }
   /** ⌥↑↓ in the piano modes, where ↑↓ move rows: shift the PC-keyboard octave instead */
   | { type: 'octave'; delta: number }
   | { type: 'context-menu' };
 
-/** letters that insert while the grid has focus in the edit mode (the same as the insert menu's access keys) */
-export const INSERT_LETTERS: Record<string, Extract<ListKeyIntent, { type: 'insert' }>['kind']> = { n: 'note', c: 'cc', p: 'program', b: 'pitch-bend', a: 'channel-pressure', y: 'poly-pressure', s: 'sysex', m: 'meta' };
+/**
+ * ⌥/Alt + letter inserts while the grid has focus, in every mode (the insert menu's access keys).
+ * Matched by physical code: Option changes the typed character on macOS (⌥N = dead tilde, ⌥C = ç).
+ */
+export const INSERT_KEYS: Record<string, Extract<ListKeyIntent, { type: 'insert' }>['kind']> = { KeyN: 'note', KeyC: 'cc', KeyP: 'program', KeyB: 'pitch-bend', KeyA: 'channel-pressure', KeyY: 'poly-pressure', KeyS: 'sysex', KeyM: 'meta' };
 
 export interface ListKey {
   key: string;
@@ -50,6 +53,7 @@ export function listKeyIntent(mode: InputMode, k: ListKey, isMusical: (code: str
   if (k.key === 'Enter' && mod && !k.altKey) return { type: 'repeat-last' };
   if (k.key === 'Enter' && k.altKey && !mod) return { type: 'insert-menu' };
   if (mod || otherMod) return null; // ⌘Z / ⌘C / ⌘V … stay global
+  if (k.altKey && !k.shiftKey && INSERT_KEYS[k.code]) return { type: 'insert', kind: INSERT_KEYS[k.code] };
   if (isInstrument(mode) && isMusical(k.code)) return null;
   switch (k.key) {
     case 'ArrowDown':
@@ -97,8 +101,6 @@ export function listKeyIntent(mode: InputMode, k: ListKey, isMusical: (code: str
     if (k.key === '+' || k.key === '=' || k.code === 'NumpadAdd') return { type: 'nudge', delta: 1, big: false };
     if (k.key === '-' || k.code === 'NumpadSubtract') return { type: 'nudge', delta: -1, big: false };
     if (/^[0-9./]$/.test(k.key)) return { type: 'edit-typed', text: k.key };
-    const kind = !k.shiftKey ? INSERT_LETTERS[k.key.toLowerCase()] : undefined;
-    if (kind && k.key.length === 1) return { type: 'insert', kind };
   }
   return null;
 }
