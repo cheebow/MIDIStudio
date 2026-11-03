@@ -94,7 +94,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
     body: (
       <>
         <ul>
-          <li>Notes are placed in one lane per instrument. With the draw tool, a click enters a hit and another click removes it.</li>
+          <li>Notes are placed in one lane per instrument. With the draw tool, a click enters a hit and another click removes it. With the select tool, drag to move (up or down to another lane), <K>{ALT}</K>+drag to duplicate, drag on empty space for a rubber-band selection.</li>
           <li>The drum map (GM / GS / user) changes only the lane names and order, never the note numbers. Double-click a lane name to rename it; right-click to hide or reorder lanes.</li>
           <li>Click the pads on the right to audition. In the “Pads” input mode the letter keys and the numeric keypad play them.</li>
           <li>Switch between the drum and melody displays with “Display” in the inspector or Track › “Make this a drum track”.</li>
