@@ -226,3 +226,67 @@ test('drum editor: a hit dragged to the bottom edge moves to a lane that was out
   expect(tick).toBe(0); // straight down: the position did not change
   expect(lanes.indexOf(pitch)).toBeGreaterThan(visible); // a lane below the first view
 });
+
+/** (tick, pitch, length) of each note, from the exported SMF. */
+const notesWithLength = (smf: Awaited<ReturnType<typeof exportedSmf>>) => {
+  const out: { tick: number; pitch: number; len: number }[] = [];
+  for (const t of smf.tracks) {
+    const open = new Map<number, number>();
+    for (const e of t.events) {
+      if (e.kind !== 'channel') continue;
+      const type = e.status & 0xf0;
+      if (type === 0x90 && e.data[1] > 0) open.set(e.data[0], e.tick);
+      else if (type === 0x80 || type === 0x90) {
+        const start = open.get(e.data[0]);
+        if (start === undefined) continue;
+        open.delete(e.data[0]);
+        out.push({ tick: start, pitch: e.data[0], len: e.tick - start });
+      }
+    }
+  }
+  return out;
+};
+
+test('piano roll: a note end dragged to the bottom-right corner lengthens it far; the start and pitch stay', async ({ page }) => {
+  await page.goto('/');
+  await importMidi(page, build(1, 480, [on(0, 0, 60), off(240, 0, 60)]));
+  await page.getByTestId('tool-select').click();
+  const grid = (await page.getByTestId('piano-roll-grid').boundingBox())!;
+  const before = await scrollOf(page, '.roll-scroll');
+  const end = await rollPoint(page, 240, 60); // rollPoint adds 3 px: the note's right edge is 3 px to the left
+  const x = end.x - 5; // inside the 6 px resize handle
+  await page.mouse.move(x, end.y);
+  await page.mouse.down();
+  await page.mouse.move(grid.x + grid.width / 2, end.y, { steps: 3 });
+  await page.mouse.move(grid.x + grid.width - 1, grid.y + grid.height + 30, { steps: 4 }); // right edge, below the grid
+  await expect.poll(async () => (await scrollOf(page, '.roll-scroll')).left, { timeout: 20_000 }).toBeGreaterThan((BAR * 4 * 80) / 480);
+  expect((await scrollOf(page, '.roll-scroll')).top).toBeGreaterThan(before.top); // it scrolls down too
+  await page.mouse.move(grid.x + grid.width / 2, grid.y + grid.height / 2, { steps: 3 }); // back inside, then let go
+  await page.mouse.up();
+  const notes = notesWithLength(await exportedSmf(page));
+  expect(notes).toHaveLength(1);
+  expect(notes[0].tick).toBe(0);
+  expect(notes[0].pitch).toBe(60); // resizing never changes the pitch, even after scrolling down
+  expect(notes[0].len).toBeGreaterThan(BAR * 4);
+});
+
+test('piano roll: lengthening past the edge and coming back shortens it again (one undo step)', async ({ page }) => {
+  await page.goto('/');
+  await importMidi(page, build(1, 480, [on(0, 0, 60), off(240, 0, 60)]));
+  await page.getByTestId('tool-select').click();
+  const grid = (await page.getByTestId('piano-roll-grid').boundingBox())!;
+  const end = await rollPoint(page, 240, 60);
+  await page.mouse.move(end.x - 5, end.y);
+  await page.mouse.down();
+  await page.mouse.move(grid.x + grid.width / 2, end.y, { steps: 3 });
+  await page.mouse.move(grid.x + grid.width - 1, end.y, { steps: 3 });
+  await expect.poll(async () => (await scrollOf(page, '.roll-scroll')).left, { timeout: 20_000 }).toBeGreaterThan((BAR * 2 * 80) / 480);
+  await page.mouse.move(grid.x + 1, end.y, { steps: 6 }); // the left edge: scrolls back
+  await expect.poll(async () => (await scrollOf(page, '.roll-scroll')).left, { timeout: 20_000 }).toBe(0);
+  const back = await rollPoint(page, 480, 60); // one beat long
+  await page.mouse.move(back.x - 3, end.y, { steps: 3 });
+  await page.mouse.up();
+  expect(notesWithLength(await exportedSmf(page))).toEqual([{ tick: 0, pitch: 60, len: 480 }]);
+  await page.getByTestId('piano-roll-grid').press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
+  expect(notesWithLength(await exportedSmf(page))).toEqual([{ tick: 0, pitch: 60, len: 240 }]); // the whole drag was one step
+});
