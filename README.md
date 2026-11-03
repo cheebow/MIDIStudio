@@ -12,6 +12,8 @@ DAW のような視覚的な編集と、レコンポーザのような数値入�
 | --- | --- | --- |
 | ![数値リスト](public/images/visual-list.jpg) | ![ピアノロール](public/images/visual-roll.jpg) | ![鍵盤](public/images/visual-keys.jpg) |
 
+![リストエディター。バンク・音色・CC、マーカー、テンポチェンジ、ノートが 1 つのリストに時刻順に並ぶ](public/images/list-editor.jpg)
+
 > 開発中です。編集・再生・録音・書き出しの各機能は自動テスト（単体・結合・Chromium / Firefox / WebKit の E2E）で確認していますが、外部 MIDI キーボード実機での録音と、Safari / Firefox での実際の音は未確認です。
 
 ## 主な機能
