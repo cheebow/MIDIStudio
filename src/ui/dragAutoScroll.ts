@@ -29,6 +29,25 @@ export function edgeScrollSpeed(pos: number, start: number, end: number, edge = 
 export type PointerLike = Pick<PointerEvent, 'clientX' | 'clientY' | 'shiftKey' | 'ctrlKey' | 'metaKey' | 'altKey'>;
 export const pointerOf = (e: PointerLike): PointerLike => ({ clientX: e.clientX, clientY: e.clientY, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey });
 
+/** Longest frame gap counted, in seconds: a stalled tab does not jump on return. */
+export const AUTO_SCROLL_MAX_DT = 0.1;
+
+/**
+ * One frame of auto-scroll: adds `speed` (px/s) × the elapsed time to `carry` and returns the whole
+ * px to scroll now; the fraction stays in `carry` for the next frame (scroll positions are whole
+ * px in some browsers), so the distance per second does not depend on the frame rate.
+ */
+export function autoScrollStep(carry: { x: number; y: number }, speedX: number, speedY: number, elapsedMs: number): { dx: number; dy: number } {
+  const dt = Math.min(AUTO_SCROLL_MAX_DT, Math.max(0, elapsedMs / 1000));
+  carry.x += speedX * dt;
+  carry.y += speedY * dt;
+  const dx = Math.trunc(carry.x);
+  const dy = Math.trunc(carry.y);
+  carry.x -= dx;
+  carry.y -= dy;
+  return { dx, dy };
+}
+
 /** How far the pointer must move after pressing before the auto-scroll can start. */
 const ARM_PX = 4;
 
@@ -59,22 +78,16 @@ export function useDragAutoScroll(scrollRef: RefObject<HTMLElement | null>, area
     }
     let raf = 0;
     let last = performance.now();
-    // fractions of a px carried to the next frame (scroll positions are whole px in some browsers)
     const carry = { x: 0, y: 0 };
     const frame = (now: number) => {
-      const dt = Math.min(0.1, Math.max(0, (now - last) / 1000)); // a stalled tab does not jump on return
+      const elapsed = now - last;
       last = now;
       const el = scrollRef.current;
       const area = areaRef.current;
       const p = pointer.current;
       if (el && area && p && armed.current) {
         const r = area.getBoundingClientRect();
-        carry.x += edgeScrollSpeed(p.x, r.left, r.right) * dt;
-        carry.y += vertical ? edgeScrollSpeed(p.y, r.top + top, r.bottom) * dt : 0;
-        const dx = Math.trunc(carry.x);
-        const dy = Math.trunc(carry.y);
-        carry.x -= dx;
-        carry.y -= dy;
+        const { dx, dy } = autoScrollStep(carry, edgeScrollSpeed(p.x, r.left, r.right), vertical ? edgeScrollSpeed(p.y, r.top + top, r.bottom) : 0, elapsed);
         if (dx) el.scrollLeft += dx;
         if (dy) el.scrollTop += dy;
       } else {
