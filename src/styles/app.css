@@ -239,6 +239,7 @@ button.link { background: none; border: none; color: var(--accent); text-decorat
 .list-row.selected { background: var(--selection); }
 .list-row.playing { box-shadow: inset 4px 0 0 var(--playhead); background: rgba(229, 72, 77, 0.08); }
 .list-row.cat-sysex, .list-row.cat-meta, .list-row.cat-raw { color: var(--muted); }
+.list-row.cat-conductor { color: var(--tempo); background: rgba(194, 120, 60, 0.06); }
 .lc { padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; }
 .lc-meas, .lc-step, .lc-key, .lc-st, .lc-gt, .lc-vel, .lc-ch, .lc-tick { text-align: right; }
 .lc.numeric { cursor: ns-resize; }

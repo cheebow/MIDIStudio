@@ -29,6 +29,7 @@ export const SHORTCUTS_EN: [string, string][] = [
   ['Keyboard mode: ↑ ↓ / Tab', 'Octave / sustain while held'],
   ['Step input: → ← - Backspace', 'Rest / back / tie / undo the last step'],
   ['List: + - / ⌥↑↓ / ⌘Enter / Insert', 'Step a value by 1 / by 10 (octave in the keyboard mode) / repeat the last value / insert menu'],
+  [`List: ${MOD}V / ⇧${MOD}V`, 'Paste at the cursor row / push the later events back and paste'],
   [`List: ${ALT}N C P B A Y S M`, 'Insert Note / CC / Program / Pitch Bend / Ch. Pressure / Poly Pressure / SysEx / Meta (in every mode)'],
   ['Esc', 'Back to edit mode, clear the selection'],
   ['F1', 'This help'],
@@ -143,7 +144,8 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
           <li>+ / - step by 1, ⌥↑↓ (Alt+↑↓) by 10 (one octave for K#), and numeric cells can be dragged vertically. ⌘Enter (Ctrl+Enter) repeats the last value.</li>
           <li>“Insert ▾” (Insert / ⌥Enter) adds anything else; ⌥N / ⌥C / ⌥P / ⌥B / ⌥A / ⌥Y / ⌥S / ⌥M (Alt+letter) insert without the menu, even in the keyboard mode (the menu’s access keys). “Sets” hold Bank + Program, RPN, NRPN and GS Reset. SysEx can be built from GS templates.</li>
           <li>With the list focused, a key played in the keyboard mode (⌥K) or on an external MIDI keyboard goes into the K# of the current row; keys held together go in as a chord at the same position, and releasing them moves the cursor on (Recomposer-style entry). In the keyboard mode the octave is ⌥↑↓ inside the list. During step input the cursor follows the step position.</li>
-          <li>Right-click for type conversion, transpose, quantize and “Change selected rows…” (shift, GT, channel, value, K#).</li>
+          <li>Right-click for type conversion, transpose, quantize and “Change selected rows…” (shift, GT, channel, value, K#). ⌘V pastes at the cursor row; ⇧⌘V pushes the later events back first (insert).</li>
+          <li>With “Conductor” on, tempo, time signature, key and marker events line up in time order too. Edit the tempo VEL (BPM), the time signature NOTE (3/4) and the marker DETAIL in place.</li>
           <li>Changing ST moves the events after it (ripple). GT changes only that note.</li>
           <li>Units can be ticks or ♩=48 (Recomposer style). Values that do not divide evenly are shown as fractions.</li>
           <li>The filter narrows the list to notes only, CC only and so on.</li>

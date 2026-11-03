@@ -136,6 +136,56 @@ test('LIST-10: ⌥C / ⌥N / ⌥B insert without opening the menu, also in the k
   await expect(rowByName(page, /^A4$/)).toBeVisible();
 });
 
+test('LIST-13: ⌘V pastes at the cursor row, ⇧⌘V inserts and pushes the later events back', async ({ page }) => {
+  await openList(page);
+  await rowByName(page, /^C4$/).locator('[data-col="name"]').click();
+  await page.keyboard.press('Shift+ArrowDown'); // C4 + E4
+  await page.keyboard.press(`${mod}+c`);
+  await rowByName(page, /^PB$/).locator('[data-col="name"]').click(); // tick 480
+  await page.keyboard.press(`${mod}+v`);
+  const first = await exportedSmf(page);
+  expect(noteOns(first).map((e) => [e.tick, e.data[0]]).sort((a, b) => a[0] - b[0] || a[1] - b[1])).toEqual([[0, 60], [0, 64], [0, 67], [480, 60], [480, 64]]);
+  expect(piano(first).filter((e) => e.kind === 'channel' && (e.status & 0xf0) === 0xe0).map((e) => e.tick)).toEqual([480, 960, 1440]); // overlay moved nothing
+  await page.getByTestId('list-grid').focus();
+  await rowByName(page, /^PB$/).locator('[data-col="name"]').click();
+  await page.keyboard.press(`${mod}+Shift+v`);
+  const second = await exportedSmf(page);
+  expect(piano(second).filter((e) => e.kind === 'channel' && (e.status & 0xf0) === 0xe0).map((e) => e.tick)).toEqual([960, 1440, 1920]); // pushed back by the span (480)
+  const at = (tick: number) => noteOns(second).filter((e) => e.tick === tick).map((e) => e.data[0]).sort();
+  expect(at(480)).toEqual([60, 64]); // the new paste
+  expect(at(960)).toEqual([60, 64]); // the first paste, pushed back with the rest
+});
+
+test('LIST-14: conductor rows show in time order and the tempo / time signature / marker are edited in place', async ({ page }) => {
+  await openList(page);
+  const tempo = rowByName(page, /^Tempo$/).first();
+  await expect(tempo.locator('[data-col="vel"]')).toHaveText('120');
+  await expect(tempo.locator('[data-col="st"]')).toHaveText('--');
+  await expect(rowByName(page, /^TS$/).first().locator('[data-col="detail"]')).toHaveText('4/4');
+  await typeCell(page, /^Tempo$/, 'vel', '100');
+  await expect(page.getByTestId('bpm-readout')).toContainText('100');
+  await typeCell(page, /^TS$/, 'name', '3/4');
+  await expect(rowByName(page, /^TS$/).first().locator('[data-col="detail"]')).toHaveText('3/4');
+  // the conductor rows never enter ST: the track rows keep their values
+  await expect(rowByName(page, /^C4$/).locator('[data-col="st"]')).toHaveText('0');
+  await page.getByRole('checkbox', { name: 'コンダクター' }).uncheck();
+  await expect(rowByName(page, /^Tempo$/)).toHaveCount(0);
+  await page.getByRole('checkbox', { name: 'コンダクター' }).check();
+  // insert a marker from the menu and name it
+  await rowByName(page, /^G4$/).locator('[data-col="name"]').click();
+  await page.getByTestId('list-insert').click();
+  await page.keyboard.press('k');
+  await expect(page.locator('.lc.cursor')).toHaveAttribute('data-col', 'detail');
+  await page.keyboard.press('Enter');
+  const input = page.getByRole('textbox', { name: /を入力/ });
+  await input.fill('Verse');
+  await input.press('Enter');
+  await expect(rowByName(page, /^Marker$/).first().locator('[data-col="detail"]')).toHaveText('Verse');
+  const smf = await exportedSmf(page);
+  const markers = smf.tracks[0].events.filter((e) => e.kind === 'meta' && e.metaType === 6).map((e) => (e.kind === 'meta' ? String.fromCharCode(...e.data) : ''));
+  expect(markers).toContain('Verse');
+});
+
 test('LIST-09: the batch dialog changes the selected rows', async ({ page }) => {
   await openList(page);
   await rowByName(page, /^C4$/).locator('[data-col="vel"]').click();

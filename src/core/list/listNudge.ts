@@ -7,8 +7,9 @@ import { EditError } from '../editing/operations';
 import type { MidiProject } from '../model/types';
 import { hasChannel } from '../events/order';
 import { eventValueRange } from './eventValue';
+import { setTempo } from '../editing/conductorOps';
 import { setAbsoluteTick, setGateTime, setRowChannel, setRowKey, setRowValue, setStepTime } from './listEdit';
-import type { ListRow, ListUnit } from './listRows';
+import { isConductorEvent, type ListRow, type ListUnit } from './listRows';
 import { t } from '../../i18n';
 
 export type NudgeCol = 'key' | 'st' | 'gt' | 'vel' | 'tick' | 'ch';
@@ -25,6 +26,7 @@ export type NudgeResult = { ok: true; value: number } | { ok: false; message: st
 /** Value range of a cell: [min, max], or null when the cell has no number. */
 export function cellRange(row: ListRow, col: NudgeCol): [number, number] | null {
   const e = row.event;
+  if (isConductorEvent(e)) return col === 'vel' && e.kind === 'tempo' ? [1, 999] : null; // BPM; the rest is edited in the conductor tab
   switch (col) {
     case 'key':
       return e.kind === 'note' || e.kind === 'poly-pressure' ? [0, 127] : null;
@@ -54,7 +56,7 @@ function currentValue(row: ListRow, col: NudgeCol, trackChannel: number): number
     case 'tick':
       return row.tick;
     case 'ch':
-      return hasChannel(row.event) ? (row.event.channelOverride ?? trackChannel) : null;
+      return !isConductorEvent(row.event) && hasChannel(row.event) ? (row.event.channelOverride ?? trackChannel) : null;
   }
 }
 
@@ -81,6 +83,7 @@ export function nudgeCell(project: MidiProject, trackId: string, row: ListRow, c
   const r = nudgedValue(row, col, opts, track.channel);
   if (r === null) return null;
   if (!r.ok) return { message: r.message };
+  if (isConductorEvent(row.event)) return { command: setTempo(project, row.tick, r.value) };
   switch (col) {
     case 'key':
       return { command: setRowKey(project, row.id, r.value) };

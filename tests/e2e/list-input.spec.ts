@@ -66,7 +66,7 @@ test('LIST-08: step mode — the list cursor follows the step cursor and a click
   await page.keyboard.press('ArrowRight'); // step cursor at 480
   await expect(page.getByTestId('step-cursor')).toContainText('001.02.000');
   await expect(cursorRow.locator('[data-col="tick"]')).toHaveText('480'); // the row at or before the step cursor
-  await rows.last().locator('[data-col="name"]').click(); // the metas at tick 1440
+  await page.locator('.list-row:not(.cat-conductor)').last().locator('[data-col="name"]').click(); // the track's last row: the metas at tick 1440
   await expect(page.getByTestId('step-cursor')).toContainText('001.04.000');
   // a note entered from the keyboard lands at the row's position
   await page.keyboard.press('KeyZ');

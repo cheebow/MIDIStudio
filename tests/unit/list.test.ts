@@ -59,6 +59,18 @@ describe('list rows (REQ-EDT-09/10/11)', () => {
   });
 });
 
+describe('conductor rows (LIST-14)', () => {
+  it('tempo / time signature rows interleave in time order without touching the track ST or STEP numbers', () => {
+    const p = song();
+    const plain = listRows(p, p.tracks[0]);
+    const withCond = listRows(p, p.tracks[0], undefined, undefined, { conductor: true });
+    expect(withCond.filter((r) => r.category === 'conductor').map((r) => [r.name, r.tick, r.detail, r.value, r.stTicks, r.step])).toEqual([['TS', 0, '4/4', null, null, 0]]);
+    expect(withCond[0].category).toBe('conductor'); // same tick: the conductor comes first
+    expect(withCond.filter((r) => r.category !== 'conductor')).toEqual(plain); // track rows unchanged (ST, STEP, index)
+    expect(listRows(p, p.tracks[0], undefined, undefined, { conductor: false })).toEqual(plain);
+  });
+});
+
 describe('list edits', () => {
   it('E05: ST edit ripples only the later events and is undoable', () => {
     const p = song();

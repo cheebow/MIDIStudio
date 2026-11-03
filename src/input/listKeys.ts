@@ -22,6 +22,8 @@ export type ListKeyIntent =
   | { type: 'insert'; kind: 'note' | 'cc' | 'program' | 'pitch-bend' | 'channel-pressure' | 'poly-pressure' | 'sysex' | 'meta' }
   /** ⌥↑↓ in the piano modes, where ↑↓ move rows: shift the PC-keyboard octave instead */
   | { type: 'octave'; delta: number }
+  /** ⌘V at the cursor row; ⇧⌘V pushes the later events back first (Recomposer-style insertion) */
+  | { type: 'paste'; insert: boolean }
   | { type: 'context-menu' };
 
 /**
@@ -52,7 +54,8 @@ export function listKeyIntent(mode: InputMode, k: ListKey, isMusical: (code: str
   const otherMod = isMac ? k.ctrlKey : k.metaKey;
   if (k.key === 'Enter' && mod && !k.altKey) return { type: 'repeat-last' };
   if (k.key === 'Enter' && k.altKey && !mod) return { type: 'insert-menu' };
-  if (mod || otherMod) return null; // ⌘Z / ⌘C / ⌘V … stay global
+  if (mod && !k.altKey && !otherMod && k.key.toLowerCase() === 'v') return { type: 'paste', insert: k.shiftKey };
+  if (mod || otherMod) return null; // ⌘Z / ⌘C … stay global
   if (k.altKey && !k.shiftKey && INSERT_KEYS[k.code]) return { type: 'insert', kind: INSERT_KEYS[k.code] };
   if (isInstrument(mode) && isMusical(k.code)) return null;
   switch (k.key) {

@@ -9,7 +9,10 @@ import { t } from '../../i18n';
 import { addEvents, deleteEvents, duplicateEvents, updateEvents, type NewEvent } from '../../core/editing/operations';
 import { CAPTURE_IDLE, captureInserted, captureStep, type CaptureState } from '../../core/list/listCapture';
 import { shiftOctave } from '../../input/KeyboardRouter';
-import { formatTicks, listRows, type ListRow, type ListUnit, type RowCategory } from '../../core/list/listRows';
+import { formatTicks, isConductorEvent, listRows, type ListRow, type ListUnit, type RowCategory } from '../../core/list/listRows';
+import { deleteConductorEvent, setTempo, setTimeSignature, upsertConductorEvent } from '../../core/editing/conductorOps';
+import { pasteRowsAt } from '../../core/list/listPaste';
+import { bpmFromUs } from '../../core/timing/tempoMap';
 import { parseTicksInput, setAbsoluteTick, setGateTime, setRowChannel, setRowKey, setRowValue, setStepTime } from '../../core/list/listEdit';
 import { applyNameInput, convertEventKinds, type ConvertTarget } from '../../core/list/listConvert';
 import { parseNameInput } from '../../core/list/listName';
@@ -37,7 +40,7 @@ const EDITABLE: Col[] = ['name', 'key', 'st', 'gt', 'vel', 'ch', 'tick'];
 const NUDGE_COL: Partial<Record<Col, NudgeCol>> = { name: 'key', key: 'key', st: 'st', gt: 'gt', vel: 'vel', ch: 'ch', tick: 'tick' };
 const COL_LABEL: Record<Col, string> = { meas: 'MEAS', step: 'STEP', name: 'NOTE', key: 'K#', st: 'ST', gt: 'GT', vel: 'VEL', ch: 'CH', tick: 'TICK', detail: 'EVENT / DETAIL' };
 const ALL_CATS: RowCategory[] = ['note', 'cc', 'program', 'pitch-bend', 'pressure', 'sysex', 'meta', 'raw'];
-const CAT_LABEL: Record<RowCategory, string> = { note: 'Note', cc: 'CC', program: 'Program', 'pitch-bend': 'PB', pressure: 'Pressure', sysex: 'SysEx', meta: 'Meta', raw: 'Raw' };
+const CAT_LABEL: Record<RowCategory, string> = { note: 'Note', cc: 'CC', program: 'Program', 'pitch-bend': 'PB', pressure: 'Pressure', sysex: 'SysEx', meta: 'Meta', raw: 'Raw', conductor: 'Conductor' };
 const INSERT_KINDS: { kind: InsertKind; label: string; key: string }[] = [
   { kind: 'note', label: 'Note', key: 'n' },
   { kind: 'cc', label: 'Control Change', key: 'c' },
@@ -71,6 +74,8 @@ export function ListEditor() {
   const stepMode = mode === 'step-piano' || mode === 'step-drums';
   const performing = mode === 'piano-performance' || mode === 'drum-performance';
   const [visibleCats, setVisibleCats] = useState<Set<RowCategory>>(new Set(ALL_CATS));
+  /** tempo / time signature / key / marker rows interleaved (they never enter ST) */
+  const [showConductor, setShowConductor] = useState(true);
   const [cursor, setCursor] = useState<{ row: number; col: Col }>({ row: 0, col: 'st' });
   /** `selectAll`: opened with Enter / F2 / double-click, so typing replaces the value; a typed digit starts after itself */
   const [editing, setEditing] = useState<{ text: string; selectAll: boolean } | null>(null);
@@ -92,7 +97,7 @@ export function ListEditor() {
 
   const filtered = visibleCats.size !== ALL_CATS.length;
   const sig = useSignatureMap(project);
-  const rows = useMemo(() => (track ? listRows(project, track, filtered ? visibleCats : undefined, sig) : []), [project, track, filtered, visibleCats, sig]);
+  const rows = useMemo(() => (track ? listRows(project, track, filtered ? visibleCats : undefined, sig, { conductor: showConductor }) : []), [project, track, filtered, visibleCats, sig, showConductor]);
   const ticks = useMemo(() => rows.map((r) => r.tick), [rows]);
   const cur = rows[Math.min(cursor.row, rows.length - 1)] as ListRow | undefined;
 
@@ -142,7 +147,7 @@ export function ListEditor() {
     pendingFocus.current = null;
     setCursor({ row: i, col: p.col });
     scrollToRow(i);
-  }, [rows]);
+  }, [rows, cursor]);
 
   // Step input: the list cursor follows the shared step cursor (INPUT_RECORDING 6, ADR-066).
   useEffect(() => {
@@ -226,7 +231,7 @@ export function ListEditor() {
       case 'meas':
         return String(r.meas).padStart(3, '0');
       case 'step':
-        return String(r.step).padStart(2, '0');
+        return r.step === 0 ? '--' : String(r.step).padStart(2, '0');
       case 'name':
         return r.name;
       case 'key':
@@ -238,7 +243,7 @@ export function ListEditor() {
       case 'vel':
         return r.value === null ? '--' : String(r.value);
       case 'ch': {
-        const ch = eventChannel(track!, r.event);
+        const ch = isConductorEvent(r.event) ? null : eventChannel(track!, r.event);
         if (ch === null) return '--';
         return `${ch + 1}${'channelOverride' in r.event && r.event.channelOverride !== undefined ? '*' : ''}`;
       }
@@ -253,6 +258,11 @@ export function ListEditor() {
 
   /** Why the cell cannot be edited as text, or null. SysEx / meta rows open the bytes dialog instead (see startEdit). */
   function canEdit(r: ListRow, col: Col): string | null {
+    if (isConductorEvent(r.event)) {
+      const k = r.event.kind;
+      if ((k === 'tempo' && col === 'vel') || (k === 'time-signature' && col === 'name') || (k === 'marker' && col === 'detail')) return null;
+      return t('コンダクター行で編集できるのはテンポの VEL（BPM）、拍子の NOTE（例: 3/4）、マーカーの DETAIL です。ほかはコンダクタータブで。');
+    }
     if (!EDITABLE.includes(col)) return t('この列は編集できません。');
     if (col === 'st' && filtered) return t('フィルター中は ST を編集できません（表示されていないイベントを誤って動かさないため）。すべての種類を表示してください。');
     if (r.event.kind === 'raw') return t('raw イベントは編集できません（内容をそのまま保持します）。');
@@ -260,7 +270,7 @@ export function ListEditor() {
     if (col === 'gt' && r.event.kind !== 'note') return t('GT はノートだけにあります。');
     if (col === 'vel' && r.value === null) return t('この行には値がありません。');
     if (col === 'st' && r.stTicks === null) return t('最後のイベントの ST は変更できません。');
-    if (col === 'ch' && eventChannel(track!, r.event) === null) return t('チャンネルを持たない行です。');
+    if (col === 'ch' && !isConductorEvent(r.event) && eventChannel(track!, r.event) === null) return t('チャンネルを持たない行です。');
     return null;
   }
 
@@ -269,7 +279,24 @@ export function ListEditor() {
     const col = cursor.col;
     try {
       let cmd = null;
-      if (col === 'st' || col === 'gt' || col === 'tick') {
+      if (isConductorEvent(cur.event)) {
+        const s = text.trim();
+        if (cur.event.kind === 'tempo') {
+          if (!/^\d+(\.\d+)?$/.test(s)) {
+            setMessage(t('テンポは 1〜999 BPM で入力してください。'));
+            return false;
+          }
+          cmd = setTempo(store.project, cur.tick, Number(s));
+        } else if (cur.event.kind === 'time-signature') {
+          const m = /^(\d+)\s*\/\s*(\d+)$/.exec(s);
+          if (!m) {
+            setMessage(t('拍子は 3/4 のように入力してください。'));
+            return false;
+          }
+          cmd = setTimeSignature(store.project, cur.tick, Number(m[1]), Number(m[2]));
+        } else if (cur.event.kind === 'marker') cmd = upsertConductorEvent(store.project, cur.tick, { kind: 'marker', text }, cur.id);
+        else return false;
+      } else if (col === 'st' || col === 'gt' || col === 'tick') {
         const tk = parseTicksInput(text, unit, project.ppq);
         if (!tk.ok) {
           setMessage(tk.message);
@@ -457,6 +484,50 @@ export function ListEditor() {
     }
   }
 
+  /** Inserts a conductor event at the cursor tick (the value in effect there) and puts the cursor on it. */
+  function doInsertConductor(kind: 'tempo' | 'time-signature' | 'marker') {
+    gridRef.current?.focus();
+    try {
+      const tick = insertTick();
+      const before = new Set(store.project.conductor.map((c) => c.id));
+      let cmd;
+      if (kind === 'tempo') {
+        const last = [...store.project.conductor].filter((c) => c.kind === 'tempo' && c.tick <= tick).sort((a, b) => a.tick - b.tick || a.originOrder - b.originOrder).pop();
+        cmd = setTempo(store.project, tick, Math.round(bpmFromUs(last && last.kind === 'tempo' ? last.usPerQuarter : 500_000) * 100) / 100);
+      } else if (kind === 'time-signature') {
+        const ts = sig.signatureAt(tick);
+        cmd = setTimeSignature(store.project, tick, ts.numerator, ts.denominator);
+      } else cmd = upsertConductorEvent(store.project, tick, { kind: 'marker', text: t('マーカー') });
+      store.run(cmd);
+      const added = store.project.conductor.find((c) => !before.has(c.id)) ?? store.project.conductor.find((c) => c.kind === kind && c.tick === tick);
+      if (added) {
+        pendingFocus.current = { id: added.id, col: kind === 'tempo' ? 'vel' : kind === 'marker' ? 'detail' : 'name' };
+        setCursor((c) => ({ ...c })); // re-run the pending-focus effect even when the rows did not change identity
+      }
+      setShowConductor(true);
+      setMessage(null);
+    } catch (e) {
+      setMessage((e as Error).message);
+    }
+  }
+
+  function doPaste(mode: 'overlay' | 'insert') {
+    const clip = store.getState().clipboard;
+    if (!clip) {
+      setMessage(t('コピーしたイベントがありません。'));
+      return;
+    }
+    try {
+      const r = pasteRowsAt(store.project, track!.id, insertTick(), clip, mode);
+      if (!r) return;
+      pendingFocus.current = { id: r.ids[0], col: cursor.col };
+      store.run(r.command, { select: r.ids });
+      setMessage(null);
+    } catch (e) {
+      setMessage((e as Error).message);
+    }
+  }
+
   function insertMenuItems(): MenuItem[] {
     return [
       ...INSERT_KINDS.map((k) => ({ label: k.label, accessKey: k.key, action: () => doInsert(k.kind) })),
@@ -464,6 +535,10 @@ export function ListEditor() {
       { label: t('Meta…'), accessKey: 'm', action: () => setBytesDialog({ mode: 'insert', kind: 'meta', tick: insertTick() }) },
       { separator: true, label: '' },
       { label: t('セット'), items: INSERT_SETS.map((s) => ({ label: t(SET_LABEL[s]), action: () => doInsertSet(s) })) },
+      { separator: true, label: '' },
+      { label: 'Tempo', accessKey: 't', action: () => doInsertConductor('tempo') },
+      { label: 'Time Signature', accessKey: 'i', action: () => doInsertConductor('time-signature') },
+      { label: 'Marker', accessKey: 'k', action: () => doInsertConductor('marker') },
     ];
   }
 
@@ -502,11 +577,31 @@ export function ListEditor() {
     };
   }
 
+  function pasteMenuItems(): MenuItem[] {
+    const has = Boolean(store.getState().clipboard);
+    return [
+      { label: t('ここに貼り付け'), shortcut: `${MOD_LABEL}V`, disabled: !has, reason: t('コピーしたイベントがありません。'), action: () => doPaste('overlay') },
+      { label: t('挿入して貼り付け（後ろのイベントをずらす）'), shortcut: `⇧${MOD_LABEL}V`, disabled: !has, reason: t('コピーしたイベントがありません。'), action: () => doPaste('insert') },
+    ];
+  }
+
   function rowMenuItems(r: ListRow): MenuItem[] {
+    if (isConductorEvent(r.event)) {
+      return [
+        { label: t('値を編集'), shortcut: 'Enter', action: () => startEdit() },
+        { label: t('挿入'), shortcut: 'Insert', items: insertMenuItems() },
+        ...pasteMenuItems(),
+        { separator: true, label: '' },
+        { label: t('削除'), shortcut: 'Delete', action: () => store.run(deleteConductorEvent(store.project, r.id)) },
+        { label: t('再生位置をここに移動'), action: () => transport.seek(r.tick) },
+        { label: t('コンダクタートラックを開く'), action: () => store.updateSettings({ activePanel: 'tempo' }) },
+      ];
+    }
     return [
       { label: t('値を編集'), shortcut: 'Enter', action: () => startEdit() },
       { label: t('挿入'), shortcut: 'Insert', items: insertMenuItems() },
       convertMenu(r),
+      ...pasteMenuItems(),
       { separator: true, label: '' },
       ...noteMenuItems(editActions, { noteLength: false }),
       { separator: true, label: '' },
@@ -551,7 +646,11 @@ export function ListEditor() {
         repeatLast();
         break;
       case 'delete':
-        store.run(deleteEvents(store.project, selection.eventIds.size ? selection.eventIds : cur ? [cur.id] : []));
+        if (cur && isConductorEvent(cur.event) && selection.eventIds.size === 0) store.run(deleteConductorEvent(store.project, cur.id));
+        else store.run(deleteEvents(store.project, selection.eventIds.size ? selection.eventIds : cur ? [cur.id] : []));
+        break;
+      case 'paste':
+        doPaste(intent.insert ? 'insert' : 'overlay');
         break;
       case 'insert-menu':
         ctxMenu.open({ ...cursorPoint(), preventDefault: () => undefined }, insertMenuItems());
@@ -602,6 +701,9 @@ export function ListEditor() {
             {CAT_LABEL[c]}
           </label>
         ))}
+        <label className="note" title={t('テンポ・拍子・調号・マーカーを時刻順に混ぜて表示します。ST には入りません。')}>
+          <input type="checkbox" checked={showConductor} onChange={(e) => setShowConductor(e.target.checked)} /> {t('コンダクター')}
+        </label>
         <button
           aria-haspopup="menu"
           title={t('カーソル位置にイベントを挿入（Insert / {alt}Enter）。{alt}N / C / P / B / A / Y / S / M ならどのモードでもメニューなしで入ります。', { alt: IS_MAC ? '⌥' : 'Alt+' })}
