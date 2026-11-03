@@ -131,6 +131,16 @@ BASE_PATH=/MIDIStudio/ npm run build        # GitHub Pages のサブパスの例
 - SoundFont は自サイトのコピーを配信する（GeneralUser GS のライセンスにより作者のダウンロードファイルへの直リンクは不可）。
 - 受入状況は `docs/ACCEPTANCE_REPORT.md`。
 
+### 入門の図を撮り直す
+
+入門（ヘルプ › 入門、`tutorial.html`）の図はアプリの実画面を Playwright で撮ったもの（ADR-063）。UI を変えたら撮り直す。
+
+```bash
+npm run shots:tutorial     # Chromium で日本語・英語の 20 枚を public/images/tutorial/ に書く
+```
+
+章ごとの状況と番号の枠は `scripts/shots/tutorial.spec.ts` で作る。撮ったあとは `npm run build` で静的ページに反映される。
+
 ### ブランチ運用
 
 - `develop`: 日々の作業の合流先。GitHub の既定ブランチなので PR は自動的にここへ向く。

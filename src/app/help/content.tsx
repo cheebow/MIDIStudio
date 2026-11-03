@@ -14,6 +14,17 @@ export interface HelpSection {
 
 const K = ({ children }: { children: ReactNode }) => <kbd className="help-key">{children}</kbd>;
 
+/**
+ * A screenshot for the beginner's guide (ADR-063): public/images/tutorial/<src>, made by
+ * `npm run shots:tutorial`. The path is relative so it resolves in the app and in the static pages alike.
+ */
+export const Fig = ({ src, alt, caption }: { src: string; alt: string; caption?: ReactNode }) => (
+  <figure className="help-fig">
+    <img src={`images/tutorial/${src}`} alt={alt} loading="lazy" />
+    {caption && <figcaption>{caption}</figcaption>}
+  </figure>
+);
+
 export const SHORTCUTS: [string, string][] = [
   ['Space / Shift+Space', '再生 / 一時停止 / 選択したノートの先頭から再生'],
   ['Enter / Home', '先頭へ'],

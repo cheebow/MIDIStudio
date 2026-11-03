@@ -1,7 +1,7 @@
 // Beginner's guide (ADR-056): for people who have never used a MIDI sequencer. One chapter per step,
 // each ending with something that can be heard. Shown in the app (ヘルプ › 入門…) and as the static
 // tutorial.html. Uses the same shape as the help sections so both can share the dialog and renderer.
-import type { HelpSection } from './content';
+import { Fig, type HelpSection } from './content';
 import { ALT_LABEL as ALT, MOD_LABEL as MOD } from '../../ui/platform';
 import type { ReactNode } from 'react';
 import { locale } from '../../i18n';
@@ -43,6 +43,7 @@ export const TUTORIAL_CHAPTERS: HelpSection[] = [
           <li><strong>インスペクター</strong>（右）: 選んだトラックの名前・色・チャンネル・音色。</li>
         </ul>
         <p>迷ったら <K>Esc</K> で編集モードに戻り、<K>{MOD}Z</K> で元に戻せます。</p>
+        <Fig src="screen.ja.jpg" alt="MIDI Studio の画面全体" caption="① トランスポート ② トラックビュー ③ エディター ④ インスペクター" />
       </>
     ),
   },
@@ -59,6 +60,8 @@ export const TUTORIAL_CHAPTERS: HelpSection[] = [
           <li><K>Space</K> で再生。もう一度 <K>Space</K> で止まり、<K>Enter</K> で先頭に戻ります。</li>
         </ol>
         <p>ノートを動かすには <K>V</K> で選択ツールにして中央をドラッグ、消すには選んで <K>Delete</K>。置く場所はグリッドに吸い付きます（スナップ）。</p>
+        <Fig src="startup.ja.jpg" alt="起動ダイアログ" caption="① 新しい曲 ② 開始" />
+        <Fig src="first-notes.ja.jpg" alt="ピアノロールに C4 のノートを 4 つ置いたところ" caption="① 描画ツール ② C4 の段 ③ 置いたノート（1/16 が 4 つ）" />
       </>
     ),
   },
@@ -74,6 +77,7 @@ export const TUTORIAL_CHAPTERS: HelpSection[] = [
           <li><K>L</K> でループを ON にし、<K>Space</K>。1 小節目が繰り返し鳴ります。ループの範囲はトランスポートの「小節」の数値か、ルーラーの端をドラッグして変えられます。</li>
         </ol>
         <p>ドラムは音の高さが楽器の違いになります（C1 = Bass Drum、D1 = Snare……）。これが 10 チャンネルの決まりです。右のパッドをクリックすると音を確かめられます。</p>
+        <Fig src="rhythm.ja.jpg" alt="ドラムエディターに 1 小節のパターンを置いたところ" caption="① Bass Drum 1 ② Acoustic Snare ③ Closed Hi-Hat ④ ループ" />
       </>
     ),
   },
@@ -88,6 +92,7 @@ export const TUTORIAL_CHAPTERS: HelpSection[] = [
           <li>ループを 2 小節にして、2 小節目はベースを F2、ピアノを F4・A4・C5 にしてみます。C → F と進むだけで曲らしくなります。</li>
         </ol>
         <p>ノートを選んで <K>{MOD}C</K> → 再生位置を動かして <K>{MOD}V</K> で貼り付け、<K>{MOD}D</K> で複製。<K>↑↓</K> で半音、Shift+<K>↑↓</K> でオクターブ移動します。</p>
+        <Fig src="chords.ja.jpg" alt="ピアノロールの C と F のコード" caption="① 編集グリッドを 1/4 に ② 1 小節目は C・E・G ③ 2 小節目は F・A・C" />
       </>
     ),
   },
@@ -102,6 +107,8 @@ export const TUTORIAL_CHAPTERS: HelpSection[] = [
           <li><strong>音量と左右</strong>: 「ミキサー」タブで Volume と Pan を動かします。再生しながら動かせます。</li>
         </ul>
         <p>音色は曲の先頭に Program Change として、音量は CC として保存され、MIDI ファイルにも入ります。</p>
+        <Fig src="sound-tempo.ja.jpg" alt="音色の選択と BPM、ミキサータブ" caption="① 音色 ② BPM ③ ミキサータブ" />
+        <Fig src="mixer.ja.jpg" alt="ミキサー" caption="ミキサー: トラックごとの Volume・Pan・Reverb・Chorus・Expression" />
       </>
     ),
   },
@@ -118,6 +125,7 @@ export const TUTORIAL_CHAPTERS: HelpSection[] = [
           <li><K>Esc</K> で編集モードに戻ります。鍵盤モードの間は 1 文字のショートカットが音になるので注意。</li>
         </ol>
         <p>MIDI キーボードがあれば起動ダイアログで「使う」を選ぶだけで同じことができます。ドラムは <K>{ALT}P</K> の「パッド」モードで。</p>
+        <Fig src="play-in.ja.jpg" alt="鍵盤モードと録音待機、録音ボタン" caption="① 鍵盤モード ② 録音待機（R） ③ 録音" />
       </>
     ),
   },
@@ -132,6 +140,7 @@ export const TUTORIAL_CHAPTERS: HelpSection[] = [
           <li>機械的すぎると感じたら、ノートを選んで 編集 › ノート › ヒューマナイズ…。位置と強さが少しだけ揺れます。</li>
           <li>マーカー（トラックビューのマーカー行の右クリック、またはコンダクター）で Intro / A / B と名前を付けておくと迷いません。</li>
         </ul>
+        <Fig src="arrange.ja.jpg" alt="トラックビューで 4 つのクリップを範囲選択したところ" caption="① 空いているところからドラッグして、4 トラックのクリップをまとめて選択" />
       </>
     ),
   },
@@ -146,6 +155,7 @@ export const TUTORIAL_CHAPTERS: HelpSection[] = [
           <li>音として聴かせたいときは WAV を書き出す…。</li>
         </ul>
         <p>ブラウザの中のデータは、そのブラウザのサイトデータを消すと一緒に消えます。大事な曲はファイルにも残してください。</p>
+        <Fig src="save.ja.jpg" alt="ファイルメニュー" caption="ファイルメニュー: ブラウザに保存、.midstudio として保存、MIDI / WAV の書き出し" />
       </>
     ),
   },

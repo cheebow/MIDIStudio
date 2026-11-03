@@ -169,6 +169,9 @@ button.toggle.arm.on { background: var(--error); border-color: var(--error); }
 .help-body h4 { margin: 14px 0 4px; font-size: 0.95rem; }
 .help-body ul { padding-left: 1.2em; }
 .help-body li { margin: 4px 0; line-height: 1.5; }
+.help-fig { margin: 12px 0 16px; }
+.help-fig img { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; }
+.help-fig figcaption { margin-top: 6px; font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
 .help-body .summary td:first-child { white-space: nowrap; }
 .help-key { display: inline-block; padding: 0 5px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; background: var(--bg); font: 0.85em system-ui, sans-serif; }
 .about-head { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }

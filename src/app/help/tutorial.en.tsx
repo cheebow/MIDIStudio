@@ -1,6 +1,6 @@
 // English beginner's guide (ADR-061): the same chapters and ids as tutorial.tsx, written for someone
 // who has never used a MIDI sequencer. Each chapter ends with something that can be heard.
-import type { HelpSection } from './content';
+import { Fig, type HelpSection } from './content';
 import { ALT_LABEL as ALT, MOD_LABEL as MOD } from '../../ui/platform';
 import type { ReactNode } from 'react';
 
@@ -35,6 +35,7 @@ export const TUTORIAL_CHAPTERS_EN: HelpSection[] = [
           <li><strong>Inspector</strong> (right): the selected track’s name, color, channel and patch.</li>
         </ul>
         <p>If you get lost, <K>Esc</K> returns to edit mode and <K>{MOD}Z</K> undoes.</p>
+        <Fig src="screen.en.jpg" alt="The whole MIDI Studio window" caption="① Transport ② Track view ③ Editor ④ Inspector" />
       </>
     ),
   },
@@ -51,6 +52,8 @@ export const TUTORIAL_CHAPTERS_EN: HelpSection[] = [
           <li>Press <K>Space</K> to play. <K>Space</K> again pauses, <K>Enter</K> goes back to the start.</li>
         </ol>
         <p>To move a note, press <K>V</K> for the select tool and drag its middle; to delete it, select it and press <K>Delete</K>. Notes snap to the grid as you place them.</p>
+        <Fig src="startup.en.jpg" alt="The startup dialog" caption="① New song ② Start" />
+        <Fig src="first-notes.en.jpg" alt="Four C4 notes placed in the piano roll" caption="① Draw tool ② The C4 row ③ The notes you placed (four 1/16ths)" />
       </>
     ),
   },
@@ -66,6 +69,7 @@ export const TUTORIAL_CHAPTERS_EN: HelpSection[] = [
           <li>Press <K>L</K> to turn the loop on, then <K>Space</K>. Bar 1 repeats. Change the loop range with the “Bars” numbers in the transport or by dragging the ends of the range in the ruler.</li>
         </ol>
         <p>On drums, pitch selects the instrument (C1 = bass drum, D1 = snare…). That is the rule of channel 10. Click the pads on the right to hear each one.</p>
+        <Fig src="rhythm.en.jpg" alt="A one-bar pattern in the drum editor" caption="① Bass Drum 1 ② Acoustic Snare ③ Closed Hi-Hat ④ Loop" />
       </>
     ),
   },
@@ -80,6 +84,7 @@ export const TUTORIAL_CHAPTERS_EN: HelpSection[] = [
           <li>Make the loop two bars long and, in bar 2, move the bass to F2 and the piano to F4, A4 and C5. Just going C → F already sounds like a song.</li>
         </ol>
         <p>Select notes and <K>{MOD}C</K>, move the playhead and <K>{MOD}V</K> to paste; <K>{MOD}D</K> duplicates. <K>↑↓</K> moves by a semitone, Shift+<K>↑↓</K> by an octave.</p>
+        <Fig src="chords.en.jpg" alt="C and F chords in the piano roll" caption="① Grid set to 1/4 ② Bar 1: C–E–G ③ Bar 2: F–A–C" />
       </>
     ),
   },
@@ -94,6 +99,8 @@ export const TUTORIAL_CHAPTERS_EN: HelpSection[] = [
           <li><strong>Volume and stereo position</strong>: move Volume and Pan on the “Mixer” tab. You can do this while the song plays.</li>
         </ul>
         <p>The patch is stored as a Program Change at the start of the song and the volume as a CC, and both go into the MIDI file.</p>
+        <Fig src="sound-tempo.en.jpg" alt="Patch select, BPM and the Mixer tab" caption="① Patch ② BPM ③ Mixer tab" />
+        <Fig src="mixer.en.jpg" alt="The mixer" caption="Mixer: Volume, Pan, Reverb, Chorus and Expression per track" />
       </>
     ),
   },
@@ -110,6 +117,7 @@ export const TUTORIAL_CHAPTERS_EN: HelpSection[] = [
           <li>Press <K>Esc</K> to return to edit mode. While in Keys mode, the single-letter shortcuts play notes instead, so keep that in mind.</li>
         </ol>
         <p>With a MIDI keyboard, choosing “Use” in the startup dialog is all it takes. For drums, use the “Pads” mode (<K>{ALT}P</K>).</p>
+        <Fig src="play-in.en.jpg" alt="Keys mode, record arm and the record button" caption="① Keys mode ② Record arm (R) ③ Record" />
       </>
     ),
   },
@@ -124,6 +132,7 @@ export const TUTORIAL_CHAPTERS_EN: HelpSection[] = [
           <li>If it feels too mechanical, select the notes and use Edit › Notes › Humanize…. Positions and velocities get a little looser.</li>
           <li>Markers (right-click the marker row in the track view, or use the conductor) named Intro / A / B keep you oriented.</li>
         </ul>
+        <Fig src="arrange.en.jpg" alt="Four clips rubber-band selected in the track view" caption="① Drag from empty space to select the clips of all four tracks at once" />
       </>
     ),
   },
@@ -138,6 +147,7 @@ export const TUTORIAL_CHAPTERS_EN: HelpSection[] = [
           <li>To let people hear it as audio, Export WAV….</li>
         </ul>
         <p>Data inside the browser disappears together with the browser’s site data when that is cleared. Keep important songs as files too.</p>
+        <Fig src="save.en.jpg" alt="The File menu" caption="File menu: save to browser, save as .midstudio, export MIDI / WAV" />
       </>
     ),
   },

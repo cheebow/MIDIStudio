@@ -658,3 +658,11 @@ UI 側とコア／再生側を分けてコード全体を読み直し、確認�
 - **互換性影響**: プロジェクトファイルの形式は変わらない。新規プロジェクトの既定トラック名（ピアノ など）は作成時の言語で付く。
 - **検証**: unit 240 件（`i18n.test.ts`: `t('…')` 呼び出し 約 870 キーすべてに英語あり・`{name}` 一致・英語側に日本語なし。`i18n-core-labels.test.ts`: core のラベルと EditError の英語あり）。typecheck（core の tsconfig にも `src/i18n` を含め、`src/i18n/index.ts` は `globalThis` 経由で DOM 型なしに通る）/ lint / build（`dist/help.en.html`・`tutorial.en.html`・`about.en.html` を生成）。E2E 全 spec 3 ブラウザ 206 件（`i18n.spec.ts`: 表示 › 言語 › English で `<html lang>` とメニューが英語になり、再読み込み後も保たれ、日本語に戻せる。`locale: en-US` の新しいブラウザは最初から英語）。Chromium のスクリーンショットでメイン画面・編集メニュー・クオンタイズダイアログ・ヘルプメニューの英語表示を目視確認。英語の綴りはアメリカ式（Color）に統一。
 
+## ADR-063 — 入門に画面の図を入れる（2026-11-03）
+
+- **背景**: 入門（ADR-056）は文章だけで、初めての人には「どこを押すのか」が伝わりにくかった。
+- **決定**: 手描きのイラストではなく、**アプリの実画面を Playwright で撮り、番号付きの枠を重ねた図**を入れる（`scripts/shots/tutorial.spec.ts`、`npm run shots:tutorial`）。UI が変わっても撮り直せる。章ごとに状況を作る（固定の SMF を読み込み、ツールやタブを切り替え、ループを入れる等）。日本語と英語を同じスクリプトで撮り、`public/images/tutorial/<名前>.<ja|en>.jpg`（Chromium、1280×920 の 2x、JPEG 品質 90）に置く。図は `Fig`（`src/app/help/content.tsx`）で `images/tutorial/...` の相対パスで参照し、アプリ内の入門ダイアログと静的ページ `tutorial.html` / `tutorial.en.html` の両方に出る。キャプションに番号の意味を書く。番号の枠は `<dialog>` が最前面層にあるときはその中に描く。
+- **見送った案**: 手描き・生成イラスト（作り直しの手間と、実画面との食い違い）。アニメーション GIF（容量と再生成の手間。必要なら後で）。
+- **互換性影響**: なし。配布サイズ +4.1 MB（20 枚。遅延読み込み `loading="lazy"`）。
+- **検証**: `npm run shots:tutorial` で 20 枚生成し、Chromium のスクリーンショットで番号と枠の位置を目視確認。typecheck / lint / build（`dist/tutorial.html` に figure が 10 個）。E2E の smoke（入門ダイアログ）と i18n の spec。アプリ内の入門ダイアログで図が表示されることを Chromium で確認。
+
