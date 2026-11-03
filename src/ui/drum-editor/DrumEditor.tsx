@@ -21,12 +21,15 @@ import { useAnimationLoop, useDragState, useElementSize, usePlayheadFollow, useS
 import { useThemeVersion } from '../../app/theme';
 import { draggedLoop, hitLoop, loopCursor, loopSnap, type LoopDrag } from '../loopDrag';
 import { selectedTrack } from '../../core/model/selectedTrack';
+import { pointerOf, useDragAutoScroll, type PointerLike } from '../dragAutoScroll';
 
 const LANE_H = 20;
 const NAMES_W = 180;
 const RULER_H = 20;
 const HIT_PX = 6;
 
+// Drag coordinates are content px (x from tick 0, y from the top of the lanes, scroll included), so
+// the drag survives scrolling while it is held (ADR-068).
 type Drag = { kind: 'move'; anchor: NoteEvent; startX: number; startY: number; dTick: number; dLane: number; duplicate: boolean } | { kind: 'box'; x0: number; y0: number; x1: number; y1: number } | LoopDrag;
 /** numbers the undo-merge keys of a duplicate drag (the copy and its lane change are one step) */
 let dragCounter = 0;
@@ -45,6 +48,9 @@ export function DrumEditor() {
   const [scroll, setScroll] = useState({ x: 0, y: 0 });
   const size = useElementSize(scrollRef, { w: 800, h: 300 });
   const [drag, dragRef, setDrag] = useDragState<Drag>();
+  /** last pointer of the active drag, re-applied when the view scrolls under it */
+  const lastPointer = useRef<PointerLike | null>(null);
+  const trackPointer = useDragAutoScroll(scrollRef, canvasRef, drag !== null, { top: RULER_H, vertical: drag?.kind !== 'loop' });
   const [onlyUsed, setOnlyUsed] = useState(false);
   // Lane names light up like the piano roll's keys: red while the player holds the drum (PC keys,
   // pads, MIDI keyboard, a click on the name), accent while the track's notes sound during playback.
@@ -193,7 +199,7 @@ export function DrumEditor() {
     }
     if (drag?.kind === 'box') {
       ctx.fillStyle = th.selection;
-      ctx.fillRect(Math.min(drag.x0, drag.x1), Math.min(drag.y0, drag.y1), Math.abs(drag.x1 - drag.x0), Math.abs(drag.y1 - drag.y0));
+      ctx.fillRect(Math.min(drag.x0, drag.x1) - view.x, Math.min(drag.y0, drag.y1) - view.y, Math.abs(drag.x1 - drag.x0), Math.abs(drag.y1 - drag.y0));
     }
   }, [track, notes, loose, lanes, laneOf, view, gridW, totalH, pxPerTick, gridLen, sig, selection.eventIds, drag, map, project.loop, project.conductor, themeVersion]);
 
@@ -239,6 +245,14 @@ export function DrumEditor() {
 
   const toTick = (x: number) => Math.max(0, (x + view.x) / pxPerTick);
   const toLane = (y: number) => Math.floor((y - RULER_H + view.y) / LANE_H);
+  /** content px (see Drag) from a client point, read from the live scroll position */
+  const contentPoint = (clientX: number, clientY: number) => {
+    const el = scrollRef.current;
+    const r = canvasRef.current?.getBoundingClientRect();
+    return { cx: clientX - (r?.left ?? 0) + (el?.scrollLeft ?? scroll.x) - leadPx, cy: clientY - (r?.top ?? 0) + (el?.scrollTop ?? scroll.y) };
+  };
+  const tickAt = (cx: number) => Math.max(0, cx / pxPerTick);
+  const laneAt = (cy: number) => Math.floor((cy - RULER_H) / LANE_H);
 
   function hit(x: number, y: number): NoteEvent | null {
     const lane = lanes[toLane(y)];
@@ -279,11 +293,14 @@ export function DrumEditor() {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+    const { cx, cy } = contentPoint(e.clientX, e.clientY);
     e.currentTarget.setPointerCapture(e.pointerId);
     e.currentTarget.focus();
+    lastPointer.current = pointerOf(e);
+    trackPointer(e.clientX, e.clientY);
     if (y < RULER_H) {
       const lh = hitLoop(x, y, project.loop, pxPerTick, view.x, RULER_H);
-      if (lh) setDrag({ kind: 'loop', hit: lh, startX: x, origin: project.loop, preview: project.loop });
+      if (lh) setDrag({ kind: 'loop', hit: lh, startX: cx, origin: project.loop, preview: project.loop });
       else transport.seek(snap(toTick(x)));
       return;
     }
@@ -308,12 +325,12 @@ export function DrumEditor() {
         else sel.add(n.id);
       } else if (!sel.has(n.id)) sel = new Set([n.id]);
       store.selectEvents(sel);
-      setDrag({ kind: 'move', anchor: n, startX: x, startY: y, dTick: 0, dLane: 0, duplicate: e.altKey }); // Alt: duplicate instead of move
+      setDrag({ kind: 'move', anchor: n, startX: cx, startY: cy, dTick: 0, dLane: 0, duplicate: e.altKey }); // Alt: duplicate instead of move
       preview(n.pitch, n.velocity);
       return;
     }
     if (!e.shiftKey) store.selectEvents([]);
-    setDrag({ kind: 'box', x0: x, y0: y, x1: x, y1: y });
+    setDrag({ kind: 'box', x0: cx, y0: cy, x1: cx, y1: cy });
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -321,19 +338,29 @@ export function DrumEditor() {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    if (!drag) {
-      e.currentTarget.style.cursor = y < RULER_H ? loopCursor(hitLoop(x, y, project.loop, pxPerTick, view.x, RULER_H)) || 'default' : tool === 'draw' ? 'crosshair' : 'default';
+    if (drag) {
+      lastPointer.current = pointerOf(e);
+      trackPointer(e.clientX, e.clientY);
+      applyDrag(lastPointer.current);
       return;
     }
+    e.currentTarget.style.cursor = y < RULER_H ? loopCursor(hitLoop(x, y, project.loop, pxPerTick, view.x, RULER_H)) || 'default' : tool === 'draw' ? 'crosshair' : 'default';
+  }
+
+  /** Updates the active drag for a pointer (also called when the view scrolls under a still pointer). */
+  function applyDrag(p: PointerLike) {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const { cx, cy } = contentPoint(p.clientX, p.clientY);
     if (drag.kind === 'loop') {
-      setDrag({ ...drag, preview: draggedLoop(drag.origin, drag.hit, (x - drag.startX) / pxPerTick, loopSnap(sig, e.shiftKey), sig.ticksPerBeat(0)) });
+      setDrag({ ...drag, preview: draggedLoop(drag.origin, drag.hit, (cx - drag.startX) / pxPerTick, loopSnap(sig, p.shiftKey), sig.ticksPerBeat(0)) });
       return;
     }
     if (drag.kind === 'move') {
-      const raw = drag.anchor.tick + (x - drag.startX) / pxPerTick;
+      const raw = drag.anchor.tick + (cx - drag.startX) / pxPerTick;
       const dTick = (settings.snapEnabled ? snapTick(raw + gridLen / 2, grid, 'floor').tick : Math.round(raw)) - drag.anchor.tick;
-      setDrag({ ...drag, dTick, dLane: Math.round((y - drag.startY) / LANE_H), duplicate: drag.duplicate || e.altKey });
-    } else setDrag({ ...drag, x1: x, y1: y });
+      setDrag({ ...drag, dTick, dLane: Math.round((cy - drag.startY) / LANE_H), duplicate: drag.duplicate || p.altKey });
+    } else setDrag({ ...drag, x1: cx, y1: cy });
   }
 
   function onPointerUp() {
@@ -371,10 +398,10 @@ export function DrumEditor() {
       const updates = ids.map((id) => notes.find((n) => n.id === id)!).map((n) => ({ id: n.id, changes: { tick: Math.max(0, n.tick + d.dTick), pitch: pitchAfter(n) } }));
       store.run(updateEvents(store.project, updates, 'ドラムノートを移動'));
     } else if (d.kind === 'box') {
-      const ta = toTick(Math.min(d.x0, d.x1));
-      const tb = toTick(Math.max(d.x0, d.x1));
-      const la = toLane(Math.min(d.y0, d.y1));
-      const lb = toLane(Math.max(d.y0, d.y1));
+      const ta = tickAt(Math.min(d.x0, d.x1));
+      const tb = tickAt(Math.max(d.x0, d.x1));
+      const la = laneAt(Math.min(d.y0, d.y1));
+      const lb = laneAt(Math.max(d.y0, d.y1));
       const pitches = new Set(lanes.slice(Math.max(0, la), lb + 1).map((l) => l.pitch));
       store.selectEvents(notes.filter((n) => n.tick >= ta && n.tick <= tb && pitches.has(n.pitch)).map((n) => n.id));
     }
@@ -412,6 +439,7 @@ export function DrumEditor() {
         <div className="drum-scroll" ref={scrollRef} onScroll={(e) => {
           const { scrollLeft, scrollTop } = e.currentTarget;
           setScroll({ x: scrollLeft, y: scrollTop });
+          if (dragRef.current && lastPointer.current) applyDrag(lastPointer.current);
         }}>
           <div style={{ width: end * pxPerTick + leadPx + NAMES_W, height: totalH }}>
             <div className="sticky-canvas" style={{ width: view.w, height: Math.min(view.h, totalH) }}>
