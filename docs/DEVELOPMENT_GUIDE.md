@@ -149,6 +149,7 @@ npm run shots:tutorial     # Chromium で日本語・英語の 20 枚を public/
 - `develop`: 日々の作業の合流先。GitHub の既定ブランチなので PR は自動的にここへ向く。
 - `main`: 公開版。push すると `.github/workflows/pages.yml` が GitHub Pages に配信する。直接コミットせず、`develop` からのマージだけを入れる。
 - 作業は `develop` から切ったブランチで行い、PR を `develop` に出す。
+- `develop` と `main` は GitHub のルールセット「Protect develop and main」で**削除と強制 push を禁止**している（2026-11-03〜）。`git push --force` や履歴の書き換えはできないので、間違えたコミットは `git revert` で戻す。PR 必須・ステータスチェック必須は付けていない（公開の版上げコミットを `develop` に直接 push するため。テストの CI もまだない）。ルールは GitHub の Settings › Rules › Rulesets で確認・変更できる。
 
 ### 版を上げて公開する（develop → main）
 
