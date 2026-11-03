@@ -36,8 +36,11 @@ export function parseNameInput(text: string, current: MidiEventKind): NameParse 
         return Number.isInteger(n) && n >= 1 && n <= 128 ? { kind: 'program', program: n - 1 } : { error: t('音色番号は 1〜128 です。') };
       case 'poly-pressure':
         return in7(n) ? { kind: 'poly-pressure', pitch: n } : { error: t('ノート番号は 0〜127 です。') };
-      default:
+      case 'note':
         return in7(n) ? { kind: 'note', pitch: n } : { error: t('ノート番号は 0〜127 です。') };
+      default:
+        // PB / CP / SysEx / Meta have no number in the NOTE column: never turn them into a note by accident
+        return { error: t('この行には番号がありません。音名か CC7 / PC5 などで種類を指定してください。') };
     }
   }
   const m = /^([a-zA-Z]{2})\s*(.*)$/.exec(s);

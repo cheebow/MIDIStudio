@@ -23,6 +23,8 @@ export const EN_LIST: Record<string, string> = {
   'コントローラー番号は 0〜127 です。': 'The controller number must be between 0 and 127.',
   '音色番号は 1〜128 です。': 'The program number must be between 1 and 128.',
   'ノート番号は 0〜127 です。': 'The note number must be between 0 and 127.',
+  'この行には番号がありません。音名か CC7 / PC5 などで種類を指定してください。': 'This row has no number here. Type a note name or a kind such as CC7 / PC5.',
+  'この行は前回値を使えません（Enter でダイアログを開きます）。': 'The last value cannot be used on this row (Enter opens the dialog).',
   'CC のあとにコントローラー番号を入力してください（例: CC7）。': 'Type the controller number after CC (e.g. CC7).',
   'PC のあとに音色番号を入力してください（例: PC5）。': 'Type the program number after PC (e.g. PC5).',
   'raw イベントは種類を変更できません（内容をそのまま保持します）。': 'Raw events cannot change type (their bytes are kept as they are).',

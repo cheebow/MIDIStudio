@@ -34,8 +34,15 @@ export function eventDefaults(project: MidiProject, track: MidiTrack, tick: numb
     velocity: project.inputPresets.defaultVelocity,
     durationTicks: g.den === 1 && g.num >= 1 ? g.num : project.ppq,
     controller: lastCc && lastCc.kind === 'cc' ? lastCc.controller : 7,
-    ccValue: (controller: number) => controllerAt(track, controller, tick).event?.value ?? CC_DEFAULTS[controller] ?? 0,
-    program: programAt(track, tick).event?.program ?? 0,
+    // only a value already in effect at the tick counts; a later event must not leak backwards
+    ccValue: (controller: number) => {
+      const c = controllerAt(track, controller, tick);
+      return c.inEffect && c.event ? c.event.value : (CC_DEFAULTS[controller] ?? 0);
+    },
+    program: (() => {
+      const p = programAt(track, tick);
+      return p.inEffect && p.event ? p.event.program : 0;
+    })(),
   };
 }
 
@@ -83,7 +90,8 @@ export function insertSetEvents(track: MidiTrack, set: InsertSet, ctx: InsertCon
   switch (set) {
     case 'bank-program': {
       const p = programAt(track, tick);
-      return [cc(0, p.msb ?? 0), cc(32, p.lsb ?? 0), { kind: 'program', tick, program: p.event?.program ?? 0 }];
+      const inEffect = p.inEffect && p.event;
+      return [cc(0, inEffect ? (p.msb ?? 0) : 0), cc(32, inEffect ? (p.lsb ?? 0) : 0), { kind: 'program', tick, program: inEffect ? p.event!.program : 0 }];
     }
     case 'rpn-bend-range':
       return [cc(101, 0), cc(100, 0), cc(6, 2), cc(38, 0)];
@@ -151,10 +159,13 @@ export function setMetaEvent(project: MidiProject, id: string, v: { metaType: nu
   return rewriteEvents(project, [id], (e) => (e.kind === 'meta' && e.metaType === v.metaType && e.dataBase64 === data ? null : { kind: 'meta', tick: e.tick, metaType: v.metaType, dataBase64: data }), 'Meta を編集');
 }
 
-/** Same byte rules as setSysExPayload (gsProject.ts); also lets the status (F0 / F7) change. */
+/**
+ * Same byte rules as setSysExPayload (gsProject.ts) for F0 messages; also lets the status change.
+ * F7 "escape" events may carry any bytes (that is what they are for: realtime / MTC / raw data).
+ */
 export function setSysExEvent(project: MidiProject, id: string, v: { status: 'F0' | 'F7'; bytes: number[] }): Command | null {
   if (v.bytes.some((b) => !Number.isInteger(b) || b < 0 || b > 0xff)) throw new EditError(t('不正なバイトがあります。'));
-  if (v.bytes.slice(0, -1).some((b) => b >= 0x80)) throw new EditError(t('SysEx の途中に 0x80 以上のバイトは置けません（最後の F7 を除く）。'));
+  if (v.status === 'F0' && v.bytes.slice(0, -1).some((b) => b >= 0x80)) throw new EditError(t('SysEx の途中に 0x80 以上のバイトは置けません（最後の F7 を除く）。'));
   const data = bytesToBase64(v.bytes);
   return rewriteEvents(project, [id], (e) => (e.kind === 'sysex' && e.status === v.status && e.dataBase64 === data ? null : { kind: 'sysex', tick: e.tick, status: v.status, dataBase64: data }), 'SysEx を編集');
 }

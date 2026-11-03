@@ -8,6 +8,8 @@ import { EditError, rewriteEvents, updateEvents, type NewEvent } from '../editin
 import type { MidiEvent, MidiProject, MidiTrack } from '../model/types';
 import { bytesToBase64 } from '../model/base64';
 import { eventDefaults } from './listInsert';
+
+type Defaults = ReturnType<typeof eventDefaults>;
 import type { NameInput } from './listName';
 import { t } from '../../i18n';
 
@@ -40,28 +42,32 @@ function carriedPitch(e: MidiEvent): number | null {
   return e.kind === 'note' || e.kind === 'poly-pressure' ? e.pitch : null;
 }
 
-/** New body for `e` converted to `target` (pure; see convertEventKind). */
-export function convertedBody(project: MidiProject, track: MidiTrack, e: MidiEvent, target: ConvertTarget): NewEvent {
+/**
+ * New body for `e` converted to `target` (pure; see convertEventKind). `defaults` is consulted only
+ * when a field has nothing to inherit, so a batch conversion computes the track state once per tick.
+ */
+export function convertedBody(e: MidiEvent, target: ConvertTarget, defaults: () => Defaults): NewEvent {
   if (e.kind === 'raw') throw new EditError(t('raw イベントは種類を変更できません（内容をそのまま保持します）。'));
   const ch = 'channelOverride' in e && e.channelOverride !== undefined ? { channelOverride: e.channelOverride } : {};
   const value = carriedValue(e);
   const pitch = carriedPitch(e);
-  const d = eventDefaults(project, track, e.tick);
   switch (target.kind) {
-    case 'note':
+    case 'note': {
+      const d = defaults();
       return { kind: 'note', tick: e.tick, ...ch, pitch: target.pitch ?? pitch ?? d.pitch, velocity: Math.max(1, value ?? d.velocity), durationTicks: d.durationTicks, releaseVelocity: 64 };
+    }
     case 'cc': {
-      const controller = target.controller ?? (e.kind === 'cc' ? e.controller : d.controller);
-      return { kind: 'cc', tick: e.tick, ...ch, controller, value: e.kind === 'cc' && target.controller === undefined ? e.value : (value ?? d.ccValue(controller)) };
+      const controller = target.controller ?? (e.kind === 'cc' ? e.controller : defaults().controller);
+      return { kind: 'cc', tick: e.tick, ...ch, controller, value: e.kind === 'cc' && target.controller === undefined ? e.value : (value ?? defaults().ccValue(controller)) };
     }
     case 'program':
-      return { kind: 'program', tick: e.tick, ...ch, program: target.program ?? (e.kind === 'program' ? e.program : d.program) };
+      return { kind: 'program', tick: e.tick, ...ch, program: target.program ?? (e.kind === 'program' ? e.program : defaults().program) };
     case 'pitch-bend':
       return { kind: 'pitch-bend', tick: e.tick, ...ch, value: e.kind === 'pitch-bend' ? e.value : 0 };
     case 'channel-pressure':
       return { kind: 'channel-pressure', tick: e.tick, ...ch, pressure: value ?? 64 };
     case 'poly-pressure':
-      return { kind: 'poly-pressure', tick: e.tick, ...ch, pitch: target.pitch ?? pitch ?? d.pitch, pressure: value ?? 64 };
+      return { kind: 'poly-pressure', tick: e.tick, ...ch, pitch: target.pitch ?? pitch ?? defaults().pitch, pressure: value ?? 64 };
     case 'sysex':
       return { kind: 'sysex', tick: e.tick, status: target.status, dataBase64: bytesToBase64(target.bytes) };
     case 'meta':
@@ -71,7 +77,17 @@ export function convertedBody(project: MidiProject, track: MidiTrack, e: MidiEve
 
 /** Converts the rows (same ids) to another kind. Rows already of that kind are left alone. */
 export function convertEventKinds(project: MidiProject, ids: Iterable<string>, target: ConvertTarget, label = '種類を変更'): Command | null {
-  return rewriteEvents(project, ids, (e, track) => (e.kind === target.kind ? null : convertedBody(project, track, e, target)), label);
+  const cache = new Map<string, Defaults>();
+  const defaultsAt = (track: MidiTrack, tick: number) => () => {
+    const key = `${track.id}:${tick}`;
+    let d = cache.get(key);
+    if (!d) {
+      d = eventDefaults(project, track, tick);
+      cache.set(key, d);
+    }
+    return d;
+  };
+  return rewriteEvents(project, ids, (e, track) => (e.kind === target.kind ? null : convertedBody(e, target, defaultsAt(track, e.tick))), label);
 }
 
 export function convertEventKind(project: MidiProject, id: string, target: ConvertTarget): Command | null {

@@ -19,19 +19,14 @@ export function isSorted(events: readonly Ordered[]): boolean {
   return true;
 }
 
+/** Channel voice kinds: the events that have a MIDI channel (and may carry channelOverride). */
+export function hasChannel(e: MidiEvent): e is Extract<MidiEvent, { kind: 'note' | 'cc' | 'program' | 'pitch-bend' | 'channel-pressure' | 'poly-pressure' }> {
+  return e.kind === 'note' || e.kind === 'cc' || e.kind === 'program' || e.kind === 'pitch-bend' || e.kind === 'channel-pressure' || e.kind === 'poly-pressure';
+}
+
 /** Effective MIDI channel (0..15) of a channel event, honouring channelOverride. */
 export function eventChannel(track: MidiTrack, e: MidiEvent): number | null {
-  switch (e.kind) {
-    case 'note':
-    case 'cc':
-    case 'program':
-    case 'pitch-bend':
-    case 'channel-pressure':
-    case 'poly-pressure':
-      return e.channelOverride ?? track.channel;
-    default:
-      return null;
-  }
+  return hasChannel(e) ? (e.channelOverride ?? track.channel) : null;
 }
 
 export function noteEndTick(n: NoteEvent): number {

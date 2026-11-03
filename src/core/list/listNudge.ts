@@ -5,8 +5,8 @@
 import type { Command } from '../editing/history';
 import { EditError } from '../editing/operations';
 import type { MidiProject } from '../model/types';
-import { base64ToBytes } from '../model/base64';
-import { decodeGs } from '../gs/gsSysex';
+import { hasChannel } from '../events/order';
+import { eventValueRange } from './eventValue';
 import { setAbsoluteTick, setGateTime, setRowChannel, setRowKey, setRowValue, setStepTime } from './listEdit';
 import type { ListRow, ListUnit } from './listRows';
 import { t } from '../../i18n';
@@ -23,30 +23,13 @@ export interface NudgeOpts {
 export type NudgeResult = { ok: true; value: number } | { ok: false; message: string } | null;
 
 /** Value range of a cell: [min, max], or null when the cell has no number. */
-export function cellRange(row: ListRow, col: NudgeCol, trackChannel: number): [number, number] | null {
+export function cellRange(row: ListRow, col: NudgeCol): [number, number] | null {
   const e = row.event;
   switch (col) {
     case 'key':
       return e.kind === 'note' || e.kind === 'poly-pressure' ? [0, 127] : null;
     case 'vel':
-      switch (e.kind) {
-        case 'note':
-          return [1, 127];
-        case 'cc':
-        case 'channel-pressure':
-        case 'poly-pressure':
-          return [0, 127];
-        case 'program':
-          return [1, 128];
-        case 'pitch-bend':
-          return [-8192, 8191];
-        case 'sysex': {
-          const d = decodeGs(base64ToBytes(e.dataBase64) ?? []);
-          return d?.param && d.param.max > d.param.min ? [d.param.min, d.param.max] : null;
-        }
-        default:
-          return null;
-      }
+      return eventValueRange(e);
     case 'st':
       return row.stTicks === null ? null : [0, Number.MAX_SAFE_INTEGER];
     case 'gt':
@@ -54,9 +37,8 @@ export function cellRange(row: ListRow, col: NudgeCol, trackChannel: number): [n
     case 'tick':
       return [0, Number.MAX_SAFE_INTEGER];
     case 'ch':
-      return e.kind === 'sysex' || e.kind === 'meta' || e.kind === 'raw' ? null : [0, 15];
+      return hasChannel(e) ? [0, 15] : null;
   }
-  void trackChannel;
 }
 
 function currentValue(row: ListRow, col: NudgeCol, trackChannel: number): number | null {
@@ -71,16 +53,14 @@ function currentValue(row: ListRow, col: NudgeCol, trackChannel: number): number
       return row.gtTicks;
     case 'tick':
       return row.tick;
-    case 'ch': {
-      const e = row.event;
-      return 'channelOverride' in e || e.kind === 'note' || e.kind === 'cc' || e.kind === 'program' || e.kind === 'pitch-bend' || e.kind === 'channel-pressure' || e.kind === 'poly-pressure' ? ((e as { channelOverride?: number }).channelOverride ?? trackChannel) : null;
-    }
+    case 'ch':
+      return hasChannel(row.event) ? (row.event.channelOverride ?? trackChannel) : null;
   }
 }
 
 /** New value of the cell after `steps` units, clamped; null when nothing would change. */
 export function nudgedValue(row: ListRow, col: NudgeCol, opts: NudgeOpts, trackChannel: number): NudgeResult {
-  const range = cellRange(row, col, trackChannel);
+  const range = cellRange(row, col);
   const cur = currentValue(row, col, trackChannel);
   if (!range || cur === null) return null;
   let delta = opts.steps;

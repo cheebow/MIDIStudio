@@ -9,6 +9,7 @@ import type { MidiProject } from '../model/types';
 import { classic48ToTicks } from '../timing/classic48';
 import { sortedTrackEvents, type ListUnit } from './listRows';
 import { setGsValue } from '../gs/gsProject';
+import { hasChannel } from '../events/order';
 import { t } from '../../i18n';
 
 export type ParsedTicks = { ok: true; ticks: number } | { ok: false; message: string };
@@ -90,7 +91,7 @@ export function setRowChannel(project: MidiProject, ids: Iterable<string>, chann
     project,
     ids,
     (e, track) => {
-      if (e.kind === 'sysex' || e.kind === 'meta' || e.kind === 'raw') return null;
+      if (!hasChannel(e)) return null;
       applicable++;
       const { channelOverride: old, ...rest } = e as typeof e & { channelOverride?: number };
       const wanted = channel === null || channel === track.channel ? undefined : channel;

@@ -86,6 +86,9 @@ export function ListEditor() {
   const lastCommitted = useRef<Partial<Record<Col, string>>>({});
   /** row to put the cursor on once the rows include it (after an insertion) */
   const pendingFocus = useRef<{ id: string; col: Col } | null>(null);
+  /** detaches the window listeners of a running cell drag */
+  const dragCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => dragCleanup.current?.(), []);
 
   const filtered = visibleCats.size !== ALL_CATS.length;
   const sig = useSignatureMap(project);
@@ -164,7 +167,7 @@ export function ListEditor() {
         if (e.type !== 'note-on' && e.type !== 'note-off') return;
         const L = latest.current;
         const allowed = L.focused && L.mode !== 'step-piano' && L.mode !== 'step-drums' && L.phase === 'idle' && !!L.track;
-        const r = L.rows[L.cursor.row];
+        const r = L.rows[Math.min(L.cursor.row, L.rows.length - 1)] as ListRow | undefined;
         const step = captureStep(captureRef.current, e.type === 'note-on' ? { type: 'note-on', pitch: e.pitch, velocity: e.velocity } : { type: 'note-off', pitch: e.pitch }, r ? { id: r.id, tick: r.tick, key: r.key } : null, allowed);
         captureRef.current = step.state;
         for (const a of step.actions) {
@@ -342,6 +345,10 @@ export function ListEditor() {
       return;
     }
     if (!cur) return;
+    if (isBytesRow(cur) && (cursor.col === 'name' || cursor.col === 'detail' || cursor.col === 'vel')) {
+      setMessage(t('この行は前回値を使えません（Enter でダイアログを開きます）。'));
+      return;
+    }
     const why = canEdit(cur, cursor.col);
     if (why) setMessage(why);
     else commit(text, 'repeat');
@@ -388,6 +395,7 @@ export function ListEditor() {
   /** Vertical drag on a numeric cell (mouse only): 6 px per unit, Shift ×10, one undo step per drag. */
   function startDrag(e: React.PointerEvent, row: ListRow, col: NudgeCol) {
     if (e.pointerType !== 'mouse' || e.button !== 0) return;
+    dragCleanup.current?.();
     const startY = e.clientY;
     const id = row.id;
     const key = `list-drag:${id}:${col}:${Date.now()}`;
@@ -403,9 +411,16 @@ export function ListEditor() {
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      window.removeEventListener('blur', onUp);
+      dragCleanup.current = null;
     };
+    // a drag whose pointerup never arrives (⌘Tab, a popup, the tab losing focus) must not keep nudging on later moves
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    window.addEventListener('blur', onUp);
+    dragCleanup.current = onUp;
   }
 
   const cursorPoint = () => {
@@ -481,8 +496,8 @@ export function ListEditor() {
         item('Channel Pressure', { kind: 'channel-pressure' }, 'channel-pressure'),
         item('Poly Pressure', { kind: 'poly-pressure' }, 'poly-pressure'),
         { separator: true, label: '' },
-        { label: t('SysEx…'), disabled: raw, action: () => setBytesDialog({ mode: 'convert', ids: targetIds(), kind: 'sysex' }) },
-        { label: t('Meta…'), disabled: raw, action: () => setBytesDialog({ mode: 'convert', ids: targetIds(), kind: 'meta' }) },
+        { label: t('SysEx…'), disabled: raw || r.event.kind === 'sysex', action: () => setBytesDialog({ mode: 'convert', ids: targetIds(), kind: 'sysex' }) },
+        { label: t('Meta…'), disabled: raw || r.event.kind === 'meta', action: () => setBytesDialog({ mode: 'convert', ids: targetIds(), kind: 'meta' }) },
       ],
     };
   }
@@ -546,7 +561,7 @@ export function ListEditor() {
         else doInsert(intent.kind);
         break;
       case 'octave':
-        store.setInputPresets(shiftOctave(project.inputPresets, intent.delta));
+        if (!e.repeat) store.setInputPresets(shiftOctave(project.inputPresets, intent.delta)); // held key: one step, like the global ↑↓
         break;
       case 'context-menu':
         if (cur) ctxMenu.open({ ...cursorPoint(), preventDefault: () => undefined }, rowMenuItems(cur));

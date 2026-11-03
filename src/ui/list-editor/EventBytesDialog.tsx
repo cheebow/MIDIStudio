@@ -73,7 +73,7 @@ export function EventBytesDialog({ state, trackId, onClose, onDone }: { state: B
       let cmd: Command | null = null;
       let ids: string[] = [];
       if (kind === 'sysex') {
-        const s = hexFieldState(hex, true);
+        const s = hexFieldState(hex, status === 'F0');
         if (!s.bytes) return reportError(s.error);
         if (param && decoded?.param?.name === param.name) rememberGs({ name: param.name, channel, value });
         if (state.mode === 'insert') {

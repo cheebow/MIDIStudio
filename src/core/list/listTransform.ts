@@ -5,8 +5,8 @@ import type { Command } from '../editing/history';
 import { EditError, moveEvents, updateEvents } from '../editing/operations';
 import { editVelocities } from '../editing/velocity';
 import type { MidiEvent, MidiProject } from '../model/types';
-import { base64ToBytes } from '../model/base64';
-import { decodeGs } from '../gs/gsSysex';
+import { hasChannel } from '../events/order';
+import { eventValue, eventValueRange } from './eventValue';
 import { setRowChannel, setRowValue } from './listEdit';
 import { t } from '../../i18n';
 
@@ -31,52 +31,7 @@ export interface BatchSummary {
   keyed: number;
 }
 
-const hasValue = (e: MidiEvent) => e.kind === 'note' || e.kind === 'cc' || e.kind === 'program' || e.kind === 'pitch-bend' || e.kind === 'channel-pressure' || e.kind === 'poly-pressure' || (e.kind === 'sysex' && gsRange(e) !== null);
-const hasChannel = (e: MidiEvent) => !(e.kind === 'sysex' || e.kind === 'meta' || e.kind === 'raw');
-
-function gsRange(e: MidiEvent): [number, number] | null {
-  if (e.kind !== 'sysex') return null;
-  const d = decodeGs(base64ToBytes(e.dataBase64) ?? []);
-  return d?.param && d.param.max > d.param.min ? [d.param.min, d.param.max] : null;
-}
-
-function valueRange(e: MidiEvent): [number, number] | null {
-  switch (e.kind) {
-    case 'note':
-      return [1, 127];
-    case 'cc':
-    case 'channel-pressure':
-    case 'poly-pressure':
-      return [0, 127];
-    case 'program':
-      return [1, 128];
-    case 'pitch-bend':
-      return [-8192, 8191];
-    case 'sysex':
-      return gsRange(e);
-    default:
-      return null;
-  }
-}
-
-function rowValue(e: MidiEvent): number | null {
-  switch (e.kind) {
-    case 'note':
-      return e.velocity;
-    case 'cc':
-    case 'pitch-bend':
-      return e.value;
-    case 'program':
-      return e.program + 1;
-    case 'channel-pressure':
-    case 'poly-pressure':
-      return e.pressure;
-    case 'sysex':
-      return decodeGs(base64ToBytes(e.dataBase64) ?? [])?.data[0] ?? null;
-    default:
-      return null;
-  }
-}
+const hasValue = (e: MidiEvent) => eventValueRange(e) !== null;
 
 export function batchSummary(project: MidiProject, ids: Iterable<string>): BatchSummary {
   const sel = new Set(ids);
@@ -133,8 +88,8 @@ export function batchEditRows(project: MidiProject, ids: Iterable<string>, op: L
       }
       for (const e of events) {
         if (e.kind === 'note') continue;
-        const r = valueRange(e);
-        const cur = rowValue(e);
+        const r = eventValueRange(e);
+        const cur = eventValue(e);
         if (!r || cur === null) continue;
         const v = clamp(op.kind === 'value-set' ? op.value : cur + op.delta, r);
         if (v === cur) continue;

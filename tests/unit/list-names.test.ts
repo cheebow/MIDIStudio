@@ -34,6 +34,9 @@ describe('NOTE column grammar (LIST-01)', () => {
     expect(parseNameInput('11', 'cc')).toEqual({ kind: 'cc', controller: 11 });
     expect(parseNameInput('5', 'program')).toEqual({ kind: 'program', program: 4 });
     expect(parseNameInput('62', 'poly-pressure')).toEqual({ kind: 'poly-pressure', pitch: 62 });
+    expect(parseNameInput('6', 'pitch-bend')).toHaveProperty('error'); // never silently a note
+    expect(parseNameInput('6', 'channel-pressure')).toHaveProperty('error');
+    expect(parseNameInput('6', 'sysex')).toHaveProperty('error');
     expect(parseNameInput('128', 'note')).toHaveProperty('error');
     expect(parseNameInput('0', 'program')).toHaveProperty('error');
     expect(parseNameInput('129', 'program')).toHaveProperty('error');

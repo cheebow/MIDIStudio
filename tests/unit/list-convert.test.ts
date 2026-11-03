@@ -111,9 +111,14 @@ describe('kind conversion (LIST-02)', () => {
 });
 
 describe('insertion templates and sets (LIST-03)', () => {
-  it('templates take the track state at the tick', () => {
+  it('templates take the track state at the tick, never a later value', () => {
     const p = song();
     const tr = p.tracks[0];
+    // a track whose only CC7 / Program Change come later: an insertion before them gets the plain defaults
+    const later: typeof tr = { ...tr, events: tr.events.map((e) => (e.kind === 'cc' || e.kind === 'program' ? { ...e, tick: e.tick + 4000 } : e)) };
+    expect(insertTemplate(p, later, 'cc', { tick: 0 })).toEqual({ kind: 'cc', tick: 0, controller: 7, value: 100 });
+    expect(insertTemplate(p, later, 'program', { tick: 0 })).toEqual({ kind: 'program', tick: 0, program: 0 });
+    expect(insertSetEvents(later, 'bank-program', { tick: 0 }).map((e) => (e.kind === 'cc' ? e.value : e.kind === 'program' ? e.program : -1))).toEqual([0, 0, 0]);
     expect(insertTemplate(p, tr, 'note', { tick: 480, pitchHint: 65 })).toEqual({ kind: 'note', tick: 480, pitch: 65, velocity: 100, durationTicks: 120, releaseVelocity: 64 });
     expect(insertTemplate(p, tr, 'cc', { tick: 480 })).toEqual({ kind: 'cc', tick: 480, controller: 11, value: 100 }); // last CC before the tick
     expect(insertTemplate(p, tr, 'program', { tick: 480 })).toEqual({ kind: 'program', tick: 480, program: 48 });
@@ -172,12 +177,15 @@ describe('insertion templates and sets (LIST-03)', () => {
     expect(back.tracks[0].events.some((e) => e.kind === 'meta' && e.metaType === 1 && e.dataBase64 === 'eA==')).toBe(true);
   });
 
-  it('setSysExEvent follows the payload rules and can change the status', () => {
+  it('setSysExEvent follows the payload rules for F0 and lets F7 escapes carry any bytes', () => {
     const p = song();
     const gs = events(p).find((e) => e.kind === 'sysex')!;
-    const q = apply(p, setSysExEvent(p, gs.id, { status: 'F7', bytes: [0x7e, 0x7f, 0x09, 0x01, 0xf7] }));
+    let q = apply(p, setSysExEvent(p, gs.id, { status: 'F7', bytes: [0x7e, 0x7f, 0x09, 0x01, 0xf7] }));
     expect(q.tracks[0].events.find((e) => e.id === gs.id)).toMatchObject({ kind: 'sysex', status: 'F7' });
+    q = apply(q, setSysExEvent(q, gs.id, { status: 'F7', bytes: [0xf1, 0x02] })); // MTC quarter frame as an escape
+    expect(q.tracks[0].events.find((e) => e.id === gs.id)).toMatchObject({ kind: 'sysex', status: 'F7', dataBase64: '8QI=' });
     expect(() => setSysExEvent(p, gs.id, { status: 'F0', bytes: [0x41, 0x80, 0xf7] })).toThrow(/0x80/);
+    expect(() => setSysExEvent(p, gs.id, { status: 'F7', bytes: [0x41, 0x100] })).toThrow();
     expect(setSysExEvent(p, gs.id, { status: 'F0', bytes: GS_RESET })).toBeNull();
   });
 });
