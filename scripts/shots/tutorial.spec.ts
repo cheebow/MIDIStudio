@@ -112,31 +112,38 @@ for (const lang of ['ja', 'en'] as Lang[]) {
       await shot(page, 'screen', lang);
 
       // --- 1. 最初の音を置く: draw tool, C4, four 16th notes in bar 1
-      await importMidi(page, song(lang, { piano: [[0, 60, Q / 4], [Q / 4, 60, Q / 4], [Q / 2, 60, Q / 4], [(Q * 3) / 4, 60, Q / 4]] }));
+      await importMidi(page, song(lang, { piano: [[0, 60, Q], [Q, 60, Q], [Q * 2, 60, Q], [Q * 3, 60, Q]] }));
       await trackHeader(page, piano).click();
       await tab(page, lang, 'ピアノロール', 'Piano roll').click();
       await page.getByTestId('tool-draw').click();
+      const gridSelect = page.getByRole('combobox', { name: lang === 'ja' ? 'グリッド' : 'Grid' });
+      await gridSelect.selectOption('4:straight');
       const grid = (await page.getByTestId('piano-roll-grid').boundingBox())!;
       const keys = (await page.locator('.roll-keys').boundingBox())!;
       const c4 = await rollPoint(page, 0, 60); // the note row of C4 (keys are drawn on a canvas)
       await callout(page, page.getByTestId('tool-draw'), 1);
       await callout(page, { x: keys.x, y: c4.y - 10, width: keys.width, height: 16 }, 2);
-      await callout(page, { x: c4.x - 6, y: c4.y - 10, width: 92, height: 16 }, 3);
+      await callout(page, { x: c4.x - 6, y: c4.y - 10, width: 4 * 80 + 12, height: 16 }, 3);
+      await callout(page, gridSelect, 4);
       await shot(page, 'first-notes', lang, { clip: { x: 0, y: grid.y - 60, width: 1280, height: 920 - (grid.y - 60) } });
       await page.getByTestId('tool-select').click();
+      await gridSelect.selectOption('16:straight');
 
-      // --- 2. リズムを足す: drum editor, kick / snare / hat, loop on
-      await importMidi(page, song(lang, { drums: [[0, 36, Q / 2, 110], [Q, 38, Q / 2], [Q * 2, 36, Q / 2, 110], [Q * 3, 38, Q / 2], ...Array.from({ length: 8 }, (_, i) => [i * (Q / 2), 42, Q / 4, 80])] }));
+      // --- 2. リズムを足す: drum editor, kick / snare / hat on a 1/8 grid, loop on
+      await importMidi(page, song(lang, { drums: [[0, 36, Q / 2, 110], [Q, 38, Q / 2, 110], [Q * 2, 36, Q / 2, 110], [Q * 3, 38, Q / 2, 110], ...Array.from({ length: 8 }, (_, i) => [i * (Q / 2), 42, Q / 2, 85])] }));
       await trackHeader(page, drums).click();
       await tab(page, lang, 'ドラム', 'Drums').click();
+      await gridSelect.selectOption('8:straight');
       await page.getByRole('checkbox', { name: 'LOOP' }).check();
       const lanes = page.getByTestId('drum-lane');
       await callout(page, lanes.filter({ hasText: /Bass Drum 1/ }).first(), 1);
       await callout(page, lanes.filter({ hasText: /Acoustic Snare/ }).first(), 2);
       await callout(page, lanes.filter({ hasText: /Closed Hi-Hat/ }).first(), 3);
       await callout(page, page.getByRole('checkbox', { name: 'LOOP' }).locator('..'), 4);
+      await callout(page, gridSelect, 5);
       await shot(page, 'rhythm', lang);
       await page.getByRole('checkbox', { name: 'LOOP' }).uncheck();
+      await gridSelect.selectOption('16:straight');
 
       // --- 3. ベースとコード: C chord then F chord over a bass line, grid 1/4
       await importMidi(

@@ -47,13 +47,14 @@ export const TUTORIAL_CHAPTERS_EN: HelpSection[] = [
         <ol>
           <li>In the startup dialog choose “New song”, then “Start”. Four tracks appear: piano, bass, guitar and drums. (If you would rather hear a finished song first, pick “Sample songs”.)</li>
           <li>Click “Piano” in the track view to select it. Make sure the editor below shows the “Piano roll” tab.</li>
-          <li>Press <K>P</K> for the draw tool, then click at the start of bar 1 at the height of C4 on the keyboard to the left. One note is placed (its length is the edit grid, 1/16 at first).</li>
-          <li>Place three more to the right at the same pitch. Keep the mouse button down and drag to make a note longer.</li>
+          <li>Set the edit grid above the editor (it starts at “1/16”) to <strong>1/4</strong>. A note you place by clicking is as long as this grid.</li>
+          <li>Press <K>P</K> for the draw tool, then click at the start of bar 1 in the C4 row (see the keyboard on the left). One quarter note is placed.</li>
+          <li>Place three more to the right in the same row, so bar 1 is filled with four quarter notes. (Keeping the button down and dragging makes a note longer; not needed here.)</li>
           <li>Press <K>Space</K> to play. <K>Space</K> again pauses, <K>Enter</K> goes back to the start.</li>
         </ol>
         <p>To move a note, press <K>V</K> for the select tool and drag its middle; to delete it, select it and press <K>Delete</K>. Notes snap to the grid as you place them.</p>
         <Fig src="startup.en.jpg" alt="The startup dialog" caption="① New song ② Start" />
-        <Fig src="first-notes.en.jpg" alt="Four C4 notes placed in the piano roll" caption="① Draw tool ② The C4 row ③ The notes you placed (four 1/16ths)" />
+        <Fig src="first-notes.en.jpg" alt="Four C4 quarter notes placed in the piano roll" caption="① Draw tool ② The C4 row ③ The notes you placed (four quarter notes) ④ Edit grid 1/4" />
       </>
     ),
   },
@@ -64,12 +65,13 @@ export const TUTORIAL_CHAPTERS_EN: HelpSection[] = [
       <>
         <ol>
           <li>Select “Drums” in the track view. The editor switches to “Drums”, with one lane per instrument.</li>
+          <li>Set the edit grid to <strong>1/8</strong> (the hi-hat goes on eighth notes).</li>
           <li>In the Bass Drum 1 lane click beats 1 and 3; in the Acoustic Snare lane click beats 2 and 4.</li>
           <li>In the Closed Hi-Hat lane click every eighth note (eight per bar).</li>
           <li>Press <K>L</K> to turn the loop on, then <K>Space</K>. Bar 1 repeats. Change the loop range with the “Bars” numbers in the transport or by dragging the ends of the range in the ruler.</li>
         </ol>
         <p>On drums, pitch selects the instrument (C1 = bass drum, D1 = snare…). That is the rule of channel 10. Click the pads on the right to hear each one.</p>
-        <Fig src="rhythm.en.jpg" alt="A one-bar pattern in the drum editor" caption="① Bass Drum 1 ② Acoustic Snare ③ Closed Hi-Hat ④ Loop" />
+        <Fig src="rhythm.en.jpg" alt="A one-bar pattern in the drum editor" caption="① Bass Drum 1 ② Acoustic Snare ③ Closed Hi-Hat ④ Loop ⑤ Edit grid 1/8" />
       </>
     ),
   },
@@ -79,12 +81,14 @@ export const TUTORIAL_CHAPTERS_EN: HelpSection[] = [
     body: (
       <>
         <ol>
-          <li>Select “Bass” and, in the piano roll, place quarter notes at C2 for one bar (set the edit grid to 1/4 and click).</li>
-          <li>Back on “Piano”, stack E4 and G4 on top of the first note you placed. C, E and G together make a C chord.</li>
-          <li>Make the loop two bars long and, in bar 2, move the bass to F2 and the piano to F4, A4 and C5. Just going C → F already sounds like a song.</li>
+          <li>Select “Bass”, set the edit grid back to <strong>1/4</strong>, and place four quarter notes in the C2 row of the piano roll (one bar).</li>
+          <li>Back on “Piano”, put E4 and G4 on top of each of the four notes from chapter 1 (C4, E4 and G4 on every beat: 12 notes in all). C, E and G together make a C chord.</li>
+          <li>Now bar 2. Click the piano roll, press <K>{MOD}A</K> to select all the notes of bar 1, then <K>{MOD}D</K> to duplicate them: the same notes appear in bar 2 and stay selected. Press <K>↑</K> five times to raise them five semitones: F4, A4, C5 (an F chord).</li>
+          <li>The bass works the same way: select “Bass”, click the piano roll, then <K>{MOD}A</K> → <K>{MOD}D</K> → <K>↑</K> five times, and bar 2 is F2. For the drums just <K>{MOD}A</K> → <K>{MOD}D</K> (bar 2 gets the same pattern).</li>
+          <li>Set the right-hand “Bars” number in the transport to 3 (1 to 3 loops bars 1 and 2). <K>Space</K>. Just going C → F already sounds like a song.</li>
         </ol>
-        <p>Select notes and <K>{MOD}C</K>, move the playhead and <K>{MOD}V</K> to paste; <K>{MOD}D</K> duplicates. <K>↑↓</K> moves by a semitone, Shift+<K>↑↓</K> by an octave.</p>
-        <Fig src="chords.en.jpg" alt="C and F chords in the piano roll" caption="① Grid set to 1/4 ② Bar 1: C–E–G ③ Bar 2: F–A–C" />
+        <p>Select notes and <K>{MOD}C</K>, move the playhead and <K>{MOD}V</K> to paste; <K>{MOD}D</K> duplicates right after the selection. <K>↑↓</K> moves by a semitone, Shift+<K>↑↓</K> by an octave.</p>
+        <Fig src="chords.en.jpg" alt="C and F chords in the piano roll" caption="① Edit grid 1/4 ② Bar 1: C–E–G ③ Bar 2: F–A–C (duplicated, then ↑ five times)" />
       </>
     ),
   },
@@ -94,7 +98,7 @@ export const TUTORIAL_CHAPTERS_EN: HelpSection[] = [
     body: (
       <>
         <ul>
-          <li><strong>Patch</strong>: select a track and pick one under “Patch” in the inspector on the right. Try Electric Piano 1 for the piano and String Ensemble 1 for the guitar to change the mood.</li>
+          <li><strong>Patch</strong>: select a track and pick one under “Patch” in the inspector on the right. Try Electric Piano 1 for the piano and String Ensemble 1 for the guitar to change the mood (the guitar has no notes yet, so you will not hear it; pick it now for later).</li>
           <li><strong>Tempo</strong>: click the BPM in the transport and type a number. 120 is average, 90 relaxed, 140 brisk. To change it in the middle of the song, use the conductor.</li>
           <li><strong>Volume and stereo position</strong>: move Volume and Pan on the “Mixer” tab. You can do this while the song plays.</li>
         </ul>
@@ -127,12 +131,13 @@ export const TUTORIAL_CHAPTERS_EN: HelpSection[] = [
     body: (
       <>
         <ul>
-          <li>In the track view, drag from empty space to select the clips of all four tracks at once. <K>{MOD}D</K> duplicates them right after themselves: two bars four times makes eight. A single clip can also be duplicated with <K>{ALT}</K>+drag.</li>
+          <li>You have two bars; repeat them four times to get eight. In the track view, drag from empty space with no clip (below the drums, say) up and to the left to select the piano, bass and drum clips together (the guitar has no notes yet, so no clip). <K>{MOD}D</K> duplicates them right after themselves. The copies stay selected, so press <K>{MOD}D</K> twice more for eight bars. A single clip can also be duplicated with <K>{ALT}</K>+drag.</li>
           <li>Change notes only where you want variation. Changing velocities adds dynamics (drag in the Velocity lane under the piano roll).</li>
           <li>If it feels too mechanical, select the notes and use Edit › Notes › Humanize…. Positions and velocities get a little looser.</li>
           <li>Markers (right-click the marker row in the track view, or use the conductor) named Intro / A / B keep you oriented.</li>
         </ul>
-        <Fig src="arrange.en.jpg" alt="Four clips rubber-band selected in the track view" caption="① Drag from empty space to select the clips of all four tracks at once" />
+        <p>You now have an eight-bar song: C and F chords alternating four times.</p>
+        <Fig src="arrange.en.jpg" alt="Three clips rubber-band selected in the track view" caption="① Drag from empty space to select the piano, bass and drum clips at once (the guitar is empty)" />
       </>
     ),
   },
