@@ -21,7 +21,7 @@ import { useAnimationLoop, useDragState, useElementSize, usePlayheadFollow, useS
 import { useThemeVersion } from '../../app/theme';
 import { PencilIcon, SelectIcon } from '../icons';
 import { selectedTrack } from '../../core/model/selectedTrack';
-import { pointerOf, useDragAutoScroll, type PointerLike } from '../dragAutoScroll';
+import { autoScrollStep, edgeScrollSpeed, pointerOf, useDragAutoScroll, type PointerLike } from '../dragAutoScroll';
 
 const RULER_H = 24;
 /** tempo lane under the bar ruler */
@@ -126,17 +126,22 @@ export function Arrangement() {
     window.addEventListener('pointerup', end);
     window.addEventListener('blur', cancel);
     window.addEventListener('keydown', onKey, true);
+    // same speed rule as the other drags (ADR-072): px per second, ramping up near and past the edge
     let raf = 0;
-    const tick = () => {
+    let last = performance.now();
+    const carry = { x: 0, y: 0 };
+    const tick = (now: number) => {
+      const elapsed = now - last;
+      last = now;
       const el = headersClipRef.current;
       const sc = scrollRef.current;
       if (el && sc) {
         const r = el.getBoundingClientRect();
         const y = headerDragY.current;
-        const dir = y < r.top + 24 ? -1 : y > r.bottom - 24 ? 1 : 0;
-        if (dir) {
+        const { dy } = autoScrollStep(carry, 0, edgeScrollSpeed(y, r.top, r.bottom), elapsed);
+        if (dy) {
           const before = sc.scrollTop;
-          sc.scrollTop += dir * 8;
+          sc.scrollTop += dy;
           if (sc.scrollTop !== before) updateDropIndex(y);
         }
       }
