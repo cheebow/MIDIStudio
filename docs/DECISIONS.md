@@ -664,5 +664,5 @@ UI 側とコア／再生側を分けてコード全体を読み直し、確認�
 - **決定**: 手描きのイラストではなく、**アプリの実画面を Playwright で撮り、番号付きの枠を重ねた図**を入れる（`scripts/shots/tutorial.spec.ts`、`npm run shots:tutorial`）。UI が変わっても撮り直せる。章ごとに状況を作る（固定の SMF を読み込み、ツールやタブを切り替え、ループを入れる等）。日本語と英語を同じスクリプトで撮り、`public/images/tutorial/<名前>.<ja|en>.jpg`（Chromium、1280×920 の 2x、JPEG 品質 90）に置く。図は `Fig`（`src/app/help/content.tsx`）で `images/tutorial/...` の相対パスで参照し、アプリ内の入門ダイアログと静的ページ `tutorial.html` / `tutorial.en.html` の両方に出る。キャプションに番号の意味を書く。番号の枠は `<dialog>` が最前面層にあるときはその中に描く。
 - **見送った案**: 手描き・生成イラスト（作り直しの手間と、実画面との食い違い）。アニメーション GIF（容量と再生成の手間。必要なら後で）。
 - **互換性影響**: なし。配布サイズ +4.1 MB（20 枚。遅延読み込み `loading="lazy"`）。
-- **検証**: `npm run shots:tutorial` で 20 枚生成し、Chromium のスクリーンショットで番号と枠の位置を目視確認。typecheck / lint / build（`dist/tutorial.html` に figure が 10 個）。E2E の smoke（入門ダイアログ）と i18n の spec。アプリ内の入門ダイアログで図が表示されることを Chromium で確認。
+- **検証**: `npm run shots:tutorial` で 20 枚生成し、Chromium のスクリーンショットで番号と枠の位置を目視確認。typecheck / lint / build（`dist/tutorial.html` に figure が 10 個）。E2E の smoke（入門ダイアログ）と i18n の spec。アプリ内の入門ダイアログで図が表示されることを Chromium で確認。**`tests/e2e/tutorial.spec.ts`** が 1〜3 章と 6 章の手順をそのままマウスとキーで実行し、出来上がりが「C と F のコードが交互の 8 小節（ピアノ 96・ベース 32・ドラム 96 ノート、ギター 0）」になることを 3 ブラウザで確かめる（入門の文章とアプリの食い違いを防ぐ）。
 

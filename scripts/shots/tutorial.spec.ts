@@ -101,7 +101,7 @@ for (const lang of ['ja', 'en'] as Lang[]) {
         song(lang, {
           piano: [[0, 60, Q], [0, 64, Q], [0, 67, Q], [Q * 4, 65, Q], [Q * 4, 69, Q], [Q * 4, 72, Q]],
           bass: [[0, 36, Q], [Q, 36, Q], [Q * 2, 36, Q], [Q * 3, 36, Q], [Q * 4, 41, Q], [Q * 5, 41, Q], [Q * 6, 41, Q], [Q * 7, 41, Q]],
-          drums: [[0, 36, Q / 2, 110], [Q, 38, Q / 2], [Q * 2, 36, Q / 2, 110], [Q * 3, 38, Q / 2], ...Array.from({ length: 8 }, (_, i) => [i * (Q / 2), 42, Q / 4, 80])],
+          drums: [0, 1].flatMap((bar) => [[bar * 4 * Q, 36, Q / 2, 110], [bar * 4 * Q + Q, 38, Q / 2, 110], [bar * 4 * Q + Q * 2, 36, Q / 2, 110], [bar * 4 * Q + Q * 3, 38, Q / 2, 110], ...Array.from({ length: 8 }, (_, i) => [bar * 4 * Q + i * (Q / 2), 42, Q / 2, 85])]),
         }),
       );
       await trackHeader(page, piano).click();
@@ -191,7 +191,7 @@ for (const lang of ['ja', 'en'] as Lang[]) {
         song(lang, {
           piano: [[0, 60, Q], [0, 64, Q], [0, 67, Q], [Q * 4, 65, Q], [Q * 4, 69, Q], [Q * 4, 72, Q]],
           bass: [[0, 36, Q], [Q, 36, Q], [Q * 2, 36, Q], [Q * 3, 36, Q], [Q * 4, 41, Q], [Q * 5, 41, Q], [Q * 6, 41, Q], [Q * 7, 41, Q]],
-          drums: [[0, 36, Q / 2, 110], [Q, 38, Q / 2], [Q * 2, 36, Q / 2, 110], [Q * 3, 38, Q / 2], ...Array.from({ length: 8 }, (_, i) => [i * (Q / 2), 42, Q / 4, 80])],
+          drums: [0, 1].flatMap((bar) => [[bar * 4 * Q, 36, Q / 2, 110], [bar * 4 * Q + Q, 38, Q / 2, 110], [bar * 4 * Q + Q * 2, 36, Q / 2, 110], [bar * 4 * Q + Q * 3, 38, Q / 2, 110], ...Array.from({ length: 8 }, (_, i) => [bar * 4 * Q + i * (Q / 2), 42, Q / 2, 85])]),
         }),
       );
       await page.keyboard.press('Escape');
