@@ -695,3 +695,22 @@ UI 側とコア／再生側を分けてコード全体を読み直し、確認�
 - **互換性影響**: なし。
 - **検証**: unit `editing.test.ts`（分割して縮めた 2 つを結合すると最初のクリップが広がり、あいだの外れたノートは範囲内なら取り込む、他トラックの単独クリップは変わらない、null 条件、Undo で元の SMF に戻る）。E2E `context-menu.spec.ts`（分割 → Shift+クリックで 2 つ選び、右クリック「結合」と ⌘J で 1 つになり、Delete で両方のノートが消える）。
 
+## ADR-066 — リストエディターの拡張: 全列編集・種類の挿入と変更・鍵盤入力・キーの所有ルール（2026-11-03）
+
+- **背景**: リストは K# / ST / GT / VEL / TICK の 5 列しか編集できず、挿入はノートだけ、NOTE 列に音名を打つと「この列は編集できません」になった。また、グリッドの `onKeyDown` が `stopPropagation()` で `window` の `useGlobalShortcuts` より先にキーを握るため、鍵盤モードで数字キー 2/3/5/6/7 がセル編集を開き、↑↓ がオクターブ移動にならず、ステップモードで ←/→/Backspace が奪われていた（REQ-EDT-13 違反）。レコンポーザ、Domino、Cakewalk、Cubase、Logic のイベントリストが持つ自由度（全列編集、種類の挿入・変換、+/- 増減、範囲一括変換、鍵盤からの音高入力）に揃える。
+- **決定**:
+  - **キーの所有**は `src/input/listKeys.ts` の `listKeyIntent(mode, key, isMusical)` が決め、`null` のキーはグリッドが触らずに通す（楽器キー、鍵盤モードの ↑↓ と Tab、ステップモードの ←/→/Backspace/-、Space、Esc、英字、⌘系）。キーは `e.key`（打った文字）で判定し `e.code` に頼らないので JIS / US で同じに動く（`+` は JIS では Shift+`;`、US では Shift+`=`）。大きな増減は Shift ではなく ⌥/Alt+↑↓（グリッドにフォーカスがある間、⌥↑↓ のトラック並べ替えは効かない。フォーカス外とトラックメニューは従来どおり）。
+  - **`list-cell-edit` モードを削除**。セル入力中の排他は text ターゲット判定（router と global shortcuts の両方）で既に成立している。フォーカスで切り替わるモードは `releaseAll()` で押さえている音を切り、元のモードの復元が ⌥K/⌥P/Esc と衝突し、状態表示から実際のモードが消える。代わりにセル入力中は「セル入力中（鍵盤は鳴りません）」をリストに表示する。
+  - **全列編集**: NOTE 列は音名（`C4` `c#4` `Db3`）、`CC7` / `PC5` / `PB` / `CP` / `PP C4`、裸の数値（行の種類で意味が決まる）を受け付ける（`core/list/listName.ts`）。同じ種類なら自分のフィールドを変え、違う種類なら**変換**する。新しい CH 列は `channelOverride`（トラックと同じ値は「なし」に正規化）。raw 行は編集も変換もしない（規則 3）。フィルター中に禁止するのは ST だけ（他の列は見えない行を動かさない）。複数行選択中の入力は現在行だけに適用し、一括は「選択行の一括変更…」に誘導する（ST の連鎖リップルを避ける）。
+  - **種類の変換**は `operations.ts` の `rewriteEvents` / `replaceEvent` で id と originOrder を保つ（選択、クリップ所属、同 tick の順序が残る）。引き継ぐのは tick、channelOverride、7bit 値（velocity ↔ value ↔ pressure）、音高（note ↔ poly pressure）。既定値は挿入と共通（`eventDefaults`: グリッド幅の GT、既定ベロシティ、直前の CC 番号、`controllerAt` / `programAt` の値）。SysEx / Meta への変換はバイト列を明示したときだけ。
+  - **挿入 ▾**（Insert / ⌥Enter、頭文字で選択: `MenuItem.accessKey`）: Note / CC / Program / Pitch Bend / Channel Pressure / Poly Pressure / SysEx… / Meta… と「セット」（バンク + 音色、RPN ピッチベンドレンジ / ファインチューン / コースチューン、NRPN、GS Reset）。セットは 1 コマンドで送出順に入る。挿入後はカーソルを新しい行の NOTE 列（セットは VEL 列）に置く。
+  - **SysEx / Meta ダイアログ**（`EventBytesDialog`）: GS は `GS_PARAMS` のテンプレート（検索、パート系はチャンネル、min..max の値、`format` のプレビュー）からバイト列とチェックサムを組み、16 進欄はそのまま編集可。前回のテンプレート・チャンネル・値はアプリ内で覚える（楽曲には保存しない）。Meta はテキスト（UTF-8）か 16 進。0x51 / 0x58 / 0x59 / 0x06 / 0x2F はコンダクターの正本と衝突するので拒否する。16 進欄は `HexBytesField` として SysEx インスペクターと共用。
+  - **増減**: `+`/`-`（numpad 含む）で 1 単位、⌥↑↓ で 10（K# は 12）。ST/GT/TICK の 1 単位は native で 1 tick、Classic 48 で `ppq/48` tick（`ppq % 48 !== 0` なら拒否）。縦ドラッグ（マウスのみ、6 px = 1 単位、Shift ×10）。同じセルへの連続操作は `mergeKey`（`list-nudge:{id}:{col}` / `list-drag:…`）で 1 回の取り消しにまとめる（方向が変わっても同じセルなら同じ段階。別のセルに移ると新しい段階）。
+  - **Enter 後の移動**（下 / 右 / 動かない）、⇧Enter で上、Tab / ⇧Tab で右 / 左。⌘/Ctrl+Enter で列ごとの前回値を繰り返す。
+  - **一括変更**（`core/list/listTransform.ts`）: 位置シフト、GT 固定 / 比率、チャンネル、値の設定 / 加算（ノートは `editVelocities`、他は種類ごとの範囲に収める）、K# の設定。移調 / クオンタイズ / ヒューマナイズ / ベロシティ比率は右クリックの `noteMenuItems` 経由で既存ダイアログを使う。
+  - **鍵盤からの音高入力**: 鍵盤 / パッドモードでグリッドにフォーカスがあり、Recorder が `idle` のとき、note-on が現在行の K#（設定で VEL も）を書き換え、設定で次の K# のある行へ進む（間の CC 行は飛ばす）。和音は押した順に 1 行ずつ。録音中は Recorder が入力を所有し、リストは何もしない（二重書き込み防止）。ステップモードは StepController が書くので対象外。
+  - **ステップ連動**: ステップモード中、リストのカーソルは `lastRowAtOrBefore(ticks, step.cursor)` の行に追従し、ユーザーが行を動かすと `step.setCursor(row.tick)`（同 tick ガードで往復を防ぐ。`lastStep` がリセットされタイ / 取消の対象が消えるのは「再生位置へ」ボタンと同じ）。
+  - **設定** `settings.list { enterMoves, captureAdvance, captureVelocity }` を楽曲に保存（`listDisplayUnit` と同じ扱い）。
+- **見送った案**: フォーカスで切り替わる `list-cell-edit` モード（上記）。複数行の ST を同時に編集（リップルが連鎖して予測できない）。既存の各ダイアログを 1 つの巨大ダイアログに統合（増やさず再利用）。Shift で ×10（JIS で `+` 自体が Shift を使う）。
+- **互換性影響**: `settings.list` は省略可能で、古い楽曲は既定値で開く。`InputMode` から `list-cell-edit` が消えた（設定や楽曲には保存されていない）。`noteName` は `core/list/noteNames.ts` に移動（`listRows.ts` から re-export）。
+- **検証**: unit `list-names.test.ts`（LIST-01）、`list-convert.test.ts`（LIST-02/03）、`list-keys.test.ts`（LIST-06）、`list-nudge.test.ts`（LIST-04/12）、`list-transform.test.ts`（LIST-09）。E2E `list-editing.spec.ts`（LIST-04/05/09/10/11/12）、`list-keys.spec.ts`（LIST-06）、`list-input.spec.ts`（LIST-07/08）、既存の `list-visual.spec.ts` は変更なしで緑。外部 MIDI 鍵盤からの取り込みは同じ `addSink` 経路だが実機では未検証。

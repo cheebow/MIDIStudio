@@ -98,8 +98,8 @@ export function EventBytesDialog({ state, trackId, onClose, onDone }: { state: B
           cmd = convertEventKinds(project, state.ids, { kind: 'meta', metaType: effectiveMetaType, bytes });
         }
       }
+      onDone(ids); // before the store update: the list picks the new row up on that very render
       if (cmd) store.run(cmd, ids.length ? { select: ids } : {});
-      onDone(ids);
       onClose();
     } catch (e) {
       reportError((e as Error).message);

@@ -17,7 +17,7 @@ import { followState, lastRowAtOrBefore } from '../../core/list/follow';
 import { eventChannel } from '../../core/events/order';
 import { isClassic48Lossless } from '../../core/timing/classic48';
 import { useEditActions, useEditorState, useServices } from '../../app/store/context';
-import { useContextMenu } from '../menu/ContextMenu';
+import { isSecondaryClick, useContextMenu } from '../menu/ContextMenu';
 import { noteMenuItems } from '../menu/editMenus';
 import type { MenuItem } from '../menu/MenuBar';
 import { useSignatureMap } from '../hooks';
@@ -389,6 +389,7 @@ export function ListEditor() {
   const insertTick = () => (cur ? cur.tick : stepMode ? step.cursor : Math.round(transport.getPosition().tick));
 
   function doInsert(kind: InsertKind) {
+    gridRef.current?.focus();
     try {
       const r = insertListEvent(store.project, track!.id, insertTemplate(store.project, track!, kind, { tick: insertTick(), pitchHint: cur?.key ?? null }));
       if (!r) return;
@@ -401,6 +402,7 @@ export function ListEditor() {
   }
 
   function doInsertSet(set: InsertSet) {
+    gridRef.current?.focus();
     try {
       const r = insertSet(store.project, track!.id, set, { tick: insertTick() });
       if (!r) return;
@@ -426,6 +428,7 @@ export function ListEditor() {
   const targetIds = (): string[] => (cur && selection.eventIds.has(cur.id) && selection.eventIds.size > 1 ? [...selection.eventIds] : cur ? [cur.id] : []);
 
   function doConvert(target: ConvertTarget) {
+    gridRef.current?.focus();
     try {
       const cmd = convertEventKinds(store.project, targetIds(), target);
       if (cmd) store.run(cmd);
@@ -637,6 +640,7 @@ export function ListEditor() {
                     data-testid="list-row"
                     onPointerDown={(e) => {
                       gridRef.current?.focus();
+                      if (isSecondaryClick(e)) return; // the context-menu handler keeps a multi-row selection
                       const col = ((e.target as HTMLElement).dataset.col as Col | undefined) ?? cursor.col;
                       setEditing(null);
                       moveCursor(i, col, e.shiftKey);

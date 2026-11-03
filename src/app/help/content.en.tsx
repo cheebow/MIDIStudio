@@ -28,6 +28,7 @@ export const SHORTCUTS_EN: [string, string][] = [
   [`${ALT}K / ${ALT}P`, 'PC keyboard / drum pad input mode (again to go back to editing)'],
   ['Keyboard mode: ↑ ↓ / Tab', 'Octave / sustain while held'],
   ['Step input: → ← - Backspace', 'Rest / back / tie / undo the last step'],
+  ['List: + - / ⌥↑↓ / ⌘Enter / Insert', 'Step a value by 1 / by 10 / repeat the last value / insert menu'],
   ['Esc', 'Back to edit mode, clear the selection'],
   ['F1', 'This help'],
   ['↑ ↓ / ← → (piano roll)', 'Move a semitone (Shift: an octave) / move by one grid step'],
@@ -129,10 +130,19 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
               <td>VEL</td>
               <td>Velocity, or the CC value</td>
             </tr>
+            <tr>
+              <td>CH / TICK</td>
+              <td>Channel (* when it differs from the track) / absolute position</td>
+            </tr>
           </tbody>
         </table>
         <ul>
-          <li>Move with ↑↓←→ / Tab, start editing with Enter or a digit, confirm with Enter, cancel with Esc. Shift+↑↓ selects several rows.</li>
+          <li>Move with ↑↓←→ / Tab, start editing with Enter or a digit, confirm with Enter, cancel with Esc. Shift+↑↓ selects several rows. “Enter moves to” chooses where the cursor goes after confirming.</li>
+          <li>The NOTE column takes note names (C4, F#3) or CC7 / PC5 / PB / CP / PP C4. Writing CC7 on a note row turns that row into a CC (same position).</li>
+          <li>+ / - step by 1, ⌥↑↓ (Alt+↑↓) by 10 (one octave for K#), and numeric cells can be dragged vertically. ⌘Enter (Ctrl+Enter) repeats the last value.</li>
+          <li>“Insert ▾” (Insert / ⌥Enter) adds anything else; the first letter picks an item (C for CC, P for Program…). “Sets” hold Bank + Program, RPN, NRPN and GS Reset. SysEx can be built from GS templates.</li>
+          <li>In the keyboard mode (⌥K) with the list focused, a played key goes into the K# of the current row and the cursor moves on (Recomposer-style entry). During step input the cursor follows the step position.</li>
+          <li>Right-click for type conversion, transpose, quantize and “Change selected rows…” (shift, GT, channel, value, K#).</li>
           <li>Changing ST moves the events after it (ripple). GT changes only that note.</li>
           <li>Units can be ticks or ♩=48 (Recomposer style). Values that do not divide evenly are shown as fractions.</li>
           <li>The filter narrows the list to notes only, CC only and so on.</li>
