@@ -488,7 +488,7 @@ export default function App() {
 
   const services: AppServices = { store, transport, adapter, input, step, recorder, audioReady: audioPhase === 'ready', reportError: setError };
   const setMode = (m: InputMode) => input.setMode(m);
-  const MODE_LABEL: Record<InputMode, string> = { 'edit-shortcuts': t('編集（ショートカット）'), 'piano-performance': t('PC 鍵盤'), 'drum-performance': t('ドラムパッド'), 'step-piano': t('ステップ（鍵盤）'), 'step-drums': t('ステップ（ドラム）'), 'list-cell-edit': t('リスト入力') };
+  const MODE_LABEL: Record<InputMode, string> = { 'edit-shortcuts': t('編集（ショートカット）'), 'piano-performance': t('PC 鍵盤'), 'drum-performance': t('ドラムパッド'), 'step-piano': t('ステップ（鍵盤）'), 'step-drums': t('ステップ（ドラム）') };
   const stepMode = inputState.mode === 'step-piano' || inputState.mode === 'step-drums';
   const noSel = selectedIds.length === 0;
   const settings = project.settings;

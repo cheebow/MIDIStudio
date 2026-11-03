@@ -15,6 +15,8 @@ export interface MenuItem {
   separator?: boolean;
   /** submenu entries; such an item has no action of its own */
   items?: MenuItem[];
+  /** one letter that activates the item while its menu is open (shown after the label) */
+  accessKey?: string;
 }
 
 export interface Menu {
@@ -141,6 +143,14 @@ export function MenuList({ items, onClose, onLeft, sub = false, autoFocusFirst =
           e.preventDefault();
           e.stopPropagation();
           onLeft();
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          // access key: activates the item (stopped here so an instrument mode never sounds it)
+          const k = items.findIndex((it) => it.accessKey && it.accessKey.toLowerCase() === e.key.toLowerCase() && !it.disabled && !it.separator);
+          if (k >= 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            listRef.current?.querySelector<HTMLButtonElement>(`[data-item="${k}"]`)?.click();
+          }
         }
       }}
     >
@@ -155,6 +165,7 @@ export function MenuList({ items, onClose, onLeft, sub = false, autoFocusFirst =
               }}
               role="menuitem"
               className="menu-item has-sub"
+              data-item={k}
               aria-haspopup="menu"
               aria-expanded={openSub?.k === k}
               disabled={it.disabled}
@@ -198,6 +209,7 @@ export function MenuList({ items, onClose, onLeft, sub = false, autoFocusFirst =
             key={k}
             role="menuitem"
             className="menu-item"
+            data-item={k}
             disabled={it.disabled}
             title={it.disabled && it.reason ? `${it.label}: ${it.reason}` : undefined}
             aria-description={it.disabled ? it.reason : undefined}
@@ -209,7 +221,7 @@ export function MenuList({ items, onClose, onLeft, sub = false, autoFocusFirst =
           >
             <span className="check">{it.checked ? '✓' : ''}</span>
             <span className="label">{it.label}</span>
-            <span className="shortcut">{it.shortcut ?? ''}</span>
+            <span className="shortcut">{it.shortcut ?? (it.accessKey ? it.accessKey.toUpperCase() : '')}</span>
           </button>
         ),
       )}

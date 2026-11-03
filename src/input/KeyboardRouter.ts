@@ -6,7 +6,7 @@
 // - releaseAll() on blur, visibility change, mode or key map change.
 import type { SavedInputPresets } from '../core/model/types';
 
-export type InputMode = 'edit-shortcuts' | 'piano-performance' | 'drum-performance' | 'step-piano' | 'step-drums' | 'list-cell-edit';
+export type InputMode = 'edit-shortcuts' | 'piano-performance' | 'drum-performance' | 'step-piano' | 'step-drums';
 
 export type MusicalInputEvent =
   | { type: 'note-on'; pitch: number; velocity: number; sourceId: string; atMs: number; target: 'piano' | 'drum' }
@@ -84,7 +84,7 @@ export class KeyboardRouter {
       return 'ignored';
     }
     if (k.targetKind === 'text' || k.targetKind === 'dialog') return 'ignored';
-    if (this._mode === 'edit-shortcuts' || this._mode === 'list-cell-edit') return 'ignored';
+    if (this._mode === 'edit-shortcuts') return 'ignored';
     if (k.ctrlKey || k.metaKey || k.altKey) return 'ignored'; // leave shortcuts alone
     const owner = this.ownerOf(k.code);
     if (!owner) return 'ignored';

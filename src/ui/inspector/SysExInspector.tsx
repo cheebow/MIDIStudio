@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { t } from '../../i18n';
 import { base64ToBytes } from '../../core/model/base64';
 import { decodeGs } from '../../core/gs/gsSysex';
-import { parseHexPayload, setGsValue, setSysExPayload } from '../../core/gs/gsProject';
+import { setGsValue, setSysExPayload } from '../../core/gs/gsProject';
+import { HexBytesField, hexFieldState, toHex } from './HexBytesField';
 import { useSignatureMap } from '../hooks';
 import { useEditorState, useServices } from '../../app/store/context';
 
@@ -26,7 +27,7 @@ export function SysExInspector() {
         if (e.kind !== 'sysex') return null;
         const bytes = base64ToBytes(e.dataBase64) ?? new Uint8Array();
         const gs = e.status === 'F0' ? decodeGs(bytes) : null;
-        const hex = Array.from(bytes, (b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+        const hex = toHex(bytes);
         return (
           <section key={e.id} className="sysex-item" data-testid="sysex-item">
             <div>
@@ -63,26 +64,22 @@ export function SysExInspector() {
               </div>
             )}
             {!gs && <div className="note">{t('解釈できない SysEx です。内容は変更せずに保存・書き出しします。')}</div>}
-            <label className="note">
-              {t('16進で編集（F0 の後ろから。F7 で終わる）')}
-              <input
-                className="hex-input"
-                value={hexEdit[e.id] ?? hex}
-                onChange={(ev) => setHexEdit({ ...hexEdit, [e.id]: ev.target.value })}
-                onBlur={() => {
-                  const text = hexEdit[e.id];
-                  if (text === undefined || text === hex) return;
-                  const parsed = parseHexPayload(text);
-                  if (!parsed) return reportError(t('16進数（00〜FF）をスペース区切りで入力してください。'));
-                  try {
-                    store.run(setSysExPayload(store.project, e.id, parsed));
-                    setHexEdit({ ...hexEdit, [e.id]: undefined as unknown as string });
-                  } catch (err) {
-                    reportError((err as Error).message);
-                  }
-                }}
-              />
-            </label>
+            <div
+              onBlur={() => {
+                const text = hexEdit[e.id];
+                if (text === undefined || text === hex) return;
+                const parsed = hexFieldState(text, e.status === 'F0');
+                if (!parsed.bytes) return reportError(parsed.error);
+                try {
+                  store.run(setSysExPayload(store.project, e.id, parsed.bytes));
+                  setHexEdit({ ...hexEdit, [e.id]: undefined as unknown as string });
+                } catch (err) {
+                  reportError((err as Error).message);
+                }
+              }}
+            >
+              <HexBytesField value={hexEdit[e.id] ?? hex} onChange={(text) => setHexEdit({ ...hexEdit, [e.id]: text })} sysex={e.status === 'F0'} />
+            </div>
           </section>
         );
       })}
