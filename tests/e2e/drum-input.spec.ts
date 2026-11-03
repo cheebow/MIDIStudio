@@ -98,3 +98,39 @@ test('key assignment dialog changes a pad key (saved with the project)', async (
   await page.keyboard.up('KeyM');
   await expect(page.getByTestId('dirty-state')).toHaveText('● 未保存');
 });
+
+test('Alt+drag in the drum editor duplicates the hit (also into another lane); plain drag moves it', async ({ page }) => {
+  await page.goto('/');
+  await menu(page, 'トラック', 'ドラムトラックにする');
+  await page.getByRole('tab', { name: 'ドラム' }).click();
+  await page.getByTestId('tool-draw').click();
+  const grid = (await page.getByTestId('drum-grid').boundingBox())!;
+  const kickY = await laneY(page, /^36 Bass Drum 1/);
+  await page.mouse.click(grid.x + 320 + 2, kickY);
+  expect(notesOf(await exportedSmf(page))).toEqual(['0:36']);
+  await page.getByTestId('tool-select').click();
+  // Alt+drag one beat (80 px) to the right: a copy at tick 480, the original stays
+  await page.keyboard.down('Alt');
+  await page.mouse.move(grid.x + 320 + 2, kickY);
+  await page.mouse.down();
+  await page.mouse.move(grid.x + 320 + 82, kickY, { steps: 5 });
+  await page.mouse.up();
+  await page.keyboard.up('Alt');
+  expect(notesOf(await exportedSmf(page)).sort()).toEqual(['0:36', '480:36']);
+  // Alt+drag the copy (still selected) one lane down and one beat right: a third hit on the next lane
+  const kick = (await page.getByTestId('drum-lane').filter({ hasText: /^36 Bass Drum 1/ }).first().boundingBox())!;
+  const below = page.getByTestId('drum-lane').nth((await page.getByTestId('drum-lane').allTextContents()).findIndex((t) => /^36 Bass Drum 1/.test(t)) + 1);
+  const belowText = (await below.textContent()) ?? '';
+  const belowPitch = Number(belowText.match(/^(\d+)/)?.[1]);
+  await page.keyboard.down('Alt');
+  await page.mouse.move(grid.x + 320 + 82, kickY);
+  await page.mouse.down();
+  await page.mouse.move(grid.x + 320 + 162, kickY + kick.height, { steps: 5 });
+  await page.mouse.up();
+  await page.keyboard.up('Alt');
+  expect(notesOf(await exportedSmf(page)).sort()).toEqual(['0:36', '480:36', `960:${belowPitch}`].sort());
+  // one undo step removes the last copy (position and lane together)
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
+  expect(notesOf(await exportedSmf(page)).sort()).toEqual(['0:36', '480:36']);
+});
+

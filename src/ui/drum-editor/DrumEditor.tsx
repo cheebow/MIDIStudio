@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { t } from '../../i18n';
 import { looseNoteIds } from '../../core/model/looseNotes';
-import { addEvents, deleteEvents, moveEvents, updateEvents, updateTrack } from '../../core/editing/operations';
+import { addEvents, deleteEvents, duplicateEvents, moveEvents, updateEvents, updateTrack } from '../../core/editing/operations';
 import { customizeDrumMap, hideLane, moveLane, renameLane, showAllLanes } from '../../core/editing/drumMapOps';
 import { BUILT_IN_DRUM_MAPS, drumLanes, findDrumMap, type DrumMapEntry } from '../../core/gm/drumMaps';
 import { gridTicks, snapTick } from '../../core/timing/grid';
@@ -27,7 +27,9 @@ const NAMES_W = 180;
 const RULER_H = 20;
 const HIT_PX = 6;
 
-type Drag = { kind: 'move'; anchor: NoteEvent; startX: number; startY: number; dTick: number; dLane: number } | { kind: 'box'; x0: number; y0: number; x1: number; y1: number } | LoopDrag;
+type Drag = { kind: 'move'; anchor: NoteEvent; startX: number; startY: number; dTick: number; dLane: number; duplicate: boolean } | { kind: 'box'; x0: number; y0: number; x1: number; y1: number } | LoopDrag;
+/** numbers the undo-merge keys of a duplicate drag (the copy and its lane change are one step) */
+let dragCounter = 0;
 
 export function DrumEditor() {
   const { store, transport, audioReady, step, input, recorder, reportError } = useServices();
@@ -159,6 +161,24 @@ export function DrumEditor() {
       ctx.stroke();
       ctx.lineWidth = 1;
       ctx.globalAlpha = 1;
+      if (drag?.kind === 'move' && drag.duplicate && sel) {
+        // Alt+drag: the original stays where it is, drawn faint
+        const ox = n.tick * pxPerTick - view.x;
+        const ol = laneOf.get(n.pitch);
+        if (ol !== undefined) {
+          const oy = RULER_H + ol * LANE_H - view.y + LANE_H / 2;
+          ctx.globalAlpha = 0.35;
+          ctx.fillStyle = drumColor(map, n.pitch);
+          ctx.beginPath();
+          ctx.moveTo(ox, oy - r);
+          ctx.lineTo(ox + r, oy);
+          ctx.lineTo(ox, oy + r);
+          ctx.lineTo(ox - r, oy);
+          ctx.closePath();
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      }
     }
     if (drag?.kind === 'box') {
       ctx.fillStyle = th.selection;
@@ -266,7 +286,7 @@ export function DrumEditor() {
         else sel.add(n.id);
       } else if (!sel.has(n.id)) sel = new Set([n.id]);
       store.selectEvents(sel);
-      setDrag({ kind: 'move', anchor: n, startX: x, startY: y, dTick: 0, dLane: 0 });
+      setDrag({ kind: 'move', anchor: n, startX: x, startY: y, dTick: 0, dLane: 0, duplicate: e.altKey }); // Alt: duplicate instead of move
       preview(n.pitch, n.velocity);
       return;
     }
@@ -290,7 +310,7 @@ export function DrumEditor() {
     if (drag.kind === 'move') {
       const raw = drag.anchor.tick + (x - drag.startX) / pxPerTick;
       const dTick = (settings.snapEnabled ? snapTick(raw + gridLen / 2, grid, 'floor').tick : Math.round(raw)) - drag.anchor.tick;
-      setDrag({ ...drag, dTick, dLane: Math.round((y - drag.startY) / LANE_H) });
+      setDrag({ ...drag, dTick, dLane: Math.round((y - drag.startY) / LANE_H), duplicate: drag.duplicate || e.altKey });
     } else setDrag({ ...drag, x1: x, y1: y });
   }
 
@@ -304,18 +324,29 @@ export function DrumEditor() {
     }
     if (d.kind === 'move' && (d.dTick !== 0 || d.dLane !== 0)) {
       const ids = [...selection.eventIds].filter((id) => notes.some((n) => n.id === id));
+      // the lane's pitch after the drag (moving between lanes sets the target lane's pitch explicitly)
+      const pitchAfter = (n: NoteEvent) => {
+        const li = laneOf.get(n.pitch);
+        const target = li === undefined ? undefined : lanes[Math.max(0, Math.min(lanes.length - 1, li + d.dLane))];
+        return target?.pitch ?? n.pitch;
+      };
+      if (d.duplicate) {
+        // Alt+drag: copies at the new place, the originals stay (one undo step with the lane change)
+        const r = duplicateEvents(store.project, ids, d.dTick, '複製');
+        if (!r) return;
+        const key = `dup-${++dragCounter}`;
+        store.run(r.command, { select: r.ids, mergeKey: key });
+        if (d.dLane !== 0) {
+          const copies = r.ids.map((id, i) => ({ id, changes: { pitch: pitchAfter(notes.find((n) => n.id === ids[i])!) } }));
+          store.run(updateEvents(store.project, copies, '複製'), { mergeKey: key });
+        }
+        return;
+      }
       if (d.dLane === 0) {
         store.run(moveEvents(store.project, ids, d.dTick));
         return;
       }
-      // Moving between lanes changes the pitch explicitly to the target lane's pitch.
-      const updates = ids
-        .map((id) => notes.find((n) => n.id === id)!)
-        .map((n) => {
-          const li = laneOf.get(n.pitch);
-          const target = li === undefined ? undefined : lanes[Math.max(0, Math.min(lanes.length - 1, li + d.dLane))];
-          return { id: n.id, changes: { tick: Math.max(0, n.tick + d.dTick), pitch: target?.pitch ?? n.pitch } };
-        });
+      const updates = ids.map((id) => notes.find((n) => n.id === id)!).map((n) => ({ id: n.id, changes: { tick: Math.max(0, n.tick + d.dTick), pitch: pitchAfter(n) } }));
       store.run(updateEvents(store.project, updates, 'ドラムノートを移動'));
     } else if (d.kind === 'box') {
       const ta = toTick(Math.min(d.x0, d.x1));
