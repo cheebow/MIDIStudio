@@ -138,7 +138,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
           </tbody>
         </table>
         <ul>
-          <li>Move with ↑↓←→ / Tab, start editing with Enter or a digit (Enter opens the cell with its value selected, so typing replaces it), confirm with Enter, cancel with Esc. Shift+↑↓ selects several rows. “Enter moves to” chooses where the cursor goes after confirming.</li>
+          <li>Move with ↑↓←→ / Tab, start editing with Enter or a digit (Enter opens the cell with its value selected, so typing replaces it), confirm with Enter, cancel with Esc. Shift+↑↓ selects several rows. “After Enter:” in the toolbar chooses where the cursor goes after confirming (Tab always goes to the next column).</li>
           <li>The NOTE column takes note names (C4, F#3) or CC7 / PC5 / PB / CP / PP C4. Writing CC7 on a note row turns that row into a CC (same position).</li>
           <li>+ / - step by 1, ⌥↑↓ (Alt+↑↓) by 10 (one octave for K#), and numeric cells can be dragged vertically. ⌘Enter (Ctrl+Enter) repeats the last value.</li>
           <li>“Insert ▾” (Insert / ⌥Enter) adds anything else; ⌥N / ⌥C / ⌥P / ⌥B / ⌥A / ⌥Y / ⌥S / ⌥M (Alt+letter) insert without the menu, even in the keyboard mode (the menu’s access keys). “Sets” hold Bank + Program, RPN, NRPN and GS Reset. SysEx can be built from GS templates.</li>

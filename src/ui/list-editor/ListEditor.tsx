@@ -602,9 +602,9 @@ export function ListEditor() {
           const r = duplicateEvents(store.project, selection.eventIds, 0);
           if (r) store.run(r.command, { select: r.ids });
         }}>{t('複製')}</button>
-        <label className="note">
-          {t('Enter で移動')}{' '}
-          <select value={settings.list.enterMoves} onChange={(e) => setList({ enterMoves: e.target.value as typeof settings.list.enterMoves })} aria-label={t('Enter で移動')}>
+        <label className="note" title={t('セルを Enter で確定したあと、カーソルをどこへ動かすか（Tab はいつも右の列へ）')}>
+          {t('確定後:')}{' '}
+          <select value={settings.list.enterMoves} onChange={(e) => setList({ enterMoves: e.target.value as typeof settings.list.enterMoves })} aria-label={t('Enter で確定したあとのカーソル')}>
             <option value="down">{t('下の行へ')}</option>
             <option value="right">{t('右の列へ')}</option>
             <option value="stay">{t('動かない')}</option>
