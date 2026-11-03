@@ -64,12 +64,16 @@ export function DrumEditor() {
     return s;
   }, [inputSnap.drumHeld, inputSnap.pianoHeld, auditionPitch]);
   const [renaming, setRenaming] = useState<number | null>(null);
+  /** part picked by a click on its name: the velocity lane shows only its notes (ADR-072, Cubase-style) */
+  const [focusPart, setFocusPart] = useState<{ trackId: string; pitch: number } | null>(null);
 
   const map = findDrumMap(track?.drumMapId, project.drumMaps);
   const notes = useMemo(() => (track ? track.events.filter((e): e is NoteEvent => e.kind === 'note') : []), [track]);
   const loose = useMemo(() => (track ? looseNoteIds(project, track) : new Set<string>()), [project, track]); // silent notes outside every clip (ADR-064)
   const lanes = useMemo(() => drumLanes(map, notes.map((n) => n.pitch), { onlyUsed }), [map, notes, onlyUsed]);
   const laneOf = useMemo(() => new Map(lanes.map((l, i) => [l.pitch, i])), [lanes]);
+  // only while that part is on screen in this track (another track, or the lane hidden: all parts again)
+  const focusLane = focusPart && track && focusPart.trackId === track.id ? lanes.find((l) => l.pitch === focusPart.pitch) : undefined;
   const ppq = project.ppq;
   const pxPerTick = settings.pianoRollZoom / ppq;
   const grid = useMemo(() => gridTicks(ppq, settings.grid), [ppq, settings.grid]);
@@ -447,7 +451,7 @@ export function DrumEditor() {
                 <div style={{ height: RULER_H }} />
                 <div style={{ transform: `translateY(${-view.y}px)` }}>
                   {lanes.map((l) => (
-                    <div key={l.pitch} className={`drum-lane-name${heldPitches.has(l.pitch) ? ' held' : ''}${playingPitches.has(l.pitch) ? ' playing' : ''}`} style={{ height: LANE_H }} data-testid="drum-lane" data-pitch={l.pitch}>
+                    <div key={l.pitch} className={`drum-lane-name${heldPitches.has(l.pitch) ? ' held' : ''}${playingPitches.has(l.pitch) ? ' playing' : ''}${focusLane?.pitch === l.pitch ? ' focused' : ''}`} style={{ height: LANE_H }} data-testid="drum-lane" data-pitch={l.pitch}>
                       {renaming === l.pitch ? (
                         <input
                           autoFocus
@@ -460,7 +464,14 @@ export function DrumEditor() {
                           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
                         />
                       ) : (
-                        <button className="lane-name" title={t('クリックで試聴、ダブルクリックで名前を変更')} onClick={() => preview(l.pitch, l.defaultVelocity)} onDoubleClick={() => setRenaming(l.pitch)}>
+                        <button
+                          className="lane-name"
+                          aria-pressed={focusLane?.pitch === l.pitch}
+                          title={t('クリックで試聴し、下のベロシティをこのパーツだけにする。ダブルクリックで名前を変更')}
+                          onClick={() => {
+                            preview(l.pitch, l.defaultVelocity);
+                            setFocusPart({ trackId: track.id, pitch: l.pitch });
+                          }} onDoubleClick={() => setRenaming(l.pitch)}>
                           <span className="lane-swatch" style={{ background: drumColor(map, l.pitch) }} />
                           <span className="pitch">{l.pitch}</span> {l.name}
                         </button>
@@ -500,7 +511,7 @@ export function DrumEditor() {
         </div>
         <DrumPads map={map} />
       </div>
-      <ControllerLane track={track} viewX={view.x} width={gridW} offsetLeft={NAMES_W} pxPerTick={pxPerTick} snap={snap} noteColor={(p) => drumColor(map, p)} />
+      <ControllerLane track={track} viewX={view.x} width={gridW} offsetLeft={NAMES_W} pxPerTick={pxPerTick} snap={snap} noteColor={(p) => drumColor(map, p)} pitchFilter={focusLane ? { pitch: focusLane.pitch, name: focusLane.name, onClear: () => setFocusPart(null) } : null} />
       {ctxMenu.element}
     </div>
   );

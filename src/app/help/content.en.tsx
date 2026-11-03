@@ -83,7 +83,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
           <li>Tools: select (<K>V</K>) and draw (<K>P</K>). With the draw tool, a click places a note of the grid length; keep dragging to set its length.</li>
           <li>Drag a note’s middle to move it, its right edge to change its length, <K>{ALT}</K>+drag to duplicate, Shift+click to add to the selection. Drag on empty space for a rubber-band selection.</li>
           <li>Snap and the edit grid (1/1 to 1/64, triplets, dotted) are in the tool row. Hold <K>{MOD}</K> while dragging to ignore snap for that drag.</li>
-          <li>The lane below switches between Velocity, CC and Pitch Bend. Paint velocities by dragging; click to add CC / Pitch Bend points, then select, drag or Delete them.</li>
+          <li>The lane below switches between Velocity, CC and Pitch Bend. Paint velocities by dragging; click to add CC / Pitch Bend points, then select, drag or Delete them. Where notes start together (a chord), grab the dot on top of a bar to change only that note (with notes selected, painting changes only those).</li>
           <li>Edit › Notes: quantize (<K>Q</K> applies the edit grid at once, <K>Shift+Q</K> opens the dialog), humanize, velocity, align note lengths to the grid. The same commands are in a note’s right-click menu.</li>
           <li>Click the keyboard on the left to audition. Keys you play light up red; keys sounding during playback light up blue.</li>
           <li>Notes of the other tracks are shown faintly (ghost notes; toggle in the View menu).</li>
@@ -99,6 +99,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
         <ul>
           <li>Notes are placed in one lane per instrument. With the draw tool, a click enters a hit and another click removes it. With the select tool, drag to move (up or down to another lane), <K>{ALT}</K>+drag to duplicate, drag on empty space for a rubber-band selection.</li>
           <li>The drum map (GM / GS / user) changes only the lane names and order, never the note numbers. Double-click a lane name to rename it; right-click to hide or reorder lanes.</li>
+          <li>Click a lane name to audition it and show only that part in the velocity lane below (to shape just the snare, for example). “… only ×” at the top left of the lane shows every part again.</li>
           <li>Click the pads on the right to audition. In the “Pads” input mode the letter keys and the numeric keypad play them. The lane name on the left lights red while you hit a drum and blue while its notes sound during playback.</li>
           <li>Switch between the drum and melody displays with “Display” in the inspector or Track › “Make this a drum track”.</li>
         </ul>
