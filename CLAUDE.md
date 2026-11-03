@@ -16,7 +16,7 @@
 10. Phase順を守り、各段階の unit / integration / E2E / 手動試聴のうち該当項目を検証する。テストが未実施なら理由と影響を報告する。常に `npm run build`, `npm run typecheck`, `npm run lint`, `npm run test` を健全に保つ。
 11. 完了前に実行されたテストコマンド、結果、残る制限、手動試聴の可否を報告。できていないことを「完成」と表記しない。
 12. 実装途中の設計変更は `docs/DECISIONS.md` に日付・理由・選択肢・互換性影響・検証結果を記録。仕様書とテストも更新する。
-13. main へ push して公開するときは、そのたびに `package.json` の version を上げ（挙動が変わるなら minor、修正だけなら patch）、`CHANGELOG.md` に利用者向けの言葉で変更を書き、`vX.Y.Z` のタグを付けて `--tags` で push する（手順は `docs/DEVELOPMENT_GUIDE.md`）。
+13. ブランチ運用: 日々の作業は `develop` から切った作業ブランチで行い、PR は `develop` に向ける（GitHub の既定ブランチも `develop`）。`main` は公開版で、push すると GitHub Pages に配信される。公開は `develop` を `main` にマージするときに行い、そのたびに `package.json` の version を上げ（挙動が変わるなら minor、修正だけなら patch）、`CHANGELOG.md` に利用者向けの言葉で変更を書き、`vX.Y.Z` のタグを付けて `--tags` で push する（手順は `docs/DEVELOPMENT_GUIDE.md`）。
 
 ## Phase の実行方法
 

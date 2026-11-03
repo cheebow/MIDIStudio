@@ -131,14 +131,23 @@ BASE_PATH=/MIDIStudio/ npm run build        # GitHub Pages のサブパスの例
 - SoundFont は自サイトのコピーを配信する（GeneralUser GS のライセンスにより作者のダウンロードファイルへの直リンクは不可）。
 - 受入状況は `docs/ACCEPTANCE_REPORT.md`。
 
-### 版を上げる（公開のたびに）
+### ブランチ運用
 
-main へ push するたびに版を上げる。番号は `package.json` の `version` が正本で、ビルド時に `__APP_VERSION__` として「MIDI Studio について」に出る。
+- `develop`: 日々の作業の合流先。GitHub の既定ブランチなので PR は自動的にここへ向く。
+- `main`: 公開版。push すると `.github/workflows/pages.yml` が GitHub Pages に配信する。直接コミットせず、`develop` からのマージだけを入れる。
+- 作業は `develop` から切ったブランチで行い、PR を `develop` に出す。
+
+### 版を上げて公開する（develop → main）
+
+公開するたびに版を上げる。番号は `package.json` の `version` が正本で、ビルド時に `__APP_VERSION__` として「MIDI Studio について」に出る。
 
 ```bash
+git switch develop && git pull
 npm version minor --no-git-tag-version   # 操作や挙動が変わるとき。直すだけなら patch
 # CHANGELOG.md に利用者向けの言葉で変更を書く（ADR 番号を添える）
-git add -A && git commit -m "v0.3.0"
+git add -A && git commit -m "v0.3.0" && git push
+git switch main && git pull && git merge --ff-only develop   # 公開 = develop を main に取り込む
 git tag v0.3.0 && git push origin main --tags
+git switch develop
 ```
 
