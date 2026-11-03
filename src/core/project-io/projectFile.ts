@@ -7,6 +7,7 @@ import { defaultInputPresets, defaultViewSettings } from '../model/defaults';
 import type { HumanizeSettings, MidiProject, ProjectViewSettings, QuantizeSettings, RecordingSettings, TmSettings } from '../model/types';
 import { SMF_LIMITS } from '../smf/types';
 import { t } from '../../i18n';
+import { adoptLooseNotes } from '../editing/operations';
 
 export const PROJECT_FILE_FORMAT = 'midi-studio-project';
 export const CURRENT_SCHEMA_VERSION = 1;
@@ -67,11 +68,11 @@ export function parseProjectFile(text: string): ProjectParseResult {
   if (errors.length > 0) return { ok: false, errors };
   const loaded = env.project as MidiProject;
   // Settings and key maps gain fields over time; missing ones fall back to defaults.
-  const project: MidiProject = {
+  const project: MidiProject = adoptLooseNotes({
     ...loaded,
     settings: sanitizeSettings(loaded.settings as unknown, defaultViewSettings(loaded.ppq), new Set(loaded.tracks.map((t) => t.id))),
     inputPresets: { ...defaultInputPresets(), ...loaded.inputPresets },
-  };
+  }); // notes outside every clip would be silent (ADR-064): older files get clips around them
   return { ok: true, project, ...(from !== CURRENT_SCHEMA_VERSION ? { migratedFrom: from } : {}) };
 }
 

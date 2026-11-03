@@ -23,10 +23,9 @@ function song(): MidiProject {
 /** An edit the engine applies at once even while playing (ADR-048): the loop range changes. */
 const edit = (p: MidiProject, n = 1): MidiProject => ({ ...p, loop: { enabled: true, startTick: 0, endTick: 1920 * (4 + n) } });
 /** A content edit (a note added far after the song): while playing it waits for a stop / seek / loop wrap (ADR-048). */
-const noteEdit = (p: MidiProject, n = 1): MidiProject => ({
-  ...p,
-  tracks: p.tracks.map((tr, i) => (i === 1 ? { ...tr, events: [...tr.events, { id: `added${n}`, kind: 'note', tick: 4800 + n * 10, pitch: 60, velocity: 100, durationTicks: 10, releaseVelocity: 0, originOrder: 1000 + n }] } : tr)) as MidiProject['tracks'],
-});
+const noteEdit = (p: MidiProject, n = 1): MidiProject =>
+  // through addEvents, so the note gets a clip (a note outside every clip is silent, ADR-064)
+  applyCommand(p, addEvents(p, p.tracks[1].id, [{ kind: 'note', tick: 4800 + n * 10, pitch: 60, velocity: 100, durationTicks: 10, releaseVelocity: 0 }])!.command).project;
 
 describe('Transport', () => {
   it('P01: play / pause / stop keep state consistent and silence notes', async () => {

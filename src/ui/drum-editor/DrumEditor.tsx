@@ -3,6 +3,7 @@
 // only labels pitches (changing the map never changes Note.pitch).
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { t } from '../../i18n';
+import { looseNoteIds } from '../../core/model/looseNotes';
 import { addEvents, deleteEvents, moveEvents, updateEvents, updateTrack } from '../../core/editing/operations';
 import { customizeDrumMap, hideLane, moveLane, renameLane, showAllLanes } from '../../core/editing/drumMapOps';
 import { BUILT_IN_DRUM_MAPS, drumLanes, findDrumMap, type DrumMapEntry } from '../../core/gm/drumMaps';
@@ -47,6 +48,7 @@ export function DrumEditor() {
 
   const map = findDrumMap(track?.drumMapId, project.drumMaps);
   const notes = useMemo(() => (track ? track.events.filter((e): e is NoteEvent => e.kind === 'note') : []), [track]);
+  const loose = useMemo(() => (track ? looseNoteIds(project, track) : new Set<string>()), [project, track]); // silent notes outside every clip (ADR-064)
   const lanes = useMemo(() => drumLanes(map, notes.map((n) => n.pitch), { onlyUsed }), [map, notes, onlyUsed]);
   const laneOf = useMemo(() => new Map(lanes.map((l, i) => [l.pitch, i])), [lanes]);
   const ppq = project.ppq;
@@ -142,6 +144,7 @@ export function DrumEditor() {
       const x = tick * pxPerTick - view.x;
       const y = RULER_H + lane * LANE_H - view.y + LANE_H / 2;
       const r = 5 + (n.velocity / 127) * 2;
+      ctx.globalAlpha = loose.has(n.id) ? 0.35 : 1; // loose: drawn faint, not played
       ctx.fillStyle = drumColor(map, n.pitch);
       ctx.beginPath();
       ctx.moveTo(x, y - r);
@@ -155,12 +158,13 @@ export function DrumEditor() {
       ctx.lineWidth = sel ? 3 : 0.6;
       ctx.stroke();
       ctx.lineWidth = 1;
+      ctx.globalAlpha = 1;
     }
     if (drag?.kind === 'box') {
       ctx.fillStyle = th.selection;
       ctx.fillRect(Math.min(drag.x0, drag.x1), Math.min(drag.y0, drag.y1), Math.abs(drag.x1 - drag.x0), Math.abs(drag.y1 - drag.y0));
     }
-  }, [track, notes, lanes, laneOf, view, gridW, totalH, pxPerTick, gridLen, sig, selection.eventIds, drag, map, project.loop, project.conductor, themeVersion]);
+  }, [track, notes, loose, lanes, laneOf, view, gridW, totalH, pxPerTick, gridLen, sig, selection.eventIds, drag, map, project.loop, project.conductor, themeVersion]);
 
   useAnimationLoop(() => {
     const canvas = overlayRef.current;

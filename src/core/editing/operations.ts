@@ -108,6 +108,21 @@ export function addEvents(project: MidiProject, trackId: TrackId, events: readon
   return { command: cmd(opts.label ?? 'イベントを追加', patch), ids };
 }
 
+/**
+ * Gives every loose note of the project a clip (ADR-064): projects saved before clips adopted new
+ * notes automatically (ADR-059 / 060) would otherwise go silent. Same bar-aligned rule as addEvents.
+ */
+export function adoptLooseNotes(project: MidiProject): MidiProject {
+  let clips = project.clips;
+  for (const track of project.tracks) {
+    const own = clips.filter((c) => c.trackId === track.id);
+    const inClip = new Set(own.flatMap((c) => c.eventIds));
+    const free = track.events.filter((e) => e.kind === 'note' && !inClip.has(e.id));
+    if (free.length) clips = [...clips, ...clipsAroundFreeEvents(project, track.id, own, free)];
+  }
+  return clips === project.clips ? project : { ...project, clips };
+}
+
 /** One new clip per gap between the track's existing clips that holds free events, on bar boundaries. */
 function clipsAroundFreeEvents(project: MidiProject, trackId: TrackId, own: readonly MidiClip[], free: readonly MidiEvent[]): MidiClip[] {
   const sig = new TimeSignatureMap(project.ppq, project.conductor.filter((c) => c.kind === 'time-signature'));

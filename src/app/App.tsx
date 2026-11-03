@@ -8,6 +8,7 @@ import { Metronome } from '../playback/Metronome';
 import { openMidiFile } from '../core/project-io/midiFile';
 import { exportSmfBytes } from '../core/project-io/exportSmf';
 import { parseProjectFile, serializeProject } from '../core/project-io/projectFile';
+import { looseNoteCount, withoutLooseNotes } from '../core/model/looseNotes';
 import { createStarterProject } from '../core/model/defaults';
 import type { MidiProject } from '../core/model/types';
 import type { ImportIssue } from '../core/smf/types';
@@ -301,9 +302,11 @@ export default function App() {
 
   function exportMidi() {
     const p = store.project;
-    const { bytes, warnings } = exportSmfBytes(p);
+    const loose = looseNoteCount(p);
+    const { bytes, warnings } = exportSmfBytes(withoutLooseNotes(p)); // what you hear is what you get (ADR-064)
     downloadBytes(bytes, safeFileName(p.title, 'mid'), 'audio/midi');
-    setInfo(warnings.length ? t('MIDI（SMF Format 1, PPQ {ppq}）を書き出しました。注意: {list}', { ppq: p.ppq, list: warnings.map((w) => t(w.message)).join(' / ') }) : t('MIDI（SMF Format 1, PPQ {ppq}）を書き出しました。', { ppq: p.ppq }));
+    const notes = [...warnings.map((w) => t(w.message)), ...(loose ? [t('クリップの外にあるノート {n} 個は鳴らないので含めていません', { n: loose })] : [])];
+    setInfo(notes.length ? t('MIDI（SMF Format 1, PPQ {ppq}）を書き出しました。注意: {list}', { ppq: p.ppq, list: notes.join(' / ') }) : t('MIDI（SMF Format 1, PPQ {ppq}）を書き出しました。', { ppq: p.ppq }));
   }
 
   // the hidden <input type=file> elements are clicked from menus / shortcuts

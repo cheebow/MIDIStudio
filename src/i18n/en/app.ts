@@ -297,4 +297,9 @@ export const EN_APP: Record<string, string> = {
   一覧とライセンス: 'List and licenses',
   詳細: 'Details',
   'GS の SysEx は保持・編集できますが、Roland SC-55 / SC-88Pro 実機の音色やエフェクトを再現するものではありません。「レコンポーザ」は株式会社カモンミュージックの製品名で、本アプリは同社とは無関係です。': 'GS SysEx is kept and editable, but the app does not reproduce the sounds or effects of real Roland SC-55 / SC-88Pro hardware. "Recomposer" is a product name of Come On Music Co., Ltd.; this app is not affiliated with them.',
+  // ADR-064: loose notes (outside every clip)
+  'クリップの外のノートを削除（{n} 個）': 'Delete notes outside clips ({n})',
+  クリップの外にノートはありません: 'There are no notes outside clips',
+  クリップの外のノートを削除: 'Delete notes outside clips',
+  'クリップの外にあるノート {n} 個は鳴らないので含めていません': '{n} notes outside clips are silent and were left out',
 };

@@ -26,7 +26,6 @@ export const EN_UI: Record<string, string> = {
   'クリップの範囲内に、クリップに属していないイベントはありません': 'There are no events inside the clip that do not belong to it',
   ここで分割: 'Split here',
   クリップの内側で右クリックしてください: 'Right-click inside the clip',
-  'クリップだけ解除（ノートは残す）': 'Remove the clip only (keep the notes)',
   ここに1小節のクリップを作成: 'Create a one-bar clip here',
   ここに貼り付け: 'Paste here',
   コピーしたノートやクリップがありません: 'Nothing copied (notes or clips)',
