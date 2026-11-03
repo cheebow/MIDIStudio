@@ -736,3 +736,12 @@ UI 側とコア／再生側を分けてコード全体を読み直し、確認�
 - **見送った案**: レーン名を Canvas に描き直す（名前の編集・並べ替えボタンが DOM にあるので、クラスを付けるだけで足りる）。
 - **互換性影響**: なし。
 - **検証**: E2E `drum-input.spec.ts`（パッドモードで M を押すと 36 のレーンだけが held になり、離すと消える）。再生中の表示は手動確認。
+
+## ADR-069 — 開発用依存の minimatch を overrides で 11 系に上げる（2026-11-03）
+
+- **背景**: プロジェクト全体のセキュリティ点検で、`npm audit` が moderate 11 件を報告した。すべて eslint / typescript-eslint が内部で使う `minimatch@10.2.6` の 1 件（GHSA-g3hv-75wg-m249、glob パターンの展開による DoS、修正は `>=11.0.1`）に行き着く。開発用の依存だけで、配布物（`dist/`）には入らない。本番用の依存（react / react-dom / spessasynth_*）は 0 件。
+- **決定**: `package.json` の `overrides` に `"minimatch": "^11.0.4"` を追加した。`npm audit fix` は eslint 10 系の指定（`minimatch@^10`）のため直せず、`--force` は eslint を 4.0.0 に下げる提案だったので使わない。minimatch 11 の動作環境は Node 20 / 22 以上で、CI（Node 22）とも合う。
+- **見送った案**: 放置する（開発環境だけの DoS で実害は小さいが、Dependabot を有効にしたので警告が残り続ける）。eslint を下げる（論外）。
+- **互換性影響**: 開発環境のみ。eslint / typescript-eslint が上流で minimatch 11 に上げたら、この override は外してよい。
+- **検証**: `npm audit` 0 件。lint が通り、パターン照合も壊れていない（`src/` に置いた違反ファイルは検出され、`dist/` は除外のまま）。typecheck / unit 285 / build / E2E 251 passed（22 skipped）。
+- **同じ日の GitHub 側の設定（リポジトリの外）**: Dependabot アラートと自動セキュリティ更新、Secret scanning と push protection を有効にした。`develop` / `main` は削除と強制 push を禁止（ルールセット「Protect develop and main」）。
