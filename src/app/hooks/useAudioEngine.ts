@@ -7,6 +7,7 @@ import { DEFAULT_SOUNDFONT_URL, fetchSoundFont } from '../../playback/SoundFontL
 import type { Transport } from '../../playback/Transport';
 import type { MidiInputAdapter } from '../../input/MidiInputAdapter';
 import { errorText } from '../errorText';
+import { t } from '../../i18n';
 
 export type AudioPhase = 'idle' | 'loading-soundfont' | 'ready';
 export type MidiSetupState = 'unknown' | 'granted' | 'prompt' | 'denied' | 'unsupported';
@@ -86,7 +87,7 @@ export function useAudioEngine({ adapter, transport, midi, blockers, setError }:
       () => setPrefetchState('done'),
       (e: unknown) => {
         setPrefetchState('failed');
-        setError(`${errorText(e)} ファイル → 「SoundFont を選ぶ」でローカルの .sf2 も使えます。`);
+        setError(t('{error} ファイル → 「SoundFont を選ぶ」でローカルの .sf2 も使えます。', { error: t(errorText(e)) }));
       },
     );
     return p;
@@ -101,7 +102,7 @@ export function useAudioEngine({ adapter, transport, midi, blockers, setError }:
       const buf = prefetch.current ?? startPrefetch();
       ensurePromise.current = loadBank(() => buf, 'GeneralUser GS v2.0.3').then(() => {
         ensurePromise.current = null;
-        if (!adapter.ready) throw new Error('音源を準備できませんでした。');
+        if (!adapter.ready) throw new Error(t('音源を準備できませんでした。'));
       });
       ensurePromise.current.catch(() => {
         ensurePromise.current = null;

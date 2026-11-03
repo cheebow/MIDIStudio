@@ -15,7 +15,8 @@ import { ExportWavDialog } from '../../ui/export/ExportWavDialog';
 import { useEditorState, useServices } from '../store/context';
 import { AboutDialog } from './HelpDialogs';
 import { HelpDialog } from '../help/HelpDialog';
-import { TUTORIAL_CHAPTERS } from '../help/tutorial';
+import { tutorialChapters } from '../help/tutorial';
+import { t } from '../../i18n';
 
 export type DialogKind = null | 'issues' | 'recent' | 'shortcuts' | 'about' | 'compat' | 'diagnostics' | 'keys' | 'record' | 'midi' | 'sysex' | 'quantize' | 'humanize' | 'velocity' | 'wav' | 'help' | 'tutorial' | { confirm: string; onYes: () => void };
 
@@ -26,13 +27,13 @@ export function AppDialogs({ dialog, setDialog, issues, recent, openRecent, midi
   if (!dialog) return null;
   if (typeof dialog === 'object') {
     return (
-      <Dialog title="確認" onClose={close}>
+      <Dialog title={t('確認')} onClose={close}>
         <p style={{ whiteSpace: 'pre-line' }}>{dialog.confirm}</p>
         <div className="row">
           <button className="primary" onClick={() => (close(), dialog.onYes())} data-testid="confirm-yes">
-            はい
+            {t('はい')}
           </button>
-          <button onClick={close}>キャンセル</button>
+          <button onClick={close}>{t('キャンセル')}</button>
         </div>
       </Dialog>
     );
@@ -40,11 +41,11 @@ export function AppDialogs({ dialog, setDialog, issues, recent, openRecent, midi
   switch (dialog) {
     case 'issues':
       return (
-        <Dialog title="読み込み時の注意" onClose={close}>
+        <Dialog title={t('読み込み時の注意')} onClose={close}>
           <ul className="issues">
             {issues.map((i, k) => (
               <li key={k} data-severity={i.severity}>
-                {i.message}
+                {t(i.message)}
               </li>
             ))}
           </ul>
@@ -52,9 +53,9 @@ export function AppDialogs({ dialog, setDialog, issues, recent, openRecent, midi
       );
     case 'recent':
       return (
-        <Dialog title="最近のプロジェクト（このブラウザ内）" onClose={close}>
+        <Dialog title={t('最近のプロジェクト（このブラウザ内）')} onClose={close}>
           {recent.length === 0 ? (
-            <p className="note">保存された曲はありません。</p>
+            <p className="note">{t('保存された曲はありません。')}</p>
           ) : (
             <ul className="saved-list">
               {recent.map((r) => (
@@ -68,20 +69,20 @@ export function AppDialogs({ dialog, setDialog, issues, recent, openRecent, midi
       );
     case 'record':
       return (
-        <Dialog title="録音の設定" onClose={close}>
+        <Dialog title={t('録音の設定')} onClose={close}>
           <RecordSettingsForm value={project.settings.recording} onChange={(v) => store.updateSettings({ recording: v })} />
-          <p className="note">録音先は R（録音待機）を押したトラックです。鍵盤用とドラム用にそれぞれ 1 トラックまで。録音は停止時に 1 回の操作として記録され、Undo で戻せます。</p>
+          <p className="note">{t('録音先は R（録音待機）を押したトラックです。鍵盤用とドラム用にそれぞれ 1 トラックまで。録音は停止時に 1 回の操作として記録され、Undo で戻せます。')}</p>
         </Dialog>
       );
     case 'midi':
       return (
-        <Dialog title="MIDI 入力の設定" onClose={close}>
+        <Dialog title={t('MIDI 入力の設定')} onClose={close}>
           <MidiInputSettings midi={midi} input={input} onChange={onMidiChange} />
         </Dialog>
       );
     case 'sysex':
       return (
-        <Dialog title="SysEx / イベントインスペクター" onClose={close}>
+        <Dialog title={t('SysEx / イベントインスペクター')} onClose={close}>
           <SysExInspector />
         </Dialog>
       );
@@ -95,14 +96,14 @@ export function AppDialogs({ dialog, setDialog, issues, recent, openRecent, midi
       return <ExportWavDialog soundFont={soundFont} onClose={close} />;
     case 'keys':
       return (
-        <Dialog title="キー割り当て" onClose={close}>
+        <Dialog title={t('キー割り当て')} onClose={close}>
           <KeyBindings presets={project.inputPresets} onChange={(p) => store.setInputPresets(p)} />
         </Dialog>
       );
     case 'help':
       return <HelpDialog onClose={close} />;
     case 'tutorial':
-      return <HelpDialog title="入門" sections={TUTORIAL_CHAPTERS} testId="tutorial-dialog" onClose={close} />;
+      return <HelpDialog title={t('入門')} sections={tutorialChapters()} testId="tutorial-dialog" onClose={close} />;
     case 'shortcuts':
       return <HelpDialog section="shortcuts" onClose={close} />;
     case 'compat':
@@ -111,18 +112,18 @@ export function AppDialogs({ dialog, setDialog, issues, recent, openRecent, midi
       return <AboutDialog onClose={close} />;
     case 'diagnostics':
       return (
-        <Dialog title="プロジェクト診断" onClose={close}>
+        <Dialog title={t('プロジェクト診断')} onClose={close}>
           <ul className="features">
-            <li data-ok={String(features.audioWorklet)}>AudioWorklet: {features.audioWorklet ? '利用可' : '利用不可'}</li>
-            <li data-ok={String(features.webMidi)}>Web MIDI: {features.webMidi ? '利用可' : '利用不可'}</li>
-            <li data-ok={String(features.indexedDb)}>IndexedDB: {features.indexedDb ? '利用可' : '利用不可'}</li>
+            <li data-ok={String(features.audioWorklet)}>AudioWorklet: {features.audioWorklet ? t('利用可') : t('利用不可')}</li>
+            <li data-ok={String(features.webMidi)}>Web MIDI: {features.webMidi ? t('利用可') : t('利用不可')}</li>
+            <li data-ok={String(features.indexedDb)}>IndexedDB: {features.indexedDb ? t('利用可') : t('利用不可')}</li>
           </ul>
           <p>
-            PPQ {project.ppq} / トラック {project.tracks.length} / イベント {project.tracks.reduce((n, t) => n + t.events.length, 0)} / テンポ・拍子等 {project.conductor.length}
+            {t('PPQ {ppq} / トラック {tracks} / イベント {events} / テンポ・拍子等 {conductor}', { ppq: project.ppq, tracks: project.tracks.length, events: project.tracks.reduce((n, tr) => n + tr.events.length, 0), conductor: project.conductor.length })}
           </p>
-          <p>raw として保持しているイベント: {project.tracks.reduce((n, t) => n + t.events.filter((e) => e.kind === 'raw').length, 0)} 件</p>
-          <p data-testid="synth-channels">音源のチャンネル数: {adapter.channelCount || '（音源未起動）'}</p>
-          {issues.length > 0 && <button onClick={() => setDialog('issues')}>直前の読み込み時の注意（{issues.length} 件）</button>}
+          <p>{t('raw として保持しているイベント: {n} 件', { n: project.tracks.reduce((n, tr) => n + tr.events.filter((e) => e.kind === 'raw').length, 0) })}</p>
+          <p data-testid="synth-channels">{t('音源のチャンネル数: {n}', { n: adapter.channelCount || t('（音源未起動）') })}</p>
+          {issues.length > 0 && <button onClick={() => setDialog('issues')}>{t('直前の読み込み時の注意（{n} 件）', { n: issues.length })}</button>}
         </Dialog>
       );
   }

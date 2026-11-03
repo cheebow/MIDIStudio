@@ -10,6 +10,7 @@ import { usePlaybackPosition, useTransportState } from './hooks/usePlayback';
 import { LoopIcon, MetronomeIcon } from '../ui/icons';
 import { useSignatureMap } from '../ui/hooks';
 import { SeekBar } from './SeekBar';
+import { t } from '../i18n';
 
 interface Props {
   transport: Transport;
@@ -61,10 +62,10 @@ export function TransportBar({ transport, project, audioReady, ensureAudio, metr
     const cur = conductorAt(project, kind, here);
     const name = KIND_NAMES[kind];
     ctxMenu.open({ clientX: r.left, clientY: r.bottom + 2, preventDefault: () => undefined }, [
-      ...(cur ? [{ label: `${name} ${conductorValueText(cur)}（${sig.format(cur.tick)} から）を変更…`, action: () => setConductorEdit({ kind, tick: cur.tick, id: cur.id }) }] : []),
-      { label: `${kind === 'tempo' ? '再生位置' : 'この小節'}に${name}の変化を追加…`, action: () => setConductorEdit({ kind, tick: at }) },
+      ...(cur ? [{ label: t('{name} {value}（{from} から）を変更…', { name: t(name), value: conductorValueText(cur), from: sig.format(cur.tick) }), action: () => setConductorEdit({ kind, tick: cur.tick, id: cur.id }) }] : []),
+      { label: t('{where}に{name}の変化を追加…', { where: kind === 'tempo' ? t('再生位置') : t('この小節'), name: t(name) }), action: () => setConductorEdit({ kind, tick: at }) },
       { separator: true, label: '' },
-      { label: 'コンダクタートラックを開く', action: () => store.updateSettings({ activePanel: 'tempo', editorCollapsed: false }) },
+      { label: t('コンダクタートラックを開く'), action: () => store.updateSettings({ activePanel: 'tempo', editorCollapsed: false }) },
     ]);
   };
 
@@ -78,26 +79,26 @@ export function TransportBar({ transport, project, audioReady, ensureAudio, metr
   };
 
   return (
-    <div className="transport" role="toolbar" aria-label="トランスポート">
-      <button onClick={() => transport.seek(0)} title="先頭へ" aria-label="先頭へ">⏮</button>
-      <button onClick={() => transport.stop()} title="停止" aria-label="停止" data-testid="transport-stop">■</button>
+    <div className="transport" role="toolbar" aria-label={t('トランスポート')}>
+      <button onClick={() => transport.seek(0)} title={t('先頭へ')} aria-label={t('先頭へ')}>⏮</button>
+      <button onClick={() => transport.stop()} title={t('停止')} aria-label={t('停止')} data-testid="transport-stop">■</button>
       <button
         className="primary"
         disabled={state.loading}
         onClick={() => run(() => ensureAudio().then(() => transport.togglePlay()))}
-        title={audioReady ? '再生 / 一時停止' : '再生（音源を準備してから再生します）'}
-        aria-label={playing ? '一時停止' : '再生'}
+        title={audioReady ? t('再生 / 一時停止') : t('再生（音源を準備してから再生します）')}
+        aria-label={playing ? t('一時停止') : t('再生')}
         data-testid="transport-play"
       >
         {playing ? '❚❚' : '▶'}
       </button>
       {record}
-      <label className="icon-toggle" title="ループ再生（小節の範囲を繰り返す）">
+      <label className="icon-toggle" title={t('ループ再生（小節の範囲を繰り返す）')}>
         <input type="checkbox" aria-label="LOOP" checked={project.loop.enabled} onChange={(e) => onLoopChange({ ...project.loop, enabled: e.target.checked })} />
         <LoopIcon />
       </label>
       <label className="note">
-        小節
+        {t('小節')}
         <input
           type="number"
           min={1}
@@ -124,26 +125,26 @@ export function TransportBar({ transport, project, audioReady, ensureAudio, metr
         {sig.format(tick)}
       </output>
       <output className="time">{formatTime(pos.seconds)}</output>
-      <button className="readout" data-testid="bpm-readout" title="テンポを変更・追加" aria-label={`テンポ ${bpm.toFixed(2)} BPM（クリックで変更）`} onClick={(e) => conductorMenu(e, 'tempo')}>
+      <button className="readout" data-testid="bpm-readout" title={t('テンポを変更・追加')} aria-label={t('テンポ {bpm} BPM（クリックで変更）', { bpm: bpm.toFixed(2) })} onClick={(e) => conductorMenu(e, 'tempo')}>
         BPM {bpm.toFixed(bpm % 1 ? 2 : 0)}
       </button>
-      <button className="readout" data-testid="signature-readout" title="拍子を変更・追加" aria-label={`拍子 ${ts.numerator}/${ts.denominator}（クリックで変更）`} onClick={(e) => conductorMenu(e, 'time-signature')}>
+      <button className="readout" data-testid="signature-readout" title={t('拍子を変更・追加')} aria-label={t('拍子 {num}/{den}（クリックで変更）', { num: ts.numerator, den: ts.denominator })} onClick={(e) => conductorMenu(e, 'time-signature')}>
         {ts.numerator}/{ts.denominator}
       </button>
       {ctxMenu.element}
       {conductorEdit && <ConductorEventDialog target={conductorEdit} onClose={() => setConductorEdit(null)} />}
-      <label className="icon-toggle" title="メトロノーム">
-        <input type="checkbox" aria-label="メトロノーム" checked={metronome} onChange={(e) => onMetronomeChange(e.target.checked)} />
+      <label className="icon-toggle" title={t('メトロノーム')}>
+        <input type="checkbox" aria-label={t('メトロノーム')} checked={metronome} onChange={(e) => onMetronomeChange(e.target.checked)} />
         <MetronomeIcon />
       </label>
-      <button onClick={() => transport.panic()} title="鳴っている音をすべて止める">Panic</button>
+      <button onClick={() => transport.panic()} title={t('鳴っている音をすべて止める')}>Panic</button>
       {state.pendingEdits && !state.loading && (
-        <span className="note pending-edits" data-testid="pending-edits" title="停止・シーク・ループの折り返しで反映します">
-          変更は停止後に反映
+        <span className="note pending-edits" data-testid="pending-edits" title={t('停止・シーク・ループの折り返しで反映します')}>
+          {t('変更は停止後に反映')}
         </span>
       )}
       <SeekBar transport={transport} project={project} sig={sig} endTick={Math.max(end, project.loop.endTick) + sig.ticksPerBar(0)} />
-      {state.loading && <span className="note">準備中…</span>}
+      {state.loading && <span className="note">{t('準備中…')}</span>}
     </div>
   );
 }

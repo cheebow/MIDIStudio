@@ -32,6 +32,7 @@ import { TransportBar } from './TransportBar';
 import { InputModeSwitch } from './InputModeSwitch';
 import { useThemePref } from './theme';
 import { useLocale } from '../i18n/react';
+import { t } from '../i18n';
 import { pianoRollZoomPatch } from '../ui/zoom';
 import { MOD_LABEL } from '../ui/platform';
 import { decodeShiftJis } from './textDecode';
@@ -70,7 +71,7 @@ export default function App() {
   const [svc] = useState(() => {
     const adapter = new SpessaAdapter(WORKLET_URL);
     const transport = new Transport(adapter);
-    const store = new EditorStore(createStarterProject({ title: '新しい曲' }));
+    const store = new EditorStore(createStarterProject({ title: t('新しい曲') }));
     const input = new InputController(transport, () => store.project, store.project.inputPresets);
     const step = new StepController(store, input);
     const metronome = new Metronome(adapter, () => {
@@ -84,7 +85,7 @@ export default function App() {
         onMessage: (m, dev, ts) => input.midiMessage(m, dev, ts),
         onDeviceLost: (dev, name) => {
           input.releaseSource(`midi:${dev}`);
-          setInfo(`MIDI 機器「${name}」が切断されました。鳴っていた音を止めました。`);
+          setInfo(t('MIDI 機器「{name}」が切断されました。鳴っていた音を止めました。', { name }));
         },
         onChange: () => setMidiRev((n) => n + 1),
       },
@@ -168,7 +169,7 @@ export default function App() {
       idle = null;
       const p = store.project;
       db.saveAutosave({ id: p.id, title: p.title, savedAt: new Date().toISOString(), json: serializeProject(p) }).catch((e: unknown) => {
-        setError(e instanceof StorageError ? `自動保存できませんでした: ${e.message}` : String(e));
+        setError(e instanceof StorageError ? t('自動保存できませんでした: {message}', { message: t(e.message) }) : String(e));
       });
     };
     const timer = setTimeout(() => {
@@ -218,8 +219,8 @@ export default function App() {
     if (c.song === 'restore' && restore) {
       const r = parseProjectFile(restore.json);
       setRestore(null);
-      if (r.ok) loadProject(r.project, { dirty: true, message: '自動保存から復元しました。保存するまで「未保存」のままです。' });
-      else setError(`自動保存のデータを読み込めませんでした: ${r.errors[0]}`);
+      if (r.ok) loadProject(r.project, { dirty: true, message: t('自動保存から復元しました。保存するまで「未保存」のままです。') });
+      else setError(t('自動保存のデータを読み込めませんでした: {error}', { error: t(r.errors[0]) }));
     } else if (restore) {
       setRestore(null);
       void db.clearAutosave().catch(() => undefined);
@@ -229,7 +230,7 @@ export default function App() {
 
   // ------------------------------------------------------------------ file actions
   const guardDirty = (then: () => void) => {
-    if (store.getState().dirty) setDialog({ confirm: '保存されていない変更があります。破棄して続けますか？', onYes: then });
+    if (store.getState().dirty) setDialog({ confirm: t('保存されていない変更があります。破棄して続けますか？'), onYes: then });
     else then();
   };
 
@@ -248,11 +249,11 @@ export default function App() {
   function importMidiBytes(bytes: Uint8Array, name: string, opts: { title?: string; silentIssues?: boolean } = {}) {
     const r = openMidiFile(bytes, { decodeText: decodeShiftJis });
     if (!r.ok) {
-      setError(`${name} を開けませんでした（現在の曲はそのままです）: ${r.errors.map((e) => e.message).join(' / ')}`);
+      setError(t('{name} を開けませんでした（現在の曲はそのままです）: {errors}', { name, errors: r.errors.map((e) => t(e.message)).join(' / ') }));
       return;
     }
-    const project = opts.title && r.project.title === '無題' ? { ...r.project, title: opts.title } : r.project;
-    loadProject(project, { message: `${name} を読み込みました（PPQ ${project.ppq}、${project.tracks.length} トラック）。` });
+    const project = opts.title && (r.project.title === '無題' || r.project.title === t('無題')) ? { ...r.project, title: opts.title } : r.project; // the import's default title, in either language
+    loadProject(project, { message: t('{name} を読み込みました（PPQ {ppq}、{n} トラック）。', { name, ppq: project.ppq, n: project.tracks.length }) });
     setIssues(r.issues);
     if (!opts.silentIssues && r.issues.some((i) => i.severity !== 'info')) setDialog('issues');
   }
@@ -266,18 +267,18 @@ export default function App() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       importMidiBytes(new Uint8Array(await res.arrayBuffer()), song.title, { title: song.title, silentIssues: true });
     } catch (e) {
-      setError(`サンプル曲「${song.title}」を読み込めませんでした: ${errorText(e)}`);
+      setError(t('サンプル曲「{title}」を読み込めませんでした: {error}', { title: song.title, error: t(errorText(e)) }));
     }
   }
 
   async function openProject(file: File) {
     const r = parseProjectFile(await file.text());
     if (!r.ok) {
-      setError(`${file.name} を開けませんでした（現在の曲はそのままです）: ${r.errors.slice(0, 5).join(' / ')}`);
+      setError(t('{name} を開けませんでした（現在の曲はそのままです）: {errors}', { name: file.name, errors: r.errors.slice(0, 5).map((m) => t(m)).join(' / ') }));
       return;
     }
     setIssues([]);
-    loadProject(r.project, { message: `${file.name} を開きました。` });
+    loadProject(r.project, { message: t('{name} を開きました。', { name: file.name }) });
   }
 
   async function saveToBrowser() {
@@ -286,7 +287,7 @@ export default function App() {
       await db.saveProject({ id: p.id, title: p.title, savedAt: new Date().toISOString(), json: serializeProject(p) });
       store.markSaved();
       await db.clearAutosave().catch(() => undefined);
-      setInfo(`「${p.title}」をブラウザ内に保存しました。`);
+      setInfo(t('「{title}」をブラウザ内に保存しました。', { title: p.title }));
     } catch (e) {
       setError(e instanceof StorageError ? e.message : String(e));
     }
@@ -302,7 +303,7 @@ export default function App() {
     const p = store.project;
     const { bytes, warnings } = exportSmfBytes(p);
     downloadBytes(bytes, safeFileName(p.title, 'mid'), 'audio/midi');
-    setInfo(`MIDI（SMF Format 1, PPQ ${p.ppq}）を書き出しました${warnings.length ? `。注意: ${warnings.map((w) => w.message).join(' / ')}` : '。'}`);
+    setInfo(warnings.length ? t('MIDI（SMF Format 1, PPQ {ppq}）を書き出しました。注意: {list}', { ppq: p.ppq, list: warnings.map((w) => t(w.message)).join(' / ') }) : t('MIDI（SMF Format 1, PPQ {ppq}）を書き出しました。', { ppq: p.ppq }));
   }
 
   // the hidden <input type=file> elements are clicked from menus / shortcuts
@@ -333,11 +334,11 @@ export default function App() {
     if (!rec) return;
     const r = parseProjectFile(rec.json);
     if (!r.ok) {
-      setError(`保存データが壊れています（現在の曲はそのままです）: ${r.errors.slice(0, 3).join(' / ')}`);
+      setError(t('保存データが壊れています（現在の曲はそのままです）: {errors}', { errors: r.errors.slice(0, 3).map((m) => t(m)).join(' / ') }));
       return;
     }
     setDialog(null);
-    loadProject(r.project, { message: `「${rec.title}」を開きました。` });
+    loadProject(r.project, { message: t('「{title}」を開きました。', { title: rec.title }) });
   }
 
   // ------------------------------------------------------------------ edit actions
@@ -379,16 +380,16 @@ export default function App() {
     paste: () =>
       tryRun(() => {
         const clip = store.getState().clipboard;
-        const t = currentTrack(store.project);
-        if (!clip || !t) return;
+        const trk = currentTrack(store.project);
+        if (!clip || !trk) return;
         const tick = Math.round(transport.getPosition().tick);
         if (clip.clips) {
           // regions go back to their own tracks; a track that is gone falls back to the selected one
-          const r = pasteClips(store.project, tick, clip, (c) => (store.project.tracks.some((x) => x.id === c.trackId) ? c.trackId : t.id));
+          const r = pasteClips(store.project, tick, clip, (c) => (store.project.tracks.some((x) => x.id === c.trackId) ? c.trackId : trk.id));
           if (r) runSelectingClips(r.command, r.clipIds);
           return;
         }
-        const r = pasteEvents(store.project, t.id, tick, clip);
+        const r = pasteEvents(store.project, trk.id, tick, clip);
         if (r) store.run(r.command, { select: r.ids });
       }),
     duplicate: () =>
@@ -419,7 +420,7 @@ export default function App() {
         try {
           store.run(quantizeNotes(store.project, store.getState().selection.eventIds, { grid }));
         } catch (e) {
-          setDialog({ confirm: `${(e as Error).message}\n丸めて実行しますか？`, onYes: () => store.run(quantizeNotes(store.project, store.getState().selection.eventIds, { grid, allowRounding: true })) });
+          setDialog({ confirm: `${t((e as Error).message)}\n${t('丸めて実行しますか？')}`, onYes: () => store.run(quantizeNotes(store.project, store.getState().selection.eventIds, { grid, allowRounding: true })) });
         }
       }),
     quantizeDialog: () => setDialog('quantize'),
@@ -463,7 +464,7 @@ export default function App() {
 
   const services: AppServices = { store, transport, adapter, input, step, recorder, audioReady: audioPhase === 'ready', reportError: setError };
   const setMode = (m: InputMode) => input.setMode(m);
-  const MODE_LABEL: Record<InputMode, string> = { 'edit-shortcuts': '編集（ショートカット）', 'piano-performance': 'PC 鍵盤', 'drum-performance': 'ドラムパッド', 'step-piano': 'ステップ（鍵盤）', 'step-drums': 'ステップ（ドラム）', 'list-cell-edit': 'リスト入力' };
+  const MODE_LABEL: Record<InputMode, string> = { 'edit-shortcuts': t('編集（ショートカット）'), 'piano-performance': t('PC 鍵盤'), 'drum-performance': t('ドラムパッド'), 'step-piano': t('ステップ（鍵盤）'), 'step-drums': t('ステップ（ドラム）'), 'list-cell-edit': t('リスト入力') };
   const stepMode = inputState.mode === 'step-piano' || inputState.mode === 'step-drums';
   const noSel = selectedIds.length === 0;
   const settings = project.settings;
@@ -494,7 +495,7 @@ export default function App() {
     tryRun,
     audioReady: audioPhase === 'ready',
     file: {
-      newProject: () => guardDirty(() => loadProject(createStarterProject({ title: '新しい曲' }))),
+      newProject: () => guardDirty(() => loadProject(createStarterProject({ title: t('新しい曲') }))),
       openProject: openProjectFile,
       openRecent: () => guardDirty(() => void showRecent()),
       saveToBrowser: () => void saveToBrowser(),
@@ -509,11 +510,11 @@ export default function App() {
   });
 
   const tabs: { id: MidiProject['settings']['activePanel']; label: string }[] = [
-    { id: 'piano-roll', label: 'ピアノロール' },
-    { id: 'drum', label: 'ドラム' },
-    { id: 'list', label: 'リスト' },
-    { id: 'mixer', label: 'ミキサー' },
-    { id: 'tempo', label: 'コンダクター' },
+    { id: 'piano-roll', label: t('ピアノロール') },
+    { id: 'drum', label: t('ドラム') },
+    { id: 'list', label: t('リスト') },
+    { id: 'mixer', label: t('ミキサー') },
+    { id: 'tempo', label: t('コンダクター') },
   ];
 
   return (
@@ -534,19 +535,19 @@ export default function App() {
             record={<RecordControls recorder={recorder} beforeStart={ensureAudio} onSettings={() => setDialog('record')} onError={setError} onMessage={setInfo} />}
           />
         </header>
-        <div className="toolbar toolbar-sub" role="toolbar" aria-label="入力と表示">
+        <div className="toolbar toolbar-sub" role="toolbar" aria-label={t('入力と表示')}>
           <div className="toolbar-group">
-            <span className="note">入力</span>
+            <span className="note">{t('入力')}</span>
             <InputModeSwitch mode={inputState.mode} setMode={setMode} drumTrack={selectedTrack?.displayMode === 'drum'} />
             {/* always rendered (disabled outside the PC-keyboard mode) so the toolbar never shifts */}
-            <span className="segmented" role="group" aria-label="PC 鍵盤">
-              <button disabled={inputState.mode !== 'piano-performance'} onClick={() => store.setInputPresets(shiftOctave(project.inputPresets, -1))} aria-label="オクターブを下げる" title="PC 鍵盤のオクターブを下げる（鍵盤モードのとき。↓ キーでも）">
+            <span className="segmented" role="group" aria-label={t('PC 鍵盤')}>
+              <button disabled={inputState.mode !== 'piano-performance'} onClick={() => store.setInputPresets(shiftOctave(project.inputPresets, -1))} aria-label={t('オクターブを下げる')} title={t('PC 鍵盤のオクターブを下げる（鍵盤モードのとき。↓ キーでも）')}>
                 Oct−<kbd className="mode-key">↓</kbd>
               </button>
-              <button disabled={inputState.mode !== 'piano-performance'} onClick={() => store.setInputPresets(shiftOctave(project.inputPresets, 1))} aria-label="オクターブを上げる" title="PC 鍵盤のオクターブを上げる（鍵盤モードのとき。↑ キーでも）">
+              <button disabled={inputState.mode !== 'piano-performance'} onClick={() => store.setInputPresets(shiftOctave(project.inputPresets, 1))} aria-label={t('オクターブを上げる')} title={t('PC 鍵盤のオクターブを上げる（鍵盤モードのとき。↑ キーでも）')}>
                 Oct+<kbd className="mode-key">↑</kbd>
               </button>
-              <button disabled={inputState.mode !== 'piano-performance'} className={input.sustain ? 'on' : ''} aria-pressed={input.sustain} onClick={() => input.setSustain(!input.sustain)} title="サステイン（CC64、鍵盤モードのとき）。このボタンは押すたびに切り替え、Tab キーは押している間だけ">
+              <button disabled={inputState.mode !== 'piano-performance'} className={input.sustain ? 'on' : ''} aria-pressed={input.sustain} onClick={() => input.setSustain(!input.sustain)} title={t('サステイン（CC64、鍵盤モードのとき）。このボタンは押すたびに切り替え、Tab キーは押している間だけ')}>
                 Sus<kbd className="mode-key">Tab</kbd>
               </button>
             </span>
@@ -555,50 +556,50 @@ export default function App() {
             {blockers.length > 0 ? (
               <span className="error-text">{blockers[0]}</span>
             ) : audioPhase === 'ready' ? (
-              <span className="note audio-ok" data-testid="audio-status" title={`音源: ${soundBankName ?? ''}${report ? `（プリセット ${report.presetCount} 個${report.missingPrograms.length > 0 ? `、GM で不足 ${report.missingPrograms.length} 音色` : ''}）` : ''}`}>
-                音源 ✓<span className="sr-only">{soundBankName}</span>
+              <span className="note audio-ok" data-testid="audio-status" title={t('音源: {name}{detail}', { name: soundBankName ?? '', detail: report ? t('（プリセット {n} 個{missing}）', { n: report.presetCount, missing: report.missingPrograms.length > 0 ? t('、GM で不足 {m} 音色', { m: report.missingPrograms.length }) : '' }) : '' })}>
+                {t('音源 ✓')}<span className="sr-only">{soundBankName}</span>
               </span>
             ) : prefetchState === 'failed' ? (
               <button className="primary" onClick={() => (startPrefetch(), void ensureAudio().catch(() => undefined))} data-testid="start-audio">
-                音源を再読み込み
+                {t('音源を再読み込み')}
               </button>
             ) : (
               <span className="note" data-testid="audio-loading">
                 {prefetchState === 'loading' || audioPhase === 'loading-soundfont'
-                  ? `音源: 読み込み中 ${progress === null ? '' : `${Math.round(progress * 100)}%`}`
-                  : '音源: 準備完了'}
+                  ? t('音源: 読み込み中 {pct}', { pct: progress === null ? '' : `${Math.round(progress * 100)}%` })
+                  : t('音源: 準備完了')}
               </span>
             )}
             <span className="sep" />
-            <button onClick={() => setTmOpen(true)} title="ビジュアルモード: レコンポーザ風リスト / 全トラックのピアノロール / 鍵盤で演奏を表示（T）" data-testid="open-tm">
-              ビジュアル
+            <button onClick={() => setTmOpen(true)} title={t('ビジュアルモード: レコンポーザ風リスト / 全トラックのピアノロール / 鍵盤で演奏を表示（T）')} data-testid="open-tm">
+              {t('ビジュアル')}
             </button>
           </div>
         </div>
 
         {restore && !showStartup && (
           <div className="banner" role="status">
-            前回の自動保存「{restore.title}」（{new Date(restore.savedAt).toLocaleString()}）があります。
+            {t('前回の自動保存「{title}」（{date}）があります。', { title: restore.title, date: new Date(restore.savedAt).toLocaleString() })}
             <button
               onClick={() =>
                 // replacing an edited song needs the same confirmation as File › 新規 / 開く
                 guardDirty(() => {
                   const r = parseProjectFile(restore.json);
                   setRestore(null);
-                  if (r.ok) loadProject(r.project, { dirty: true, message: '自動保存から復元しました。保存するまで「未保存」のままです。' });
-                  else setError(`自動保存のデータを読み込めませんでした: ${r.errors[0]}`);
+                  if (r.ok) loadProject(r.project, { dirty: true, message: t('自動保存から復元しました。保存するまで「未保存」のままです。') });
+                  else setError(t('自動保存のデータを読み込めませんでした: {error}', { error: t(r.errors[0]) }));
                 })
               }
             >
-              復元
+              {t('復元')}
             </button>
-            <button onClick={() => (setRestore(null), void db.clearAutosave().catch(() => undefined))}>破棄</button>
+            <button onClick={() => (setRestore(null), void db.clearAutosave().catch(() => undefined))}>{t('破棄')}</button>
           </div>
         )}
         {error && (
           <div className="banner error" role="alert" data-testid="error">
             {error}
-            <button onClick={() => setError(null)}>閉じる</button>
+            <button onClick={() => setError(null)}>{t('閉じる')}</button>
           </div>
         )}
 
@@ -609,7 +610,7 @@ export default function App() {
 
         {!settings.editorCollapsed && (
           <Splitter
-            label="下部エディターの高さ"
+            label={t('下部エディターの高さ')}
             height={settings.editorHeight ?? Math.round(window.innerHeight * 0.55)}
             min={160}
             max={Math.max(200, window.innerHeight - 220)}
@@ -619,32 +620,32 @@ export default function App() {
         )}
         <section
           className={`editor-panel${settings.editorCollapsed ? ' collapsed' : ''}`}
-          aria-label="エディター"
+          aria-label={t('エディター')}
           style={settings.editorCollapsed ? undefined : settings.editorHeight ? { flex: 'none', height: settings.editorHeight } : undefined}
         >
           <div className="tabs" role="tablist">
-            {tabs.map((t) => (
-              <button key={t.id} role="tab" aria-selected={settings.activePanel === t.id} className={settings.activePanel === t.id ? 'on' : ''} onClick={() => store.updateSettings({ activePanel: t.id, editorCollapsed: false })}>
-                {t.label}
+            {tabs.map((tab) => (
+              <button key={tab.id} role="tab" aria-selected={settings.activePanel === tab.id} className={settings.activePanel === tab.id ? 'on' : ''} onClick={() => store.updateSettings({ activePanel: tab.id, editorCollapsed: false })}>
+                {tab.label}
               </button>
             ))}
             {!settings.editorCollapsed && (settings.activePanel === 'piano-roll' || settings.activePanel === 'drum') && (
               <span className="editor-tools">
-                <span className="segmented" role="group" aria-label="ツール">
-                  <button aria-label="選択" aria-pressed={state.tool === 'select'} className={`icon-btn${state.tool === 'select' ? ' on' : ''}`} onClick={() => store.setTool('select')} title="選択ツール (V): クリックで選択、ドラッグで移動・範囲選択" data-testid="tool-select">
+                <span className="segmented" role="group" aria-label={t('ツール')}>
+                  <button aria-label={t('選択')} aria-pressed={state.tool === 'select'} className={`icon-btn${state.tool === 'select' ? ' on' : ''}`} onClick={() => store.setTool('select')} title={t('選択ツール (V): クリックで選択、ドラッグで移動・範囲選択')} data-testid="tool-select">
                     <SelectIcon />
                   </button>
-                  <button aria-label="描画" aria-pressed={state.tool === 'draw'} className={`icon-btn${state.tool === 'draw' ? ' on' : ''}`} onClick={() => store.setTool('draw')} title="描画ツール (P): クリックで入力（ドラムではもう一度クリックで削除）" data-testid="tool-draw">
+                  <button aria-label={t('描画')} aria-pressed={state.tool === 'draw'} className={`icon-btn${state.tool === 'draw' ? ' on' : ''}`} onClick={() => store.setTool('draw')} title={t('描画ツール (P): クリックで入力（ドラムではもう一度クリックで削除）')} data-testid="tool-draw">
                     <PencilIcon />
                   </button>
                 </span>
-                <label className="icon-toggle" title="スナップ（グリッドに合わせる）。Ctrl / ⌘ を押しながらのドラッグで一時的に無効">
+                <label className="icon-toggle" title={t('スナップ（グリッドに合わせる）。Ctrl / ⌘ を押しながらのドラッグで一時的に無効')}>
                   <input type="checkbox" aria-label="SNAP" checked={settings.snapEnabled} onChange={(e) => store.updateSettings({ snapEnabled: e.target.checked })} />
                   <SnapGridIcon />
-                  <span className="icon-text">スナップ</span>
+                  <span className="icon-text">{t('スナップ')}</span>
                 </label>
                 <select
-                  aria-label="グリッド"
+                  aria-label={t('グリッド')}
                   value={`${settings.grid.division}:${settings.grid.kind}`}
                   onChange={(e) => {
                     const [d, k] = e.target.value.split(':');
@@ -652,31 +653,31 @@ export default function App() {
                   }}
                 >
                   {GRID_DIVISIONS.flatMap((d) => (['straight', 'triplet', 'dotted'] as const).map((k) => ({ division: d, kind: k }))).map((g) => {
-                    const t = gridTicks(project.ppq, g);
+                    const gt = gridTicks(project.ppq, g);
                     return (
                       <option key={`${g.division}:${g.kind}`} value={`${g.division}:${g.kind}`}>
                         {gridLabel(g)}
-                        {t.den !== 1 ? '（Tick が割り切れません）' : ''}
+                        {gt.den !== 1 ? t('（Tick が割り切れません）') : ''}
                       </option>
                     );
                   })}
                 </select>
-                <span className="segmented zoom-buttons" role="group" aria-label="ピアノロールの拡大・縮小">
-                  <button onClick={() => store.updateSettings(pianoRollZoomPatch(settings, 'out'))} aria-label="ピアノロールを縮小" title={`横方向に縮小（${MOD_LABEL}+ホイールでも）`}>
+                <span className="segmented zoom-buttons" role="group" aria-label={t('ピアノロールの拡大・縮小')}>
+                  <button onClick={() => store.updateSettings(pianoRollZoomPatch(settings, 'out'))} aria-label={t('ピアノロールを縮小')} title={t('横方向に縮小（{mod}+ホイールでも）', { mod: MOD_LABEL })}>
                     −
                   </button>
-                  <button onClick={() => store.updateSettings(pianoRollZoomPatch(settings, 'in'))} aria-label="ピアノロールを拡大" title={`横方向に拡大（${MOD_LABEL}+ホイールでも）`}>
+                  <button onClick={() => store.updateSettings(pianoRollZoomPatch(settings, 'in'))} aria-label={t('ピアノロールを拡大')} title={t('横方向に拡大（{mod}+ホイールでも）', { mod: MOD_LABEL })}>
                     +
                   </button>
                 </span>
               </span>
             )}
-            <span className="note tab-track">{selectedTrack ? `編集中: ${selectedTrack.name}（${selectedTrack.port}${selectedTrack.channel + 1}）` : ''}</span>
+            <span className="note tab-track">{selectedTrack ? t('編集中: {name}（{port}{channel}）', { name: selectedTrack.name, port: selectedTrack.port, channel: selectedTrack.channel + 1 }) : ''}</span>
             <button
               className="collapse-btn"
               onClick={() => store.updateSettings({ editorCollapsed: !settings.editorCollapsed })}
-              aria-label={settings.editorCollapsed ? '下部エディターを開く' : '下部エディターを折り畳む'}
-              title={settings.editorCollapsed ? '開く' : '折り畳む'}
+              aria-label={settings.editorCollapsed ? t('下部エディターを開く') : t('下部エディターを折り畳む')}
+              title={settings.editorCollapsed ? t('開く') : t('折り畳む')}
               data-testid="editor-collapse"
             >
               {settings.editorCollapsed ? '▴' : '▾'}
@@ -696,14 +697,14 @@ export default function App() {
 
         <footer className="statusbar" aria-live="polite">
           <span data-testid="input-mode" className={inputState.mode !== 'edit-shortcuts' ? 'mode-active' : ''}>
-            入力: {MODE_LABEL[inputState.mode]}
-            {inputState.mode === 'piano-performance' ? `（オクターブ ${project.inputPresets.pianoOctaveShift >= 0 ? '+' : ''}${project.inputPresets.pianoOctaveShift}）` : ''}
-            {inputState.mode === 'piano-performance' || inputState.mode === 'drum-performance' ? '（Esc で編集へ）' : ''}
+            {t('入力: {mode}', { mode: MODE_LABEL[inputState.mode] })}
+            {inputState.mode === 'piano-performance' ? t('（オクターブ {shift}）', { shift: `${project.inputPresets.pianoOctaveShift >= 0 ? '+' : ''}${project.inputPresets.pianoOctaveShift}` }) : ''}
+            {inputState.mode === 'piano-performance' || inputState.mode === 'drum-performance' ? t('（Esc で編集へ）') : ''}
           </span>
-          <span data-testid="dirty-state">{dirty ? '● 未保存' : '保存済み'}</span>
+          <span data-testid="dirty-state">{dirty ? t('● 未保存') : t('保存済み')}</span>
           <span>PPQ {project.ppq}</span>
-          <span>{!features.webMidi ? 'Web MIDI: 利用できません — PCキーボード入力は使えます' : midi.state === 'granted' ? `MIDI 入力: ${midi.deviceList.filter((d) => d.state === 'connected' && d.enabled).length} 台` : 'MIDI 入力: 未接続（MIDI → MIDI 入力の設定）'}</span>
-          <span className="grow" data-testid="status-info">{info ?? (state.lastAction ? `最後の操作: ${state.lastAction}` : '')}</span>
+          <span>{!features.webMidi ? t('Web MIDI: 利用できません — PCキーボード入力は使えます') : midi.state === 'granted' ? t('MIDI 入力: {n} 台', { n: midi.deviceList.filter((d) => d.state === 'connected' && d.enabled).length }) : t('MIDI 入力: 未接続（MIDI → MIDI 入力の設定）')}</span>
+          <span className="grow" data-testid="status-info">{info ?? (state.lastAction ? t('最後の操作: {action}', { action: t(state.lastAction) }) : '')}</span>
         </footer>
 
         {tmOpen && <VisualMonitor onClose={() => setTmOpen(false)} />}

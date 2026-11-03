@@ -6,6 +6,7 @@ import { isValidPort } from '../model/ports';
 import { defaultInputPresets, defaultViewSettings } from '../model/defaults';
 import type { HumanizeSettings, MidiProject, ProjectViewSettings, QuantizeSettings, RecordingSettings, TmSettings } from '../model/types';
 import { SMF_LIMITS } from '../smf/types';
+import { t } from '../../i18n';
 
 export const PROJECT_FILE_FORMAT = 'midi-studio-project';
 export const CURRENT_SCHEMA_VERSION = 1;
@@ -39,26 +40,26 @@ export type ProjectParseResult = { ok: true; project: MidiProject; migratedFrom?
 const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record<string, unknown>> = {};
 
 export function parseProjectFile(text: string): ProjectParseResult {
-  if (text.length > MAX_PROJECT_FILE_CHARS) return { ok: false, errors: ['プロジェクトファイルが大きすぎます。'] };
+  if (text.length > MAX_PROJECT_FILE_CHARS) return { ok: false, errors: [t('プロジェクトファイルが大きすぎます。')] };
   let raw: unknown;
   try {
     raw = JSON.parse(text);
   } catch (e) {
-    return { ok: false, errors: [`JSON として読み込めません: ${(e as Error).message}`] };
+    return { ok: false, errors: [t('JSON として読み込めません: {message}', { message: (e as Error).message })] };
   }
   if (!isObject(raw) || raw.format !== PROJECT_FILE_FORMAT) {
-    return { ok: false, errors: ['MIDI Studio のプロジェクトファイル（.midstudio）ではありません。'] };
+    return { ok: false, errors: [t('MIDI Studio のプロジェクトファイル（.midstudio）ではありません。')] };
   }
   let version = raw.schemaVersion;
-  if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) return { ok: false, errors: ['schemaVersion が不正です。'] };
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) return { ok: false, errors: [t('schemaVersion が不正です。')] };
   if (version > CURRENT_SCHEMA_VERSION) {
-    return { ok: false, errors: [`このファイルは新しい版の MIDI Studio で保存されています（schema ${version}）。この版では schema ${CURRENT_SCHEMA_VERSION} までしか開けません。`] };
+    return { ok: false, errors: [t('このファイルは新しい版の MIDI Studio で保存されています（schema {version}）。この版では schema {current} までしか開けません。', { version, current: CURRENT_SCHEMA_VERSION })] };
   }
   const from = version;
   let env: Record<string, unknown> = raw;
   while (version < CURRENT_SCHEMA_VERSION) {
     const step = MIGRATIONS[version];
-    if (!step) return { ok: false, errors: [`schema ${version} からの移行処理がありません。`] };
+    if (!step) return { ok: false, errors: [t('schema {version} からの移行処理がありません。', { version })] };
     env = step(env);
     version++;
   }
@@ -159,140 +160,140 @@ export function validateProject(p: unknown): string[] {
   const err = (m: string) => {
     if (errors.length < 50) errors.push(m);
   };
-  if (!isObject(p)) return ['project がありません。'];
-  if (p.schemaVersion !== 1) err('project.schemaVersion が 1 ではありません。');
-  if (typeof p.id !== 'string' || p.id === '') err('project.id が不正です。');
-  if (typeof p.title !== 'string') err('project.title が不正です。');
-  if (!isInt(p.ppq, 1, 0x7fff)) err(`PPQ が不正です（${String(p.ppq)}）。`);
-  if (!isInt(p.nextOriginOrder, 0, Number.MAX_SAFE_INTEGER)) err('nextOriginOrder が不正です。');
+  if (!isObject(p)) return [t('project がありません。')];
+  if (p.schemaVersion !== 1) err(t('project.schemaVersion が 1 ではありません。'));
+  if (typeof p.id !== 'string' || p.id === '') err(t('project.id が不正です。'));
+  if (typeof p.title !== 'string') err(t('project.title が不正です。'));
+  if (!isInt(p.ppq, 1, 0x7fff)) err(t('PPQ が不正です（{ppq}）。', { ppq: String(p.ppq) }));
+  if (!isInt(p.nextOriginOrder, 0, Number.MAX_SAFE_INTEGER)) err(t('nextOriginOrder が不正です。'));
   const ids = new Set<string>();
   const uniqueId = (id: unknown, where: string) => {
-    if (typeof id !== 'string' || id === '') return err(`${where}: id が不正です。`);
-    if (ids.has(id)) err(`${where}: id "${id}" が重複しています。`);
+    if (typeof id !== 'string' || id === '') return err(t('{where}: id が不正です。', { where }));
+    if (ids.has(id)) err(t('{where}: id "{id}" が重複しています。', { where, id }));
     ids.add(id);
   };
   const tickOk = (e: Record<string, unknown>, where: string) => {
-    if (!isInt(e.tick, 0, MAX_TICK)) err(`${where}: tick が不正です。`);
-    if (typeof e.originOrder !== 'number' || !Number.isSafeInteger(e.originOrder)) err(`${where}: originOrder が不正です。`);
+    if (!isInt(e.tick, 0, MAX_TICK)) err(t('{where}: tick が不正です。', { where }));
+    if (typeof e.originOrder !== 'number' || !Number.isSafeInteger(e.originOrder)) err(t('{where}: originOrder が不正です。', { where }));
   };
   const b64Ok = (v: unknown, where: string) => {
-    if (typeof v !== 'string' || base64ToBytes(v) === null) err(`${where}: Base64 データが不正です。`);
+    if (typeof v !== 'string' || base64ToBytes(v) === null) err(t('{where}: Base64 データが不正です。', { where }));
   };
 
-  if (!Array.isArray(p.conductor)) err('conductor が配列ではありません。');
+  if (!Array.isArray(p.conductor)) err(t('conductor が配列ではありません。'));
   else
     p.conductor.forEach((c, i) => {
       const w = `conductor[${i}]`;
-      if (!isObject(c)) return err(`${w}: オブジェクトではありません。`);
+      if (!isObject(c)) return err(t('{w}: オブジェクトではありません。', { w }));
       uniqueId(c.id, w);
       tickOk(c, w);
       switch (c.kind) {
         case 'tempo':
-          if (!isInt(c.usPerQuarter, 1, 0xffffff)) err(`${w}: テンポ値が不正です。`);
+          if (!isInt(c.usPerQuarter, 1, 0xffffff)) err(t('{w}: テンポ値が不正です。', { w }));
           break;
         case 'time-signature':
-          if (!isInt(c.numerator, 1, 255) || !isInt(c.denominator, 1, 128) || (c.denominator & (c.denominator - 1)) !== 0) err(`${w}: 拍子が不正です。`);
+          if (!isInt(c.numerator, 1, 255) || !isInt(c.denominator, 1, 128) || (c.denominator & (c.denominator - 1)) !== 0) err(t('{w}: 拍子が不正です。', { w }));
           break;
         case 'key-signature':
-          if (!isInt(c.sharpsFlats, -7, 7) || typeof c.minor !== 'boolean') err(`${w}: 調号が不正です。`);
+          if (!isInt(c.sharpsFlats, -7, 7) || typeof c.minor !== 'boolean') err(t('{w}: 調号が不正です。', { w }));
           break;
         case 'marker':
-          if (typeof c.text !== 'string') err(`${w}: マーカー文字列が不正です。`);
+          if (typeof c.text !== 'string') err(t('{w}: マーカー文字列が不正です。', { w }));
           if (c.rawBase64 !== undefined) b64Ok(c.rawBase64, w);
           break;
         default:
-          err(`${w}: 未知の種類 "${String(c.kind)}" です。`);
+          err(t('{w}: 未知の種類 "{kind}" です。', { w, kind: String(c.kind) }));
       }
     });
 
-  if (!Array.isArray(p.conductorMeta)) err('conductorMeta が配列ではありません。');
+  if (!Array.isArray(p.conductorMeta)) err(t('conductorMeta が配列ではありません。'));
   else
     p.conductorMeta.forEach((m, i) => {
       const w = `conductorMeta[${i}]`;
-      if (!isObject(m) || m.kind !== 'meta') return err(`${w}: メタイベントではありません。`);
+      if (!isObject(m) || m.kind !== 'meta') return err(t('{w}: メタイベントではありません。', { w }));
       uniqueId(m.id, w);
       tickOk(m, w);
-      if (!isInt(m.metaType, 0, 127)) err(`${w}: metaType が不正です。`);
+      if (!isInt(m.metaType, 0, 127)) err(t('{w}: metaType が不正です。', { w }));
       b64Ok(m.dataBase64, w);
     });
 
   const eventTrack = new Map<string, string>();
-  if (!Array.isArray(p.tracks)) err('tracks が配列ではありません。');
+  if (!Array.isArray(p.tracks)) err(t('tracks が配列ではありません。'));
   else
-    p.tracks.forEach((t, ti) => {
+    p.tracks.forEach((tr, ti) => {
       const w = `tracks[${ti}]`;
-      if (!isObject(t)) return err(`${w}: オブジェクトではありません。`);
-      uniqueId(t.id, w);
-      if (typeof t.name !== 'string') err(`${w}: name が不正です。`);
-      if (typeof t.color !== 'string') err(`${w}: color が不正です。`);
-      if (!isValidPort(t.port)) err(`${w}: port が不正です。`);
-      if (!isInt(t.channel, 0, 15)) err(`${w}: channel が不正です（0..15）。`);
-      if (t.displayMode !== 'melodic' && t.displayMode !== 'drum') err(`${w}: displayMode が不正です。`);
-      for (const k of ['mute', 'solo', 'recordArm'] as const) if (typeof t[k] !== 'boolean') err(`${w}: ${k} が不正です。`);
-      if (t.endOfTrackTick !== undefined && !isInt(t.endOfTrackTick, 0, MAX_TICK)) err(`${w}: endOfTrackTick が不正です。`);
-      if (!Array.isArray(t.events)) return err(`${w}: events が配列ではありません。`);
-      t.events.forEach((e, ei) => {
+      if (!isObject(tr)) return err(t('{w}: オブジェクトではありません。', { w }));
+      uniqueId(tr.id, w);
+      if (typeof tr.name !== 'string') err(t('{w}: name が不正です。', { w }));
+      if (typeof tr.color !== 'string') err(t('{w}: color が不正です。', { w }));
+      if (!isValidPort(tr.port)) err(t('{w}: port が不正です。', { w }));
+      if (!isInt(tr.channel, 0, 15)) err(t('{w}: channel が不正です（0..15）。', { w }));
+      if (tr.displayMode !== 'melodic' && tr.displayMode !== 'drum') err(t('{w}: displayMode が不正です。', { w }));
+      for (const k of ['mute', 'solo', 'recordArm'] as const) if (typeof tr[k] !== 'boolean') err(t('{w}: {k} が不正です。', { w, k }));
+      if (tr.endOfTrackTick !== undefined && !isInt(tr.endOfTrackTick, 0, MAX_TICK)) err(t('{w}: endOfTrackTick が不正です。', { w }));
+      if (!Array.isArray(tr.events)) return err(t('{w}: events が配列ではありません。', { w }));
+      tr.events.forEach((e, ei) => {
         const we = `${w}.events[${ei}]`;
-        if (!isObject(e)) return err(`${we}: オブジェクトではありません。`);
+        if (!isObject(e)) return err(t('{we}: オブジェクトではありません。', { we }));
         uniqueId(e.id, we);
-        if (typeof e.id === 'string') eventTrack.set(e.id, String(t.id));
+        if (typeof e.id === 'string') eventTrack.set(e.id, String(tr.id));
         tickOk(e, we);
-        if (e.channelOverride !== undefined && !isInt(e.channelOverride, 0, 15)) err(`${we}: channelOverride が不正です。`);
+        if (e.channelOverride !== undefined && !isInt(e.channelOverride, 0, 15)) err(t('{we}: channelOverride が不正です。', { we }));
         const d7 = (v: unknown) => isInt(v, 0, 127);
         switch (e.kind) {
           case 'note':
-            if (!d7(e.pitch) || !isInt(e.velocity, 1, 127) || !d7(e.releaseVelocity) || !isInt(e.durationTicks, 1, MAX_TICK)) err(`${we}: ノートの値が不正です。`);
-            if (e.releaseOrder !== undefined && !Number.isSafeInteger(e.releaseOrder)) err(`${we}: releaseOrder が不正です。`);
+            if (!d7(e.pitch) || !isInt(e.velocity, 1, 127) || !d7(e.releaseVelocity) || !isInt(e.durationTicks, 1, MAX_TICK)) err(t('{we}: ノートの値が不正です。', { we }));
+            if (e.releaseOrder !== undefined && !Number.isSafeInteger(e.releaseOrder)) err(t('{we}: releaseOrder が不正です。', { we }));
             break;
           case 'cc':
-            if (!d7(e.controller) || !d7(e.value)) err(`${we}: CC の値が不正です。`);
+            if (!d7(e.controller) || !d7(e.value)) err(t('{we}: CC の値が不正です。', { we }));
             break;
           case 'program':
-            if (!d7(e.program)) err(`${we}: Program の値が不正です。`);
+            if (!d7(e.program)) err(t('{we}: Program の値が不正です。', { we }));
             break;
           case 'pitch-bend':
-            if (!isInt(e.value, -8192, 8191)) err(`${we}: Pitch Bend の値が不正です。`);
+            if (!isInt(e.value, -8192, 8191)) err(t('{we}: Pitch Bend の値が不正です。', { we }));
             break;
           case 'channel-pressure':
-            if (!d7(e.pressure)) err(`${we}: Pressure の値が不正です。`);
+            if (!d7(e.pressure)) err(t('{we}: Pressure の値が不正です。', { we }));
             break;
           case 'poly-pressure':
-            if (!d7(e.pitch) || !d7(e.pressure)) err(`${we}: Poly Pressure の値が不正です。`);
+            if (!d7(e.pitch) || !d7(e.pressure)) err(t('{we}: Poly Pressure の値が不正です。', { we }));
             break;
           case 'sysex':
-            if (e.status !== 'F0' && e.status !== 'F7') err(`${we}: SysEx status が不正です。`);
+            if (e.status !== 'F0' && e.status !== 'F7') err(t('{we}: SysEx status が不正です。', { we }));
             b64Ok(e.dataBase64, we);
             break;
           case 'raw':
             b64Ok(e.rawBase64, we);
-            if (typeof e.reason !== 'string') err(`${we}: reason が不正です。`);
+            if (typeof e.reason !== 'string') err(t('{we}: reason が不正です。', { we }));
             break;
           case 'meta':
-            if (!isInt(e.metaType, 0, 127)) err(`${we}: metaType が不正です。`);
+            if (!isInt(e.metaType, 0, 127)) err(t('{we}: metaType が不正です。', { we }));
             b64Ok(e.dataBase64, we);
             break;
           default:
-            err(`${we}: 未知のイベント種類 "${String(e.kind)}" です。`);
+            err(t('{we}: 未知のイベント種類 "{kind}" です。', { we, kind: String(e.kind) }));
         }
       });
     });
 
-  if (!Array.isArray(p.clips)) err('clips が配列ではありません。');
+  if (!Array.isArray(p.clips)) err(t('clips が配列ではありません。'));
   else {
     const trackIds = new Set(Array.isArray(p.tracks) ? p.tracks.map((t) => (isObject(t) ? t.id : null)) : []);
     p.clips.forEach((c, i) => {
       const w = `clips[${i}]`;
-      if (!isObject(c)) return err(`${w}: オブジェクトではありません。`);
+      if (!isObject(c)) return err(t('{w}: オブジェクトではありません。', { w }));
       uniqueId(c.id, w);
-      if (!trackIds.has(c.trackId)) err(`${w}: 存在しないトラックを参照しています。`);
-      if (!isInt(c.startTick, 0, MAX_TICK) || !isInt(c.endTick, 1, MAX_TICK) || (c.endTick as number) <= (c.startTick as number)) err(`${w}: 範囲が不正です。`);
-      if (!Array.isArray(c.eventIds)) return err(`${w}: eventIds が配列ではありません。`);
-      for (const id of c.eventIds) if (eventTrack.get(id as string) !== c.trackId) err(`${w}: 同じトラックに存在しないイベント "${String(id)}" を参照しています。`);
+      if (!trackIds.has(c.trackId)) err(t('{w}: 存在しないトラックを参照しています。', { w }));
+      if (!isInt(c.startTick, 0, MAX_TICK) || !isInt(c.endTick, 1, MAX_TICK) || (c.endTick as number) <= (c.startTick as number)) err(t('{w}: 範囲が不正です。', { w }));
+      if (!Array.isArray(c.eventIds)) return err(t('{w}: eventIds が配列ではありません。', { w }));
+      for (const id of c.eventIds) if (eventTrack.get(id as string) !== c.trackId) err(t('{w}: 同じトラックに存在しないイベント "{id}" を参照しています。', { w, id: String(id) }));
     });
   }
 
-  if (!isObject(p.loop) || typeof p.loop.enabled !== 'boolean' || !isInt(p.loop.startTick, 0, MAX_TICK) || !isInt(p.loop.endTick, 0, MAX_TICK)) err('loop が不正です。');
-  if (!isObject(p.settings)) err('settings がありません。');
-  if (!isObject(p.inputPresets)) err('inputPresets がありません。');
+  if (!isObject(p.loop) || typeof p.loop.enabled !== 'boolean' || !isInt(p.loop.startTick, 0, MAX_TICK) || !isInt(p.loop.endTick, 0, MAX_TICK)) err(t('loop が不正です。'));
+  if (!isObject(p.settings)) err(t('settings がありません。'));
+  if (!isObject(p.inputPresets)) err(t('inputPresets がありません。'));
   return errors;
 }

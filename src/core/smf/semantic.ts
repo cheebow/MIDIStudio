@@ -2,6 +2,7 @@
 // SysEx and meta events happen at the same ticks on the same port/channel, regardless of byte
 // layout, running status, track split or chunk order.
 import type { SmfFile } from './types';
+import { t } from '../../i18n';
 
 /** Metas that only describe the file layout: compared separately or not at all. */
 const LAYOUT_META = new Set([0x03, 0x21, 0x2f]);
@@ -50,8 +51,8 @@ export function compareSmfSemantics(a: SmfFile, b: SmfFile, maxDifferences = 20)
   const differences: string[] = [];
   const na = normalize(a);
   const nb = normalize(b);
-  if (na.ppq !== nb.ppq) differences.push(`PPQ が異なります: ${na.ppq} / ${nb.ppq}`);
-  if (na.endTick !== nb.endTick) differences.push(`曲の終わり（End of Track）が異なります: ${na.endTick} / ${nb.endTick}`);
+  if (na.ppq !== nb.ppq) differences.push(t('PPQ が異なります: {a} / {b}', { a: na.ppq, b: nb.ppq }));
+  if (na.endTick !== nb.endTick) differences.push(t('曲の終わり（End of Track）が異なります: {a} / {b}', { a: na.endTick, b: nb.endTick }));
   const ticks = [...new Set([...na.byTick.keys(), ...nb.byTick.keys()])].sort((x, y) => x - y);
   for (const tick of ticks) {
     const ma = na.byTick.get(tick) ?? new Map<string, string[]>();

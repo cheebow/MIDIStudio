@@ -6,6 +6,7 @@ import { Dialog } from '../../ui/Dialog';
 import { Logo } from '../../ui/Logo';
 import { midiPref, type AudioPhase, type MidiSetupState } from '../hooks/useAudioEngine';
 import { SAMPLE_SONGS } from '../samples';
+import { t } from '../../i18n';
 
 export interface StartupChoice {
   song: 'restore' | 'new' | 'sample';
@@ -48,20 +49,20 @@ export function StartupDialog({
   }
   const soundStatus =
     audioPhase === 'ready'
-      ? soundBankName ?? '準備完了'
+      ? soundBankName ?? t('準備完了')
       : prefetchState === 'failed'
-        ? '読み込みに失敗しました'
+        ? t('読み込みに失敗しました')
         : prefetchState === 'loading'
-          ? `読み込み中 ${progress === null ? '' : `${Math.round(progress * 100)}%`}`
+          ? t('読み込み中 {pct}', { pct: progress === null ? '' : `${Math.round(progress * 100)}%` })
           : 'GeneralUser GS';
   const midiChoice = midiState === 'prompt' || midiState === 'granted';
   const midiStatus =
     midiState === 'unsupported'
-      ? 'このブラウザでは使えません'
+      ? t('このブラウザでは使えません')
       : midiState === 'granted'
-        ? `接続 ${midiDevices} 台`
+        ? t('接続 {n} 台', { n: midiDevices })
         : midiState === 'denied'
-          ? 'ブラウザで許可されていません'
+          ? t('ブラウザで許可されていません')
           : null;
 
   return (
@@ -85,19 +86,19 @@ export function StartupDialog({
         }}
       >
         <fieldset>
-          <legend>曲</legend>
+          <legend>{t('曲')}</legend>
           {restore && (
             <label>
-              <input type="radio" name="startup-song" checked={song === 'restore'} onChange={() => setSong('restore')} /> 前回の自動保存「{restore.title}」（{new Date(restore.savedAt).toLocaleString()}）を開く
+              <input type="radio" name="startup-song" checked={song === 'restore'} onChange={() => setSong('restore')} /> {t('前回の自動保存「{title}」（{date}）を開く', { title: restore.title, date: new Date(restore.savedAt).toLocaleString() })}
             </label>
           )}
           <label>
-            <input type="radio" name="startup-song" checked={song === 'new'} onChange={() => setSong('new')} /> 新しい曲（ピアノ・ベース・ギター・ドラム）
+            <input type="radio" name="startup-song" checked={song === 'new'} onChange={() => setSong('new')} /> {t('新しい曲（ピアノ・ベース・ギター・ドラム）')}
           </label>
           <label className="row">
-            <input type="radio" name="startup-song" checked={song === 'sample'} onChange={() => setSong('sample')} /> サンプル曲
+            <input type="radio" name="startup-song" checked={song === 'sample'} onChange={() => setSong('sample')} /> {t('サンプル曲')}
             <select
-              aria-label="サンプル曲"
+              aria-label={t('サンプル曲')}
               value={sampleId}
               onChange={(e) => {
                 setSampleId(e.target.value);
@@ -113,28 +114,28 @@ export function StartupDialog({
           </label>
         </fieldset>
         <fieldset>
-          <legend>音源</legend>
+          <legend>{t('音源')}</legend>
           <span data-testid="startup-sound">{soundStatus}</span>
           <div className="row">
             {prefetchState === 'failed' && (
               <button type="button" onClick={onRetrySoundFont}>
-                標準の音源を再読み込み
+                {t('標準の音源を再読み込み')}
               </button>
             )}
             <button type="button" onClick={onChooseSoundFont}>
-              SoundFont ファイルを選ぶ…
+              {t('SoundFont ファイルを選ぶ…')}
             </button>
           </div>
         </fieldset>
         <fieldset>
-          <legend>MIDI キーボード</legend>
+          <legend>{t('MIDI キーボード')}</legend>
           {midiChoice ? (
             <>
               <label>
-                <input type="radio" name="startup-midi" checked={useMidi} onChange={() => setUseMidi(true)} /> 使う
+                <input type="radio" name="startup-midi" checked={useMidi} onChange={() => setUseMidi(true)} /> {t('使う')}
               </label>
               <label>
-                <input type="radio" name="startup-midi" checked={!useMidi} onChange={() => setUseMidi(false)} /> 使わない
+                <input type="radio" name="startup-midi" checked={!useMidi} onChange={() => setUseMidi(false)} /> {t('使わない')}
               </label>
               {midiStatus && <span className="note">{midiStatus}</span>}
             </>
@@ -144,7 +145,7 @@ export function StartupDialog({
         </fieldset>
         <div className="row">
           <button type="submit" className="primary" data-testid="startup-start">
-            開始
+            {t('開始')}
           </button>
         </div>
       </form>

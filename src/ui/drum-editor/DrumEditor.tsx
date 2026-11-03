@@ -2,6 +2,7 @@
 // It edits the same track events as the piano roll. Lanes come from the track's drum map, which
 // only labels pitches (changing the map never changes Note.pitch).
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '../../i18n';
 import { addEvents, deleteEvents, moveEvents, updateEvents, updateTrack } from '../../core/editing/operations';
 import { customizeDrumMap, hideLane, moveLane, renameLane, showAllLanes } from '../../core/editing/drumMapOps';
 import { BUILT_IN_DRUM_MAPS, drumLanes, findDrumMap, type DrumMapEntry } from '../../core/gm/drumMaps';
@@ -61,7 +62,7 @@ export function DrumEditor() {
   const end = useMemo(() => maxOf(notes, (n) => n.tick + n.durationTicks, ppq * 4 * 32) + ppq * 16, [notes, ppq]);
   const gridW = view.w - NAMES_W;
   const totalH = RULER_H + lanes.length * LANE_H;
-  const snap = (t: number) => (settings.snapEnabled ? snapTick(t, grid, 'floor').tick : Math.round(t));
+  const snap = (tk: number) => (settings.snapEnabled ? snapTick(tk, grid, 'floor').tick : Math.round(tk));
 
 
   useEffect(() => {
@@ -127,7 +128,7 @@ export function DrumEditor() {
     ctx.fillStyle = th.border;
     ctx.fillRect(0, RULER_H - 1, gridW, 1);
     drawLoopRuler(ctx, drag?.kind === 'loop' ? drag.preview : project.loop, pxPerTick, view.x, RULER_H, th);
-    drawRulerConductorMarks(ctx, conductorMarks(project.conductor), pxPerTick, view.x, gridW, RULER_H, th, (t) => barLabelEnd.get(t) ?? -Infinity);
+    drawRulerConductorMarks(ctx, conductorMarks(project.conductor), pxPerTick, view.x, gridW, RULER_H, th, (tk) => barLabelEnd.get(tk) ?? -Infinity);
     ctx.font = '11px system-ui, sans-serif';
     for (const n of notes) {
       const sel = selection.eventIds.has(n.id);
@@ -191,7 +192,7 @@ export function DrumEditor() {
     follow(pos, x, gridW, scrollRef.current, sig, pxPerTick, settings.followPlayback);
   }, [transport, view, gridW, totalH, pxPerTick, settings.followPlayback, step, input, recorder, track?.id, laneOf, sig, follow]);
 
-  if (!track) return <p className="placeholder">トラックがありません。</p>;
+  if (!track) return <p className="placeholder">{t('トラックがありません。')}</p>;
 
   const toTick = (x: number) => Math.max(0, (x + view.x) / pxPerTick);
   const toLane = (y: number) => Math.floor((y - RULER_H + view.y) / LANE_H);
@@ -218,7 +219,7 @@ export function DrumEditor() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     const tick = snap(toTick(x));
-    if (y < RULER_H) return ctxMenu.open(e, [{ label: '再生位置をここに移動', action: () => transport.seek(tick) }]);
+    if (y < RULER_H) return ctxMenu.open(e, [{ label: t('再生位置をここに移動'), action: () => transport.seek(tick) }]);
     const n = hit(x, y);
     if (n) {
       // right-click on an unselected note selects just that note
@@ -328,9 +329,9 @@ export function DrumEditor() {
     <div className="drum-editor">
       <div className="drum-toolbar">
         <label className="note">
-          ドラムマップ{' '}
+          {t('ドラムマップ')}{' '}
           <select
-            aria-label="ドラムマップ"
+            aria-label={t('ドラムマップ')}
             value={map.id}
             onChange={(e) => store.run(updateTrack(store.project, track.id, { drumMapId: e.target.value }, 'ドラムマップを変更'))}
           >
@@ -342,13 +343,13 @@ export function DrumEditor() {
           </select>
         </label>
         <label className="note">
-          <input type="checkbox" checked={onlyUsed} onChange={(e) => setOnlyUsed(e.target.checked)} /> 使用中のレーンのみ
+          <input type="checkbox" checked={onlyUsed} onChange={(e) => setOnlyUsed(e.target.checked)} /> {t('使用中のレーンのみ')}
         </label>
         <button onClick={() => editMap('レーンをすべて表示', showAllLanes)} disabled={!map.hidden?.length}>
-          非表示レーンを戻す
+          {t('非表示レーンを戻す')}
         </button>
-        <span className="note" title="ドラムマップは表示名・並び順だけを変えます。ノート番号は変わりません。レーン名のクリックで試聴、ダブルクリックで名前の変更。">ⓘ マップは表示名のみ</span>
-        {track.displayMode !== 'drum' && <span className="warn-text" title="Track メニューの「ドラムトラックにする」で切り替えられます">メロディ表示のトラックです</span>}
+        <span className="note" title={t('ドラムマップは表示名・並び順だけを変えます。ノート番号は変わりません。レーン名のクリックで試聴、ダブルクリックで名前の変更。')}>{t('ⓘ マップは表示名のみ')}</span>
+        {track.displayMode !== 'drum' && <span className="warn-text" title={t('Track メニューの「ドラムトラックにする」で切り替えられます')}>{t('メロディ表示のトラックです')}</span>}
       </div>
       <div className="drum-main">
         <div className="drum-scroll" ref={scrollRef} onScroll={(e) => {
@@ -366,7 +367,7 @@ export function DrumEditor() {
                         <input
                           autoFocus
                           defaultValue={l.name}
-                          aria-label="レーン名"
+                          aria-label={t('レーン名')}
                           onBlur={(e) => {
                             setRenaming(null);
                             if (e.target.value && e.target.value !== l.name) editMap('レーン名を変更', (m) => renameLane(m, l.pitch, e.target.value));
@@ -374,15 +375,15 @@ export function DrumEditor() {
                           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
                         />
                       ) : (
-                        <button className="lane-name" title="クリックで試聴、ダブルクリックで名前を変更" onClick={() => preview(l.pitch, l.defaultVelocity)} onDoubleClick={() => setRenaming(l.pitch)}>
+                        <button className="lane-name" title={t('クリックで試聴、ダブルクリックで名前を変更')} onClick={() => preview(l.pitch, l.defaultVelocity)} onDoubleClick={() => setRenaming(l.pitch)}>
                           <span className="lane-swatch" style={{ background: drumColor(map, l.pitch) }} />
                           <span className="pitch">{l.pitch}</span> {l.name}
                         </button>
                       )}
                       <span className="lane-tools">
-                        <button aria-label={`${l.name} を上へ`} onClick={() => editMap('レーンを並べ替え', (m) => moveLane(m, l.pitch, -1))}>▲</button>
-                        <button aria-label={`${l.name} を下へ`} onClick={() => editMap('レーンを並べ替え', (m) => moveLane(m, l.pitch, 1))}>▼</button>
-                        <button aria-label={`${l.name} を隠す`} onClick={() => editMap('レーンを隠す', (m) => hideLane(m, l.pitch))}>×</button>
+                        <button aria-label={t('{name} を上へ', { name: l.name })} onClick={() => editMap('レーンを並べ替え', (m) => moveLane(m, l.pitch, -1))}>▲</button>
+                        <button aria-label={t('{name} を下へ', { name: l.name })} onClick={() => editMap('レーンを並べ替え', (m) => moveLane(m, l.pitch, 1))}>▼</button>
+                        <button aria-label={t('{name} を隠す', { name: l.name })} onClick={() => editMap('レーンを隠す', (m) => hideLane(m, l.pitch))}>×</button>
                       </span>
                     </div>
                   ))}
@@ -394,7 +395,7 @@ export function DrumEditor() {
                 style={{ left: NAMES_W }}
                 tabIndex={0}
                 data-testid="drum-grid"
-                aria-label={`ドラムエディター: ${track.name}。${tool === 'draw' ? '描画ツール（クリックで入力・削除）' : '選択ツール'}`}
+                aria-label={t('ドラムエディター: {name}。{tool}', { name: track.name, tool: tool === 'draw' ? t('描画ツール（クリックで入力・削除）') : t('選択ツール') })}
                 onPointerDown={onPointerDown}
                 onContextMenu={onContextMenu}
                 onPointerMove={onPointerMove}

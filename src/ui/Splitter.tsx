@@ -1,5 +1,6 @@
 // Horizontal splitter bar: drag to resize the area below it, double-click to collapse / expand.
 import { useRef } from 'react';
+import { t } from '../i18n';
 
 export function Splitter({ height, min, max, onResize, onToggle, label }: { height: number; min: number; max: number; onResize: (h: number) => void; onToggle: () => void; label: string }) {
   const start = useRef<{ y: number; h: number } | null>(null);
@@ -13,7 +14,7 @@ export function Splitter({ height, min, max, onResize, onToggle, label }: { heig
       aria-valuemin={min}
       aria-valuemax={max}
       tabIndex={0}
-      title="ドラッグで高さを変更、ダブルクリックで折り畳み / 展開"
+      title={t('ドラッグで高さを変更、ダブルクリックで折り畳み / 展開')}
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId);
         start.current = { y: e.clientY, h: height };

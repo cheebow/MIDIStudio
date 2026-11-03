@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { editVelocities, type VelocityOp } from '../../core/editing/velocity';
 import { useServices } from '../../app/store/context';
+import { t } from '../../i18n';
 import { Dialog } from '../Dialog';
 import { useNoteTarget } from './noteTarget';
 
@@ -35,7 +36,7 @@ export function VelocityDialog({ onClose }: { onClose: () => void }) {
     </label>
   );
   return (
-    <Dialog title="ベロシティ" onClose={onClose}>
+    <Dialog title={t('ベロシティ')} onClose={onClose}>
       <form
         className="form-grid quantize-form"
         data-testid="velocity-dialog"
@@ -46,18 +47,18 @@ export function VelocityDialog({ onClose }: { onClose: () => void }) {
       >
         {fieldset}
         <fieldset>
-          <legend>変更</legend>
-          {option('set', '一定にする', num('値', value, setValue, 1, 127))}
-          {option('add', '加算', num('加算する量', delta, setDelta, -126, 126))}
-          {option('scale', '倍率', <>{num('倍率（%）', percent, setPercent, 1, 400)} %</>)}
-          {option('ramp', '傾斜', <>{num('始点', from, setFrom, 1, 127)} → {num('終点', to, setTo, 1, 127)}</>)}
+          <legend>{t('変更')}</legend>
+          {option('set', t('一定にする'), num(t('値'), value, setValue, 1, 127))}
+          {option('add', t('加算'), num(t('加算する量'), delta, setDelta, -126, 126))}
+          {option('scale', t('倍率'), <>{num(t('倍率（%）'), percent, setPercent, 1, 400)} %</>)}
+          {option('ramp', t('傾斜'), <>{num(t('始点'), from, setFrom, 1, 127)} → {num(t('終点'), to, setTo, 1, 127)}</>)}
         </fieldset>
         <div className="row">
           <button type="submit" className="primary" disabled={ids.length === 0} data-testid="velocity-apply">
-            適用（{ids.length} 個）
+            {t('適用（{n} 個）', { n: ids.length })}
           </button>
           <button type="button" onClick={onClose}>
-            キャンセル
+            {t('キャンセル')}
           </button>
         </div>
       </form>

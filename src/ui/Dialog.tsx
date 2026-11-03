@@ -2,6 +2,7 @@
 // `closable: false` removes the × and ignores Esc (the startup dialog has to be answered);
 // `header` replaces the title bar (the startup dialog shows the logo there).
 import { useEffect, useRef, type ReactNode } from 'react';
+import { t } from '../i18n';
 
 export function Dialog({ title, onClose, children, closable = true, header, wide = false }: { title: string; onClose: () => void; children: ReactNode; closable?: boolean; header?: ReactNode; wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -24,7 +25,7 @@ export function Dialog({ title, onClose, children, closable = true, header, wide
         <header>
           <h2>{title}</h2>
           {closable && (
-            <button aria-label="閉じる" onClick={onClose}>
+            <button aria-label={t('閉じる')} onClick={onClose}>
               ×
             </button>
           )}

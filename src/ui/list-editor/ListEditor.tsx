@@ -1,6 +1,7 @@
 // RCM-style list editor (REQ-EDT-09..13, UI_DESIGN 6). Virtualised rows (only visible rows are
 // rendered), keyboard navigation, numeric cell editing. Edits go through the shared EditorStore.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '../../i18n';
 import { addEvents, deleteEvents, duplicateEvents } from '../../core/editing/operations';
 import { formatTicks, listRows, type ListRow, type ListUnit, type RowCategory } from '../../core/list/listRows';
 import { parseTicksInput, setAbsoluteTick, setGateTime, setRowKey, setRowValue, setStepTime } from '../../core/list/listEdit';
@@ -73,7 +74,7 @@ export function ListEditor() {
     return () => cancelAnimationFrame(raf);
   }, [transport, ticks, settings.followPlayback]);
 
-  if (!track) return <p className="placeholder">トラックがありません。</p>;
+  if (!track) return <p className="placeholder">{t('トラックがありません。')}</p>;
 
   const cur = rows[Math.min(cursor.row, rows.length - 1)];
 
@@ -101,12 +102,12 @@ export function ListEditor() {
   }
 
   function canEdit(r: ListRow, col: Col): string | null {
-    if (!EDITABLE.includes(col)) return 'この列は編集できません。';
-    if (filtered) return 'フィルター中は数値を編集できません（表示されていないイベントを誤って動かさないため）。すべての種類を表示してください。';
-    if (col === 'key' && r.event.kind !== 'note' && r.event.kind !== 'poly-pressure') return 'ノート番号のない行です。';
-    if (col === 'gt' && r.event.kind !== 'note') return 'GT はノートだけにあります。';
-    if (col === 'vel' && r.value === null) return 'この行には値がありません。';
-    if (col === 'st' && r.stTicks === null) return '最後のイベントの ST は変更できません。';
+    if (!EDITABLE.includes(col)) return t('この列は編集できません。');
+    if (filtered) return t('フィルター中は数値を編集できません（表示されていないイベントを誤って動かさないため）。すべての種類を表示してください。');
+    if (col === 'key' && r.event.kind !== 'note' && r.event.kind !== 'poly-pressure') return t('ノート番号のない行です。');
+    if (col === 'gt' && r.event.kind !== 'note') return t('GT はノートだけにあります。');
+    if (col === 'vel' && r.value === null) return t('この行には値がありません。');
+    if (col === 'st' && r.stTicks === null) return t('最後のイベントの ST は変更できません。');
     return null;
   }
 
@@ -115,17 +116,17 @@ export function ListEditor() {
     const col = cursor.col;
     try {
       if (col === 'st' || col === 'gt' || col === 'tick') {
-        const t = parseTicksInput(text, unit, project.ppq);
-        if (!t.ok) {
-          setMessage(t.message);
+        const tk = parseTicksInput(text, unit, project.ppq);
+        if (!tk.ok) {
+          setMessage(tk.message);
           return false;
         }
-        if (col === 'st') store.run(setStepTime(store.project, track!.id, cur.id, t.ticks));
-        else if (col === 'gt') store.run(setGateTime(store.project, cur.id, t.ticks));
-        else store.run(setAbsoluteTick(store.project, cur.id, t.ticks));
+        if (col === 'st') store.run(setStepTime(store.project, track!.id, cur.id, tk.ticks));
+        else if (col === 'gt') store.run(setGateTime(store.project, cur.id, tk.ticks));
+        else store.run(setAbsoluteTick(store.project, cur.id, tk.ticks));
       } else {
         if (!/^-?\d+$/.test(text.trim())) {
-          setMessage('整数を入力してください。');
+          setMessage(t('整数を入力してください。'));
           return false;
         }
         const v = Number(text.trim());
@@ -202,7 +203,7 @@ export function ListEditor() {
   return (
     <div className="list-editor">
       <div className="list-toolbar">
-        <div className="segmented" role="group" aria-label="表示単位">
+        <div className="segmented" role="group" aria-label={t('表示単位')}>
           <button className={unit === 'native' ? 'on' : ''} aria-pressed={unit === 'native'} onClick={() => store.updateSettings({ listDisplayUnit: 'native' })}>
             Native Tick（PPQ {project.ppq}）
           </button>
@@ -210,8 +211,8 @@ export function ListEditor() {
             Classic 48（♩=48）
           </button>
         </div>
-        {unit === 'classic48' && !lossless && <span className="warn-text" title="PPQ が 48 の倍数でないため、一部の値は小数・分数で表示されます。入力は整数 Tick に正確に戻せる値だけ受け付けます。">ⓘ 小数・分数表示あり</span>}
-        <span className="note">表示:</span>
+        {unit === 'classic48' && !lossless && <span className="warn-text" title={t('PPQ が 48 の倍数でないため、一部の値は小数・分数で表示されます。入力は整数 Tick に正確に戻せる値だけ受け付けます。')}>{t('ⓘ 小数・分数表示あり')}</span>}
+        <span className="note">{t('表示:')}</span>
         {ALL_CATS.map((c) => (
           <label key={c} className="note">
             <input
@@ -227,16 +228,16 @@ export function ListEditor() {
             {CAT_LABEL[c]}
           </label>
         ))}
-        <button onClick={insertNote}>ノート挿入</button>
+        <button onClick={insertNote}>{t('ノート挿入')}</button>
         <button disabled={!selection.eventIds.size} onClick={() => {
           const r = duplicateEvents(store.project, selection.eventIds, 0);
           if (r) store.run(r.command, { select: r.ids });
-        }}>複製</button>
-        <button onClick={() => store.updateSettings({ activePanel: 'tempo' })} title="テンポ・拍子・調号・マーカーは「コンダクター」タブで編集します">
-          コンダクタートラックを開く
+        }}>{t('複製')}</button>
+        <button onClick={() => store.updateSettings({ activePanel: 'tempo' })} title={t('テンポ・拍子・調号・マーカーは「コンダクター」タブで編集します')}>
+          {t('コンダクタートラックを開く')}
         </button>
       </div>
-      {filtered && <div className="list-notice">フィルター中: ST は表示されていないイベントも含めた次のイベントまでの距離です。数値の編集はすべて表示したときだけできます。</div>}
+      {filtered && <div className="list-notice">{t('フィルター中: ST は表示されていないイベントも含めた次のイベントまでの距離です。数値の編集はすべて表示したときだけできます。')}</div>}
       {message && (
         <div className="list-notice warn-text" role="status" data-testid="list-message">
           {message}
@@ -247,7 +248,7 @@ export function ListEditor() {
           className="list-grid"
           ref={gridRef}
           role="grid"
-          aria-label={`イベントリスト: ${track.name}。上下で行、左右で列を移動、Enter で編集。`}
+          aria-label={t('イベントリスト: {name}。上下で行、左右で列を移動、Enter で編集。', { name: track.name })}
           aria-rowcount={rows.length}
           tabIndex={0}
           onKeyDown={onKeyDown}
@@ -289,16 +290,16 @@ export function ListEditor() {
                     onContextMenu={(e) => {
                       if (!selection.eventIds.has(r.id)) moveCursor(i);
                       ctxMenu.open(e, [
-                        { label: '値を編集', shortcut: 'Enter', action: () => startEdit() },
-                        { label: 'コピー', action: editActions.copy },
-                        { label: '複製', action: () => {
+                        { label: t('値を編集'), shortcut: 'Enter', action: () => startEdit() },
+                        { label: t('コピー'), action: editActions.copy },
+                        { label: t('複製'), action: () => {
                           const d = duplicateEvents(store.project, store.getState().selection.eventIds, 0);
                           if (d) store.run(d.command, { select: d.ids });
                         } },
                         { separator: true, label: '' },
-                        { label: '再生位置をここに移動', action: () => transport.seek(r.tick) },
+                        { label: t('再生位置をここに移動'), action: () => transport.seek(r.tick) },
                         { separator: true, label: '' },
-                        { label: '削除', shortcut: 'Delete', action: () => store.run(deleteEvents(store.project, store.getState().selection.eventIds)) },
+                        { label: t('削除'), shortcut: 'Delete', action: () => store.run(deleteEvents(store.project, store.getState().selection.eventIds)) },
                       ]);
                     }}
                   >
@@ -307,7 +308,7 @@ export function ListEditor() {
                       return (
                         <div key={c} role="gridcell" data-col={c} className={`lc lc-${c}${active ? ' cursor' : ''}`}>
                           {c === 'meas' && hidden > 0 && (
-                            <span className="hidden-badge" title={`${hidden} 件のイベントが非表示`}>
+                            <span className="hidden-badge" title={t('{n} 件のイベントが非表示', { n: hidden })}>
                               +{hidden}
                             </span>
                           )}
@@ -316,7 +317,7 @@ export function ListEditor() {
                               className="cell-input"
                               autoFocus
                               value={editing.text}
-                              aria-label={`${COL_LABEL[c]} を入力`}
+                              aria-label={t('{col} を入力', { col: t(COL_LABEL[c]) })}
                               onChange={(e) => setEditing({ text: e.target.value })}
                               onKeyDown={(e) => {
                                 e.stopPropagation();

@@ -19,6 +19,7 @@ import type {
 } from '../model/types';
 import { sortEvents } from '../events/order';
 import type { ImportIssue, SmfEvent, SmfFile } from '../smf/types';
+import { t } from '../../i18n';
 
 export interface ImportOptions {
   title?: string;
@@ -79,7 +80,7 @@ function toConductor(e: Extract<SmfEvent, { kind: 'meta' }>, order: number, ctx:
   ctx.issues.push({
     code: 'W_IMPORT_BAD_CONDUCTOR_META',
     severity: 'warning',
-    message: `MTrk ${track + 1} の Tick ${e.tick}: メタイベント FF ${hex(e.metaType)} の内容が不正なため、解釈せずにそのまま保持しました。`,
+    message: t('MTrk {track} の Tick {tick}: メタイベント FF {type} の内容が不正なため、解釈せずにそのまま保持しました。', { track: track + 1, tick: e.tick, type: hex(e.metaType) }),
     track,
     tick: e.tick,
   });
@@ -197,7 +198,7 @@ class TrackBuilder {
       issues.push({
         code: 'W_IMPORT_NOTE_OVERLAP',
         severity: 'warning',
-        message: `${trackLabel}: 同じチャンネル・音高の Note On が Note Off の前に重なっていました（${this.overlaps} 箇所）。古い Note On から順に Note Off と対応付けました。書き出し時の Note On/Off の位置は変わりません。`,
+        message: t('{track}: 同じチャンネル・音高の Note On が Note Off の前に重なっていました（{n} 箇所）。古い Note On から順に Note Off と対応付けました。書き出し時の Note On/Off の位置は変わりません。', { track: trackLabel, n: this.overlaps }),
         track: trackIndex,
       });
     }
@@ -205,7 +206,7 @@ class TrackBuilder {
       issues.push({
         code: 'W_IMPORT_ZERO_LENGTH_NOTE',
         severity: 'warning',
-        message: `${trackLabel}: 長さ 0 のノート（同じ Tick の Note On/Off）が ${this.zeroLength} 個ありました。ノートとしては編集できないため、元のメッセージのまま保持しました。`,
+        message: t('{track}: 長さ 0 のノート（同じ Tick の Note On/Off）が {n} 個ありました。ノートとしては編集できないため、元のメッセージのまま保持しました。', { track: trackLabel, n: this.zeroLength }),
         track: trackIndex,
       });
     }
@@ -213,7 +214,7 @@ class TrackBuilder {
       issues.push({
         code: 'W_IMPORT_UNPAIRED_NOTE_OFF',
         severity: 'warning',
-        message: `${trackLabel}: 対応する Note On のない Note Off が ${this.unpairedOff} 個ありました。元のメッセージのまま保持しました。`,
+        message: t('{track}: 対応する Note On のない Note Off が {n} 個ありました。元のメッセージのまま保持しました。', { track: trackLabel, n: this.unpairedOff }),
         track: trackIndex,
       });
     }
@@ -221,7 +222,7 @@ class TrackBuilder {
       issues.push({
         code: 'W_IMPORT_UNPAIRED_NOTE_ON',
         severity: 'warning',
-        message: `${trackLabel}: Note Off のない Note On が ${unterminated} 個ありました。元のメッセージのまま保持しました（音源によっては鳴り続けます）。`,
+        message: t('{track}: Note Off のない Note On が {n} 個ありました。元のメッセージのまま保持しました（音源によっては鳴り続けます）。', { track: trackLabel, n: unterminated }),
         track: trackIndex,
       });
     }
@@ -319,7 +320,7 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
       ctx.issues.push({
         code: 'W_IMPORT_PORT_CHANGE',
         severity: 'warning',
-        message: `${label}: 演奏の途中にポート指定（FF 21）が ${portChanges} 個ありました。イベントとして保持し書き出しますが、MIDI Studio の再生・編集ではトラック先頭のポートを使います。`,
+        message: t('{track}: 演奏の途中にポート指定（FF 21）が {n} 個ありました。イベントとして保持し書き出しますが、MIDI Studio の再生・編集ではトラック先頭のポートを使います。', { track: label, n: portChanges }),
         track: trackIndex,
       });
     }
@@ -351,14 +352,14 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
     // Format 0: split channel messages into one track per channel (ADR-015). SysEx and
     // non-conductor metas go to a leading "System" track so they stay ahead of channel events
     // at the same tick on export.
-    const t = smf.tracks[0];
+    const t0 = smf.tracks[0];
     const byChannel = new Map<number, SmfEvent[]>();
     const system: SmfEvent[] = [];
     const orders = new Map<SmfEvent, number>();
     // Pre-assign file order so split tracks keep the global source order.
     const base = counter;
-    t.events.forEach((e, i) => orders.set(e, base + i));
-    for (const e of t.events) {
+    t0.events.forEach((e, i) => orders.set(e, base + i));
+    for (const e of t0.events) {
       if (e.kind === 'channel') {
         const ch = e.status & 0x0f;
         const list = byChannel.get(ch) ?? [];
@@ -400,7 +401,7 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
       }
     };
     if (systemRest.length > 0) {
-      const tr = withOrder(systemRest, () => convertTrack(systemRest, 0, t.endOfTrackTick, 0, 'System'));
+      const tr = withOrder(systemRest, () => convertTrack(systemRest, 0, t0.endOfTrackTick, 0, 'System'));
       if (port !== null) {
         tr.port = portLabel(port);
         tr.hasPortPrefix = true;
@@ -409,19 +410,19 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
     }
     for (const ch of [...byChannel.keys()].sort((a, b) => a - b)) {
       const list = byChannel.get(ch)!;
-      const tr = withOrder(list, () => convertTrack(list, 0, t.endOfTrackTick, ch, `Ch ${ch + 1}`));
+      const tr = withOrder(list, () => convertTrack(list, 0, t0.endOfTrackTick, ch, `Ch ${ch + 1}`));
       if (port !== null) {
         tr.port = portLabel(port);
         tr.hasPortPrefix = true;
       }
       tracks.push(tr);
     }
-    counter = base + t.events.length;
-    conductorEnd = t.endOfTrackTick;
+    counter = base + t0.events.length;
+    conductorEnd = t0.endOfTrackTick;
     ctx.issues.push({
       code: 'I_IMPORT_FORMAT0_SPLIT',
       severity: 'info',
-      message: `SMF Format 0 をチャンネルごとに ${byChannel.size} トラックへ分けました${systemRest.length > 0 ? '（SysEx・メタイベントは「System」トラック）' : ''}。書き出しは Format 1 です。`,
+      message: t('SMF Format 0 をチャンネルごとに {n} トラックへ分けました{system}。書き出しは Format 1 です。', { n: byChannel.size, system: systemRest.length > 0 ? t('（SysEx・メタイベントは「System」トラック）') : '' }),
     });
   }
 
@@ -429,7 +430,7 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
     ctx.issues.push({
       code: 'I_IMPORT_CONDUCTOR_MERGED',
       severity: 'info',
-      message: `テンポ・拍子・調・マーカーをテンポトラックにまとめました（元の MTrk: ${[...movedConductor].map((i) => i + 1).join(', ')}）。`,
+      message: t('テンポ・拍子・調・マーカーをテンポトラックにまとめました（元の MTrk: {tracks}）。', { tracks: [...movedConductor].map((i) => i + 1).join(', ') }),
     });
   }
   const sortedConductor = sortEvents(conductor);
@@ -441,7 +442,7 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
   const project: MidiProject = {
     schemaVersion: 1,
     id: newId('prj'),
-    title: title || '無題',
+    title: title || t('無題'),
     ppq: smf.ppq,
     conductor: sortedConductor,
     conductorMeta,
@@ -459,7 +460,7 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
     ctx.issues.push({
       code: 'I_IMPORT_NO_CONDUCTOR_TRACK',
       severity: 'info',
-      message: 'MTrk 1 に演奏データがあるため、テンポトラックとしてではなく通常のトラックとして読み込みました。',
+      message: t('MTrk 1 に演奏データがあるため、テンポトラックとしてではなく通常のトラックとして読み込みました。'),
     });
   }
   return { project, issues: ctx.issues };
@@ -490,7 +491,7 @@ function reportConductorConflicts(events: readonly ConductorEvent[], issues: Imp
     issues.push({
       code: 'W_IMPORT_CONDUCTOR_CONFLICT',
       severity: 'warning',
-      message: `同じ Tick に異なるテンポまたは拍子が ${conflicts} 箇所ありました。すべて保持し、ファイル内の順序で後のものが有効になります。`,
+      message: t('同じ Tick に異なるテンポまたは拍子が {n} 箇所ありました。すべて保持し、ファイル内の順序で後のものが有効になります。', { n: conflicts }),
     });
   }
 }

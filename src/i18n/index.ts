@@ -16,11 +16,21 @@ export const LOCALE_NAMES: Record<Locale, string> = { ja: '日本語', en: 'Engl
 const KEY = 'midi-studio.locale';
 const EN: Record<string, string> = { ...EN_CORE, ...EN_UI, ...EN_UI2, ...EN_APP, ...EN_HELP };
 const listeners = new Set<() => void>();
+
+// Browser globals reached through globalThis with local types, so this file also type-checks in the
+// DOM-free core project (tsconfig.core.json) and runs in Node.
+interface BrowserGlobals {
+  localStorage?: { getItem(k: string): string | null; setItem(k: string, v: string): void };
+  navigator?: { language?: string };
+  document?: { documentElement: { lang: string } };
+}
+const g = globalThis as unknown as BrowserGlobals;
+
 let current: Locale = readPref() ?? detect();
 
 function readPref(): Locale | null {
   try {
-    const v = typeof localStorage === 'undefined' ? null : localStorage.getItem(KEY);
+    const v = g.localStorage?.getItem(KEY) ?? null;
     return v === 'ja' || v === 'en' ? v : null;
   } catch {
     return null;
@@ -29,8 +39,8 @@ function readPref(): Locale | null {
 
 function detect(): Locale {
   // only in a browser: Node (unit tests, the static-page build) has a navigator too but stays Japanese
-  if (typeof document === 'undefined' || typeof navigator === 'undefined') return 'ja';
-  return (navigator.language || '').toLowerCase().startsWith('en') ? 'en' : 'ja';
+  if (!g.document || !g.navigator) return 'ja';
+  return (g.navigator.language || '').toLowerCase().startsWith('en') ? 'en' : 'ja';
 }
 
 export function locale(): Locale {
@@ -41,7 +51,7 @@ export function setLocale(l: Locale): void {
   if (l === current) return;
   current = l;
   try {
-    localStorage.setItem(KEY, l);
+    g.localStorage?.setItem(KEY, l);
   } catch {
     /* private mode: not kept */
   }
@@ -49,7 +59,7 @@ export function setLocale(l: Locale): void {
 }
 
 function apply(): void {
-  if (typeof document !== 'undefined') document.documentElement.lang = current;
+  if (g.document) g.document.documentElement.lang = current;
   for (const fn of listeners) fn();
 }
 

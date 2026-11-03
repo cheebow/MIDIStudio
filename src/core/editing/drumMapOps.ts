@@ -4,13 +4,14 @@ import { findDrumMap, type DrumMap } from '../gm/drumMaps';
 import { newId } from '../model/ids';
 import type { MidiProject } from '../model/types';
 import type { Command } from './history';
+import { t } from '../../i18n';
 
 export function customizeDrumMap(project: MidiProject, trackId: string, label: string, edit: (m: DrumMap) => DrumMap): Command | null {
   const track = project.tracks.find((t) => t.id === trackId);
   if (!track) return null;
   const userMaps = project.drumMaps ?? [];
   const current = findDrumMap(track.drumMapId, userMaps);
-  const base: DrumMap = current.builtIn ? { ...current, id: newId('dmap'), name: `${current.name}（カスタム）`, builtIn: false, entries: [...current.entries] } : current;
+  const base: DrumMap = current.builtIn ? { ...current, id: newId('dmap'), name: t('{name}（カスタム）', { name: current.name }), builtIn: false, entries: [...current.entries] } : current;
   const edited = edit(base);
   const drumMaps = current.builtIn ? [...userMaps, edited] : userMaps.map((m) => (m.id === edited.id ? edited : m));
   const tracks = project.tracks.map((t) => (t.id === trackId ? { ...t, drumMapId: edited.id } : t));

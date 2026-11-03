@@ -2,6 +2,7 @@
 // with `items` is a submenu (ADR-041): it opens on hover / click / →, and closes with ← or when
 // another item of the parent menu is hovered. Keyboard: ↑↓ move, Enter activates, Esc closes.
 import { useEffect, useRef, useState } from 'react';
+import { t } from '../../i18n';
 
 export interface MenuItem {
   label: string;
@@ -46,7 +47,7 @@ export function MenuBar({ menus }: { menus: Menu[] }) {
   }, [open]);
   const closeAll = () => setOpen(null);
   return (
-    <nav className="menubar" ref={ref} aria-label="メニュー">
+    <nav className="menubar" ref={ref} aria-label={t('メニュー')}>
       {menus.map((m, i) => (
         <div className="menu" key={m.label}>
           <button

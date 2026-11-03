@@ -2,6 +2,8 @@
 // text so the same validator protects both file loads and storage loads.
 // The IDBFactory is injectable for tests (fake-indexeddb).
 
+import { t } from '../i18n';
+
 const DB_NAME = 'midi-studio';
 const DB_VERSION = 1;
 const PROJECTS = 'projects';
@@ -35,9 +37,9 @@ export class StorageError extends Error {
 function wrap(e: unknown): StorageError {
   const name = (e as { name?: string } | null)?.name;
   if (name === 'QuotaExceededError') {
-    return new StorageError('quota', 'ブラウザの保存容量が不足しています。不要なプロジェクトを削除するか、ファイルとして保存してください。現在の編集内容はそのまま残っています。', { cause: e });
+    return new StorageError('quota', t('ブラウザの保存容量が不足しています。不要なプロジェクトを削除するか、ファイルとして保存してください。現在の編集内容はそのまま残っています。'), { cause: e });
   }
-  return new StorageError('failed', `ブラウザ内への保存・読込に失敗しました: ${(e as Error)?.message ?? String(e)}`, { cause: e });
+  return new StorageError('failed', t('ブラウザ内への保存・読込に失敗しました: {message}', { message: (e as Error)?.message ?? String(e) }), { cause: e });
 }
 
 function req<T>(r: IDBRequest<T>): Promise<T> {
@@ -61,7 +63,7 @@ export class ProjectStore {
   constructor(private readonly factory: IDBFactory | null = globalThis.indexedDB ?? null) {}
 
   private db(): Promise<IDBDatabase> {
-    if (!this.factory) return Promise.reject(new StorageError('unavailable', 'このブラウザでは IndexedDB を使えないため、ブラウザ内保存・自動保存は無効です。ファイルとして保存してください。'));
+    if (!this.factory) return Promise.reject(new StorageError('unavailable', t('このブラウザでは IndexedDB を使えないため、ブラウザ内保存・自動保存は無効です。ファイルとして保存してください。')));
     if (!this.dbPromise) {
       this.dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
         const open = this.factory!.open(DB_NAME, DB_VERSION);
@@ -72,7 +74,7 @@ export class ProjectStore {
         };
         open.onsuccess = () => resolve(open.result);
         open.onerror = () => reject(wrap(open.error));
-        open.onblocked = () => reject(new StorageError('blocked', '別のタブがデータベースを使用中です。他の MIDI Studio のタブを閉じてください。'));
+        open.onblocked = () => reject(new StorageError('blocked', t('別のタブがデータベースを使用中です。他の MIDI Studio のタブを閉じてください。')));
       }).catch((e: unknown) => {
         this.dbPromise = null;
         throw e;

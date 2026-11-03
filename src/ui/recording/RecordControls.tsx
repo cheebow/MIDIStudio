@@ -1,6 +1,7 @@
 // Record button + status (REQ-IN-04). Recording needs an armed track (R).
 import { useEffect, useSyncExternalStore } from 'react';
 import type { Recorder } from '../../app/recording/Recorder';
+import { t } from '../../i18n';
 
 export function RecordControls({ recorder, onSettings, beforeStart, onError, onMessage }: { recorder: Recorder; onSettings: () => void; beforeStart: () => Promise<void>; onError: (m: string) => void; onMessage: (m: string) => void }) {
   const st = useSyncExternalStore(recorder.subscribe, recorder.getState);
@@ -14,8 +15,8 @@ export function RecordControls({ recorder, onSettings, beforeStart, onError, onM
       <button
         className={`record${active ? ' on' : ''}`}
         aria-pressed={active}
-        aria-label={active ? '録音を停止' : '録音'}
-        title="録音（録音待機のトラックへ）"
+        aria-label={active ? t('録音を停止') : t('録音')}
+        title={t('録音（録音待機のトラックへ）')}
         data-testid="record"
         onClick={() => {
           if (active) recorder.stop();
@@ -24,9 +25,9 @@ export function RecordControls({ recorder, onSettings, beforeStart, onError, onM
       >
         ●
       </button>
-      {st.phase === 'count-in' && <span className="count-in" data-testid="count-in">カウント {st.countIn}</span>}
+      {st.phase === 'count-in' && <span className="count-in" data-testid="count-in">{t('カウント')} {st.countIn}</span>}
       {st.phase === 'recording' && <span className="rec-label">REC</span>}
-      <button onClick={onSettings} title="録音の設定" aria-label="録音の設定">
+      <button onClick={onSettings} title={t('録音の設定')} aria-label={t('録音の設定')}>
         ⚙
       </button>
     </span>

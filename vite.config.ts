@@ -5,12 +5,17 @@ import react from '@vitejs/plugin-react';
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
 
 /**
- * Static pages (ADR-055 / 056): the in-app help and the beginner's guide rendered to HTML, served on
- * the fly at /help.html and /tutorial.html by the dev server. The build writes them to dist/ with
- * scripts/build-pages.mjs.
+ * Static pages (ADR-055 / 056 / 061): the in-app help and the beginner's guide rendered to HTML in
+ * Japanese and English, served on the fly at /help.html, /tutorial.html, /help.en.html and
+ * /tutorial.en.html by the dev server. The build writes them to dist/ with scripts/build-pages.mjs.
  */
 function staticPages(): Plugin {
-  const pages: Record<string, string> = { '/help.html': 'renderHelpHtml', '/tutorial.html': 'renderTutorialHtml' };
+  const pages: Record<string, string> = {
+    '/help.html': 'renderHelpHtml',
+    '/tutorial.html': 'renderTutorialHtml',
+    '/help.en.html': 'renderHelpEnHtml',
+    '/tutorial.en.html': 'renderTutorialEnHtml',
+  };
   return {
     name: 'static-pages',
     configureServer(server) {

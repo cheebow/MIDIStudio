@@ -2,6 +2,7 @@
 // Created only when the browser supports Web MIDI; access is requested from a user action with
 // sysex: false. Disconnects release the notes held on that device (I14).
 import { parseMidiMessage, type ParsedMidiInput } from './midiMessages';
+import { t } from '../i18n';
 
 export interface MidiDeviceInfo {
   id: string;
@@ -93,7 +94,7 @@ export class MidiInputAdapter {
       this.refresh();
     } catch (e) {
       this._state = 'denied';
-      this.error = `MIDI 機器へのアクセスが許可されませんでした（${(e as Error)?.message ?? e}）。PC キーボードとマウスでの入力は使えます。`;
+      this.error = t('MIDI 機器へのアクセスが許可されませんでした（{message}）。PC キーボードとマウスでの入力は使えます。', { message: String((e as Error)?.message ?? e) });
       this.handlers.onChange();
     }
   }

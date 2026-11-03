@@ -6,6 +6,7 @@ import type { ConductorEvent, MidiProject } from '../../core/model/types';
 import { bpmFromUs } from '../../core/timing/tempoMap';
 import { TimeSignatureMap } from '../../core/timing/timeSignatureMap';
 import { useEditorState, useServices } from '../../app/store/context';
+import { t } from '../../i18n';
 import { Dialog } from '../Dialog';
 import { formatBpm, keyName } from '../canvas';
 
@@ -13,14 +14,16 @@ export type ConductorKind = ConductorValue['kind'];
 
 export const KIND_NAMES: Record<ConductorKind, string> = { tempo: 'テンポ', 'time-signature': '拍子', 'key-signature': '調号', marker: 'マーカー' };
 
-/** Key options: "C（調号なし）", "G（♯1）", "Am（調号なし）", ... value "sf:minor". */
-export const KEY_OPTIONS: { value: string; label: string }[] = [false, true].flatMap((minor) =>
-  Array.from({ length: 15 }, (_, i) => {
-    const sf = i - 7;
-    const acc = sf === 0 ? '調号なし' : sf > 0 ? `♯${sf}` : `♭${-sf}`;
-    return { value: `${sf}:${minor ? 1 : 0}`, label: `${keyName(sf, minor)}（${minor ? '短調' : '長調'}・${acc}）` };
-  }),
-);
+/** Key options: "C（長調・調号なし）", "G（長調・♯1）", "Am（短調・調号なし）", ... value "sf:minor". Built per call: the labels follow the UI language. */
+export function keyOptions(): { value: string; label: string }[] {
+  return [false, true].flatMap((minor) =>
+    Array.from({ length: 15 }, (_, i) => {
+      const sf = i - 7;
+      const acc = sf === 0 ? t('調号なし') : sf > 0 ? `♯${sf}` : `♭${-sf}`;
+      return { value: `${sf}:${minor ? 1 : 0}`, label: `${keyName(sf, minor)}（${minor ? t('短調') : t('長調')}・${acc}）` };
+    }),
+  );
+}
 
 export function signatureMap(project: MidiProject): TimeSignatureMap {
   return new TimeSignatureMap(project.ppq, project.conductor.filter((c) => c.kind === 'time-signature'));
@@ -81,12 +84,12 @@ function valueOf(c: ConductorEvent): ConductorValue {
 export function parseConductorValue(kind: ConductorKind, text: string): ConductorValue {
   if (kind === 'tempo') {
     const bpm = Number(text);
-    if (!text.trim() || !Number.isFinite(bpm)) throw new Error('テンポは数値（BPM）で入力してください。');
+    if (!text.trim() || !Number.isFinite(bpm)) throw new Error(t('テンポは数値（BPM）で入力してください。'));
     return { kind, bpm };
   }
   if (kind === 'time-signature') {
     const m = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(text);
-    if (!m) throw new Error('拍子は 3/4 のように入力してください。');
+    if (!m) throw new Error(t('拍子は 3/4 のように入力してください。'));
     return { kind, numerator: Number(m[1]), denominator: Number(m[2]) };
   }
   if (kind === 'key-signature') {
@@ -120,7 +123,7 @@ export function ValueField({ kind, value, onChange, onCommit, label, autoFocus }
           onCommit?.(e.target.value); // a choice is final
         }}
       >
-        {KEY_OPTIONS.map((o) => (
+        {keyOptions().map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>
@@ -167,7 +170,7 @@ export function ConductorEventDialog({ target, onClose }: { target: ConductorDia
   const submit = () => {
     try {
       const tick = sig.parse(pos);
-      if (tick === null) throw new Error('位置は 小節.拍.Tick（例 5.1.0、または小節番号だけ）で入力してください。');
+      if (tick === null) throw new Error(t('位置は 小節.拍.Tick（例 5.1.0、または小節番号だけ）で入力してください。'));
       store.run(upsertConductorEvent(store.project, tick, parseConductorValue(kind, value), existing?.id));
       onClose();
     } catch (e) {
@@ -175,7 +178,7 @@ export function ConductorEventDialog({ target, onClose }: { target: ConductorDia
     }
   };
   return (
-    <Dialog title={`${KIND_NAMES[kind]}を${existing ? '変更' : '追加'}`} onClose={onClose}>
+    <Dialog title={existing ? t('{kind}を変更', { kind: t(KIND_NAMES[kind]) }) : t('{kind}を追加', { kind: t(KIND_NAMES[kind]) })} onClose={onClose}>
       <form
         className="form-grid"
         data-testid="conductor-dialog"
@@ -186,24 +189,24 @@ export function ConductorEventDialog({ target, onClose }: { target: ConductorDia
       >
         {!existing && (
           <label>
-            種類
+            {t('種類')}
             <select value={kind} onChange={(e) => changeKind(e.target.value as ConductorKind)}>
               {(Object.keys(KIND_NAMES) as ConductorKind[]).map((k) => (
                 <option key={k} value={k}>
-                  {KIND_NAMES[k]}
+                  {t(KIND_NAMES[k])}
                 </option>
               ))}
             </select>
           </label>
         )}
         <label>
-          位置（小節.拍.Tick）
-          <input aria-label="位置" value={pos} onChange={(e) => setPos(e.target.value)} />
-          {kind === 'time-signature' && <span className="note">拍子はその小節の頭に置きます。</span>}
+          {t('位置（小節.拍.Tick）')}
+          <input aria-label={t('位置')} value={pos} onChange={(e) => setPos(e.target.value)} />
+          {kind === 'time-signature' && <span className="note">{t('拍子はその小節の頭に置きます。')}</span>}
         </label>
         <label>
-          {kind === 'tempo' ? 'テンポ（BPM）' : kind === 'time-signature' ? '拍子（例 3/4、6/8）' : kind === 'key-signature' ? '調' : 'マーカーの名前'}
-          <ValueField kind={kind} value={value} onChange={setValue} label={KIND_NAMES[kind]} autoFocus />
+          {kind === 'tempo' ? t('テンポ（BPM）') : kind === 'time-signature' ? t('拍子（例 3/4、6/8）') : kind === 'key-signature' ? t('調') : t('マーカーの名前')}
+          <ValueField kind={kind} value={value} onChange={setValue} label={t(KIND_NAMES[kind])} autoFocus />
         </label>
         {error && (
           <p className="warn-text" role="alert">
@@ -222,11 +225,11 @@ export function ConductorEventDialog({ target, onClose }: { target: ConductorDia
                 onClose();
               }}
             >
-              削除
+              {t('削除')}
             </button>
           )}
           <button type="button" onClick={onClose}>
-            キャンセル
+            {t('キャンセル')}
           </button>
         </div>
       </form>

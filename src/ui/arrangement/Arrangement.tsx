@@ -2,6 +2,7 @@
 // and playhead. Only the visible range is drawn; the playhead lives on its own overlay canvas
 // redrawn per animation frame (the song is not redrawn every frame).
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '../../i18n';
 import { arrangementZoomPatch } from '../zoom';
 import { draggedLoop, hitLoop, loopCursor, loopSnap, type LoopDrag } from '../loopDrag';
 import { adoptFreeEvents, createClip, deleteClip, duplicateClip, freeEventsInClip, moveClips, reorderTracks, resizeClip, splitClip, updateClip, updateTrack } from '../../core/editing/operations';
@@ -30,9 +31,9 @@ const TRACK_H = 48;
 
 function songEnd(p: MidiProject): number {
   let end = p.ppq * 4 * 16;
-  for (const t of p.tracks) {
-    end = Math.max(end, t.endOfTrackTick ?? 0);
-    for (const e of t.events) end = Math.max(end, e.kind === 'note' ? e.tick + e.durationTicks : e.tick);
+  for (const tk of p.tracks) {
+    end = Math.max(end, tk.endOfTrackTick ?? 0);
+    for (const e of tk.events) end = Math.max(end, e.kind === 'note' ? e.tick + e.durationTicks : e.tick);
   }
   for (const c of p.clips) end = Math.max(end, c.endTick);
   return end + p.ppq * 4 * 8;
@@ -169,7 +170,7 @@ export function Arrangement() {
   const selectedTrackId = selectedTrack(project)?.id;
 
   const tickAt = (x: number) => Math.max(0, (x + scrollX) / pxPerTick);
-  const snap = (t: number) => (snapGrid ? snapTick(t, snapGrid).tick : Math.round(t));
+  const snap = (tk: number) => (snapGrid ? snapTick(tk, snapGrid).tick : Math.round(tk));
 
   // Static layer: ruler, lanes, clips. Redrawn when the project / view changes.
   useEffect(() => {
@@ -251,7 +252,7 @@ export function Arrangement() {
       ctx.fillText(String(rbar), x + 3, RULER_H / 2);
       barLabelEnd.set(Math.round(tick), x + 3 + ctx.measureText(String(rbar)).width);
     }
-    drawRulerConductorMarks(ctx, marks.filter((m) => m.kind === 'signature' || m.kind === 'key'), pxPerTick, scrollX, viewW, RULER_H, th, (t) => barLabelEnd.get(t) ?? -Infinity);
+    drawRulerConductorMarks(ctx, marks.filter((m) => m.kind === 'signature' || m.kind === 'key'), pxPerTick, scrollX, viewW, RULER_H, th, (tk) => barLabelEnd.get(tk) ?? -Infinity);
     ctx.strokeStyle = th.border;
     ctx.beginPath();
     ctx.moveTo(0, RULER_H + 0.5);
@@ -273,7 +274,7 @@ export function Arrangement() {
     ctx.stroke();
     // drag previews
     if (drag?.kind === 'create') {
-      const i = project.tracks.findIndex((t) => t.id === drag.trackId);
+      const i = project.tracks.findIndex((tk) => tk.id === drag.trackId);
       const a = Math.min(drag.startTick, drag.endTick);
       const b = Math.max(drag.startTick, drag.endTick);
       ctx.strokeStyle = th.accent;
@@ -288,7 +289,7 @@ export function Arrangement() {
       ctx.setLineDash([4, 3]);
       for (const c of project.clips) {
         if (!ids.has(c.id)) continue;
-        const i = Math.max(0, Math.min(last, project.tracks.findIndex((t) => t.id === c.trackId) + drag.trackOffset));
+        const i = Math.max(0, Math.min(last, project.tracks.findIndex((tk) => tk.id === c.trackId) + drag.trackOffset));
         ctx.strokeRect((c.startTick + drag.dx) * pxPerTick - scrollX + 0.5, HEAD_H + i * TRACK_H - scrollY + 3.5, (c.endTick - c.startTick) * pxPerTick, TRACK_H - 7);
       }
       ctx.setLineDash([]);
@@ -306,7 +307,7 @@ export function Arrangement() {
       ctx.setLineDash([]);
     }
     if (drag?.kind === 'resize') {
-      const i = project.tracks.findIndex((t) => t.id === drag.clip.trackId);
+      const i = project.tracks.findIndex((tk) => tk.id === drag.clip.trackId);
       const a = drag.edge === 'start' ? drag.tick : drag.clip.startTick;
       const b = drag.edge === 'end' ? drag.tick : drag.clip.endTick;
       ctx.strokeStyle = th.accent;
@@ -331,8 +332,8 @@ export function Arrangement() {
     const live = recorder.livePreview();
     if (live.size) {
       ctx.fillStyle = 'rgba(229,72,77,0.9)';
-      project.tracks.forEach((t, i) => {
-        const notes = live.get(t.id);
+      project.tracks.forEach((tk, i) => {
+        const notes = live.get(tk.id);
         if (!notes) return;
         const y0 = HEAD_H + i * TRACK_H - scrollY;
         for (const n of notes) ctx.fillRect(n.tick * pxPerTick - scrollX, y0 + 6 + ((127 - n.pitch) / 127) * (TRACK_H - 12), Math.max(2, n.durationTicks * pxPerTick), 2);
@@ -345,8 +346,8 @@ export function Arrangement() {
     const i = Math.floor((y - HEAD_H + scrollY) / TRACK_H);
     const track = project.tracks[i];
     if (!track) return null;
-    const t = tickAt(x);
-    return project.clips.find((c) => c.trackId === track.id && t >= c.startTick && t < c.endTick) ?? null;
+    const tk = tickAt(x);
+    return project.clips.find((c) => c.trackId === track.id && tk >= c.startTick && tk < c.endTick) ?? null;
   }
 
   /** a clip edge within EDGE_PX of x in the lane at y (edges win over the clip body) */
@@ -393,9 +394,9 @@ export function Arrangement() {
     if (!track) {
       // below the last track: a rubber band can still start here (selection tool)
       if (tool !== 'draw') {
-        const t = tickAt(x);
+        const tk = tickAt(x);
         const row = rowAt(y);
-        setDrag({ kind: 'marquee', tick0: t, row0: row, tick1: t, row1: row, add });
+        setDrag({ kind: 'marquee', tick0: tk, row0: row, tick1: tk, row1: row, add });
       }
       return;
     }
@@ -419,13 +420,13 @@ export function Arrangement() {
     } else if (tool === 'draw') {
       // the draw tool (P) creates a clip; the selection tool (V) drags a rubber band over the clips
       store.setSelection({ ...selection, clipIds: new Set(), trackIds: new Set([track.id]) });
-      const t = snap(tickAt(x));
-      setDrag({ kind: 'create', trackId: track.id, startTick: t, endTick: t });
+      const tk = snap(tickAt(x));
+      setDrag({ kind: 'create', trackId: track.id, startTick: tk, endTick: tk });
     } else {
       if (!add) store.setSelection({ ...selection, clipIds: new Set(), trackIds: new Set([track.id]) });
-      const t = tickAt(x);
+      const tk = tickAt(x);
       const row = rowAt(y);
-      setDrag({ kind: 'marquee', tick0: t, row0: row, tick1: t, row1: row, add });
+      setDrag({ kind: 'marquee', tick0: tk, row0: row, tick1: tk, row1: row, add });
     }
   }
 
@@ -436,7 +437,7 @@ export function Arrangement() {
   function clipsInBox(tickA: number, tickB: number, rowA: number, rowB: number): string[] {
     const [t0, t1] = tickA <= tickB ? [tickA, tickB] : [tickB, tickA];
     const [r0, r1] = rowA <= rowB ? [rowA, rowB] : [rowB, rowA];
-    const rows = new Map(project.tracks.map((t, i) => [t.id, i]));
+    const rows = new Map(project.tracks.map((tk, i) => [tk.id, i]));
     return project.clips.filter((c) => c.startTick < t1 && c.endTick > t0 && (rows.get(c.trackId) ?? -1) + 1 > r0 && (rows.get(c.trackId) ?? -1) < r1).map((c) => c.id);
   }
 
@@ -454,9 +455,9 @@ export function Arrangement() {
     else if (drag.kind === 'create') setDrag({ ...drag, endTick: snap(tickAt(x)) });
     else if (drag.kind === 'marquee') setDrag({ ...drag, tick1: tickAt(x), row1: rowAt(y) });
     else if (drag.kind === 'resize') {
-      const t = snap(tickAt(x));
+      const tk = snap(tickAt(x));
       // the clip keeps at least one tick
-      const tick = drag.edge === 'start' ? Math.max(0, Math.min(drag.clip.endTick - 1, t)) : Math.max(drag.clip.startTick + 1, t);
+      const tick = drag.edge === 'start' ? Math.max(0, Math.min(drag.clip.endTick - 1, tk)) : Math.max(drag.clip.startTick + 1, tk);
       setDrag({ ...drag, tick });
     } else {
       const raw = (x - drag.startX) / pxPerTick;
@@ -523,11 +524,11 @@ export function Arrangement() {
     const near = conductorNear(kind, x);
     const name = KIND_NAMES[kind];
     return [
-      { label: `ここに${name}を追加…`, action: () => setConductorEdit({ kind, tick: addTick }) },
+      { label: t('ここに{name}を追加…', { name: t(name) }), action: () => setConductorEdit({ kind, tick: addTick }) },
       ...(near
         ? [
-            { label: `この${name}（${conductorValueText(near)}）を変更…`, action: () => setConductorEdit({ kind, tick: near.tick, id: near.id }) },
-            { label: `この${name}を削除`, action: () => store.run(deleteConductorEvent(store.project, near.id)) },
+            { label: t('この{name}（{value}）を変更…', { name: t(name), value: conductorValueText(near) }), action: () => setConductorEdit({ kind, tick: near.tick, id: near.id }) },
+            { label: t('この{name}を削除', { name: t(name) }), action: () => store.run(deleteConductorEvent(store.project, near.id)) },
           ]
         : []),
     ];
@@ -538,8 +539,8 @@ export function Arrangement() {
     const tick = snap(raw);
     const barStart = Math.round(sig.barBeatToTick(sig.tickToBarBeat(raw).bar));
     const sep: MenuItem = { separator: true, label: '' };
-    const open: MenuItem = { label: 'コンダクタートラックを開く', action: () => store.updateSettings({ activePanel: 'tempo', editorCollapsed: false }) };
-    const seek: MenuItem = { label: '再生位置をここに移動', action: () => transport.seek(tick) };
+    const open: MenuItem = { label: t('コンダクタートラックを開く'), action: () => store.updateSettings({ activePanel: 'tempo', editorCollapsed: false }) };
+    const seek: MenuItem = { label: t('再生位置をここに移動'), action: () => transport.seek(tick) };
     if (lane === 'tempo') return ctxMenu.open(e, [...conductorItems('tempo', x, tick), sep, seek, open]);
     if (lane === 'marker') return ctxMenu.open(e, [...conductorItems('marker', x, tick), sep, seek, open]);
     ctxMenu.open(e, [seek, sep, ...conductorItems('time-signature', x, barStart), ...conductorItems('key-signature', x, barStart), ...(markerH ? [] : conductorItems('marker', x, tick)), sep, open]);
@@ -584,11 +585,11 @@ export function Arrangement() {
       if (group.size > 1) {
         const n = group.size;
         ctxMenu.open(e, [
-          { label: `コピー（${n} 個のクリップ）`, shortcut: `${MOD}C`, action: actions.copy },
-          { label: '切り取り', shortcut: `${MOD}X`, action: run(actions.cut) },
-          { label: '複製（すぐ後ろへ）', shortcut: `${MOD}D`, action: run(actions.duplicate) },
+          { label: t('コピー（{n} 個のクリップ）', { n }), shortcut: `${MOD}C`, action: actions.copy },
+          { label: t('切り取り'), shortcut: `${MOD}X`, action: run(actions.cut) },
+          { label: t('複製（すぐ後ろへ）'), shortcut: `${MOD}D`, action: run(actions.duplicate) },
           { separator: true, label: '' },
-          { label: '削除（中のノートごと）', shortcut: 'Delete', action: run(actions.delete) },
+          { label: t('削除（中のノートごと）'), shortcut: 'Delete', action: run(actions.delete) },
         ]);
         return;
       }
@@ -601,39 +602,39 @@ export function Arrangement() {
         fn();
       };
       ctxMenu.open(e, [
-        { label: 'ピアノロールで開く', action: () => store.updateSettings({ selectedTrackId: track.id, activePanel: track.displayMode === 'drum' ? 'drum' : 'piano-roll', editorCollapsed: false }) },
-        { label: '名前と色…', action: () => setClipEdit(clip) },
+        { label: t('ピアノロールで開く'), action: () => store.updateSettings({ selectedTrackId: track.id, activePanel: track.displayMode === 'drum' ? 'drum' : 'piano-roll', editorCollapsed: false }) },
+        { label: t('名前と色…'), action: () => setClipEdit(clip) },
         { separator: true, label: '' },
-        { label: 'コピー', shortcut: `${MOD}C`, action: actions.copy },
-        { label: '切り取り', shortcut: `${MOD}X`, action: run(actions.cut) },
-        { label: 'この位置のクリップを全トラックで選択', action: () => selectClipsAt(tick, track.id) },
+        { label: t('コピー'), shortcut: `${MOD}C`, action: actions.copy },
+        { label: t('切り取り'), shortcut: `${MOD}X`, action: run(actions.cut) },
+        { label: t('この位置のクリップを全トラックで選択'), action: () => selectClipsAt(tick, track.id) },
         { separator: true, label: '' },
-        { label: `クオンタイズ（${gridLabel(settings.grid)}）`, action: withNotes(actions.quantize), disabled: noteIds.length === 0, reason: 'クリップにノートがありません' },
-        { label: 'クオンタイズ…', action: withNotes(actions.quantizeDialog), disabled: noteIds.length === 0, reason: 'クリップにノートがありません' },
-        { label: 'ヒューマナイズ…', action: withNotes(actions.humanizeDialog), disabled: noteIds.length === 0, reason: 'クリップにノートがありません' },
-        { label: 'ベロシティ…', action: withNotes(actions.velocityDialog), disabled: noteIds.length === 0, reason: 'クリップにノートがありません' },
+        { label: t('クオンタイズ（{grid}）', { grid: gridLabel(settings.grid) }), action: withNotes(actions.quantize), disabled: noteIds.length === 0, reason: t('クリップにノートがありません') },
+        { label: t('クオンタイズ…'), action: withNotes(actions.quantizeDialog), disabled: noteIds.length === 0, reason: t('クリップにノートがありません') },
+        { label: t('ヒューマナイズ…'), action: withNotes(actions.humanizeDialog), disabled: noteIds.length === 0, reason: t('クリップにノートがありません') },
+        { label: t('ベロシティ…'), action: withNotes(actions.velocityDialog), disabled: noteIds.length === 0, reason: t('クリップにノートがありません') },
         { separator: true, label: '' },
-        { label: `範囲内の外れたノートを取り込む${free ? `（${free} 個）` : ''}`, action: run(() => store.run(adoptFreeEvents(store.project, clip.id))), disabled: free === 0, reason: 'クリップの範囲内に、クリップに属していないイベントはありません' },
-        { label: 'ここで分割', action: run(() => store.run(splitClip(store.project, clip.id, tick))), disabled: tick <= clip.startTick || tick >= clip.endTick, reason: 'クリップの内側で右クリックしてください' },
-        { label: '複製（すぐ後ろへ）', action: run(() => store.run(duplicateClip(store.project, clip.id, clip.endTick).command)) },
+        { label: `${t('範囲内の外れたノートを取り込む')}${free ? t('（{n} 個）', { n: free }) : ''}`, action: run(() => store.run(adoptFreeEvents(store.project, clip.id))), disabled: free === 0, reason: t('クリップの範囲内に、クリップに属していないイベントはありません') },
+        { label: t('ここで分割'), action: run(() => store.run(splitClip(store.project, clip.id, tick))), disabled: tick <= clip.startTick || tick >= clip.endTick, reason: t('クリップの内側で右クリックしてください') },
+        { label: t('複製（すぐ後ろへ）'), action: run(() => store.run(duplicateClip(store.project, clip.id, clip.endTick).command)) },
         { separator: true, label: '' },
-        { label: '削除（中のノートごと）', shortcut: 'Delete', action: run(() => store.run(deleteClip(store.project, clip.id, { deleteEvents: true }))) },
-        { label: 'クリップだけ解除（ノートは残す）', action: run(() => store.run(deleteClip(store.project, clip.id, { deleteEvents: false }, 'クリップを解除'))) },
+        { label: t('削除（中のノートごと）'), shortcut: 'Delete', action: run(() => store.run(deleteClip(store.project, clip.id, { deleteEvents: true }))) },
+        { label: t('クリップだけ解除（ノートは残す）'), action: run(() => store.run(deleteClip(store.project, clip.id, { deleteEvents: false }, 'クリップを解除'))) },
       ]);
       return;
     }
     const clipboard = store.getState().clipboard;
     ctxMenu.open(e, [
-      { label: '再生位置をここに移動', action: () => transport.seek(tick) },
+      { label: t('再生位置をここに移動'), action: () => transport.seek(tick) },
       ...(track
         ? [
-            { label: 'ここに1小節のクリップを作成', action: run(() => {
+            { label: t('ここに1小節のクリップを作成'), action: run(() => {
               const start = Math.round(sig.barBeatToTick(sig.tickToBarBeat(tick).bar));
               const r = createClip(store.project, track.id, start, start + Math.round(sig.ticksPerBar(start)));
               store.run(r.command);
               store.setSelection({ ...store.getState().selection, clipIds: new Set([r.clipId]) });
             }) },
-            { label: 'ここに貼り付け', disabled: !clipboard, reason: 'コピーしたノートやクリップがありません', action: run(() => {
+            { label: t('ここに貼り付け'), disabled: !clipboard, reason: t('コピーしたノートやクリップがありません'), action: run(() => {
               if (!clipboard) return;
               if (clipboard.clips) {
                 // copied regions return to their own tracks; a track that is gone falls back to the clicked one
@@ -647,7 +648,7 @@ export function Arrangement() {
               const r = pasteEvents(store.project, track.id, tick, clipboard);
               if (r) store.run(r.command, { select: r.ids });
             }) },
-            { label: 'この位置のクリップを全トラックで選択', action: () => selectClipsAt(tick, track.id), disabled: !project.clips.some((c) => tick >= c.startTick && tick < c.endTick), reason: 'この位置にクリップがありません' },
+            { label: t('この位置のクリップを全トラックで選択'), action: () => selectClipsAt(tick, track.id), disabled: !project.clips.some((c) => tick >= c.startTick && tick < c.endTick), reason: t('この位置にクリップがありません') },
           ]
         : []),
     ]);
@@ -658,44 +659,44 @@ export function Arrangement() {
       <div className="track-headers" onWheel={(e) => scrollRef.current && (scrollRef.current.scrollTop += e.deltaY)}>
         <div className="arr-corner" style={{ height: RULER_H }}>
           {/* same tool state as the piano roll / drum editor; shown here too so the draw mode is discoverable from the track view */}
-          <span className="segmented arr-tools" role="group" aria-label="トラックビューのツール">
-            <button aria-label="選択" aria-pressed={tool === 'select'} className={`icon-btn${tool === 'select' ? ' on' : ''}`} onClick={() => store.setTool('select')} title="選択ツール (V): クリックで選択、ドラッグで移動、空いているところのドラッグで範囲選択" data-testid="arr-tool-select">
+          <span className="segmented arr-tools" role="group" aria-label={t('トラックビューのツール')}>
+            <button aria-label={t('選択')} aria-pressed={tool === 'select'} className={`icon-btn${tool === 'select' ? ' on' : ''}`} onClick={() => store.setTool('select')} title={t('選択ツール (V): クリックで選択、ドラッグで移動、空いているところのドラッグで範囲選択')} data-testid="arr-tool-select">
               <SelectIcon />
             </button>
-            <button aria-label="描画" aria-pressed={tool === 'draw'} className={`icon-btn${tool === 'draw' ? ' on' : ''}`} onClick={() => store.setTool('draw')} title="描画ツール (P): 空いているところをドラッグでクリップ（リージョン）を作成" data-testid="arr-tool-draw">
+            <button aria-label={t('描画')} aria-pressed={tool === 'draw'} className={`icon-btn${tool === 'draw' ? ' on' : ''}`} onClick={() => store.setTool('draw')} title={t('描画ツール (P): 空いているところをドラッグでクリップ（リージョン）を作成')} data-testid="arr-tool-draw">
               <PencilIcon />
             </button>
           </span>
-          <span className="segmented zoom-buttons" role="group" aria-label="トラックビューの拡大・縮小">
-            <button onClick={() => store.updateSettings(arrangementZoomPatch(settings, 'out'))} aria-label="トラックビューを縮小" title="横方向に縮小">
+          <span className="segmented zoom-buttons" role="group" aria-label={t('トラックビューの拡大・縮小')}>
+            <button onClick={() => store.updateSettings(arrangementZoomPatch(settings, 'out'))} aria-label={t('トラックビューを縮小')} title={t('横方向に縮小')}>
               −
             </button>
-            <button onClick={() => store.updateSettings(arrangementZoomPatch(settings, 'in'))} aria-label="トラックビューを拡大" title="横方向に拡大">
+            <button onClick={() => store.updateSettings(arrangementZoomPatch(settings, 'in'))} aria-label={t('トラックビューを拡大')} title={t('横方向に拡大')}>
               +
             </button>
           </span>
         </div>
         {markerH > 0 && (
-          <div className="tempo-lane-label marker-lane-label" style={{ height: markerH }} role="button" tabIndex={0} onClick={() => store.updateSettings({ activePanel: 'tempo', editorCollapsed: false })} title="マーカー（SMF のマーカーイベント）。クリックで「コンダクター」タブを開きます。右クリック・ダブルクリックで追加・変更できます。">
-            マーカー
+          <div className="tempo-lane-label marker-lane-label" style={{ height: markerH }} role="button" tabIndex={0} onClick={() => store.updateSettings({ activePanel: 'tempo', editorCollapsed: false })} title={t('マーカー（SMF のマーカーイベント）。クリックで「コンダクター」タブを開きます。右クリック・ダブルクリックで追加・変更できます。')}>
+            {t('マーカー')}
           </div>
         )}
-        <div className="tempo-lane-label" style={{ height: COND_H }} role="button" tabIndex={0} data-testid="tempo-lane-label" onClick={() => store.updateSettings({ activePanel: 'tempo', editorCollapsed: false })} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && store.updateSettings({ activePanel: 'tempo', editorCollapsed: false })} title="テンポの変化（線の高さ）と、変わる位置の BPM。拍子と調号の変化は小節番号の横に表示します。クリックで「コンダクター」タブを開きます。右クリック・ダブルクリックで追加・変更できます。">
-          テンポ
+        <div className="tempo-lane-label" style={{ height: COND_H }} role="button" tabIndex={0} data-testid="tempo-lane-label" onClick={() => store.updateSettings({ activePanel: 'tempo', editorCollapsed: false })} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && store.updateSettings({ activePanel: 'tempo', editorCollapsed: false })} title={t('テンポの変化（線の高さ）と、変わる位置の BPM。拍子と調号の変化は小節番号の横に表示します。クリックで「コンダクター」タブを開きます。右クリック・ダブルクリックで追加・変更できます。')}>
+          {t('テンポ')}
         </div>
         <div className="track-headers-clip" ref={headersClipRef}>
         <div style={{ transform: `translateY(${-scrollY}px)` }}>
-        {project.tracks.map((t, i) => (
+        {project.tracks.map((tk, i) => (
           <TrackHeader
-            key={t.id}
-            track={t}
-            selected={t.id === selectedTrackId}
-            dragging={headerDrag?.trackId === t.id}
-            renaming={renaming === t.id}
-            onSelect={() => store.updateSettings({ selectedTrackId: t.id })}
+            key={tk.id}
+            track={tk}
+            selected={tk.id === selectedTrackId}
+            dragging={headerDrag?.trackId === tk.id}
+            renaming={renaming === tk.id}
+            onSelect={() => store.updateSettings({ selectedTrackId: tk.id })}
             onDragStart={(clientY) => {
               headerDragY.current = clientY;
-              setHeaderDrag({ trackId: t.id, from: i, to: i });
+              setHeaderDrag({ trackId: tk.id, from: i, to: i });
             }}
             onDragMove={(clientY) => {
               headerDragY.current = clientY;
@@ -704,10 +705,10 @@ export function Arrangement() {
             onDragEnd={finishHeaderDrag}
             onRename={(name) => {
               setRenaming(null);
-              if (name !== null && name !== t.name) store.run(updateTrack(store.project, t.id, { name }, 'トラック名を変更'));
+              if (name !== null && name !== tk.name) store.run(updateTrack(store.project, tk.id, { name }, 'トラック名を変更'));
             }}
-            onStartRename={() => setRenaming(t.id)}
-            onFlag={(flags) => store.setTrackFlags(t.id, flags)}
+            onStartRename={() => setRenaming(tk.id)}
+            onFlag={(flags) => store.setTrackFlags(tk.id, flags)}
           />
         ))}
         </div>
@@ -723,7 +724,7 @@ export function Arrangement() {
             <canvas
               ref={canvasRef}
               className="arrangement-canvas"
-              aria-label="トラックビュー（クリップの配置）"
+              aria-label={t('トラックビュー（クリップの配置）')}
               data-testid="arrangement-canvas"
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
@@ -735,7 +736,7 @@ export function Arrangement() {
                 const lane = headLane(e.clientY - rect.top);
                 if (lane) return onHeadDoubleClick(lane, e.clientX - rect.left);
                 const clip = hitClip(e.clientX - rect.left, e.clientY - rect.top);
-                const track = clip && project.tracks.find((t) => t.id === clip.trackId);
+                const track = clip && project.tracks.find((tk) => tk.id === clip.trackId);
                 if (track) store.updateSettings({ selectedTrackId: track.id, activePanel: track.displayMode === 'drum' ? 'drum' : 'piano-roll', editorCollapsed: false });
               }}
             />
@@ -746,7 +747,7 @@ export function Arrangement() {
       {ctxMenu.element}
       {conductorEdit && <ConductorEventDialog target={conductorEdit} onClose={() => setConductorEdit(null)} />}
       {clipEdit && (
-        <Dialog title="クリップの名前と色" onClose={() => setClipEdit(null)}>
+        <Dialog title={t('クリップの名前と色')} onClose={() => setClipEdit(null)}>
           <form
             className="form-grid"
             onSubmit={(e) => {
@@ -757,19 +758,19 @@ export function Arrangement() {
             }}
           >
             <label>
-              名前
-              <input name="name" defaultValue={clipEdit.name ?? ''} placeholder={project.tracks.find((t) => t.id === clipEdit.trackId)?.name} autoFocus />
+              {t('名前')}
+              <input name="name" defaultValue={clipEdit.name ?? ''} placeholder={project.tracks.find((tk) => tk.id === clipEdit.trackId)?.name} autoFocus />
             </label>
             <label>
-              色
-              <input name="color" type="color" defaultValue={(clipEdit.color ?? project.tracks.find((t) => t.id === clipEdit.trackId)?.color ?? '#4f8ef7').slice(0, 7)} />
+              {t('色')}
+              <input name="color" type="color" defaultValue={(clipEdit.color ?? project.tracks.find((tk) => tk.id === clipEdit.trackId)?.color ?? '#4f8ef7').slice(0, 7)} />
             </label>
             <div className="row">
               <button className="primary" type="submit">
                 OK
               </button>
               <button type="button" onClick={() => setClipEdit(null)}>
-                キャンセル
+                {t('キャンセル')}
               </button>
             </div>
           </form>
@@ -828,7 +829,7 @@ function drawTrackClips(ctx: CanvasRenderingContext2D, project: MidiProject, tra
   const clips = project.clips.filter((c) => c.trackId === track.id && c.endTick >= t0 && c.startTick <= t1);
   const clipOf = new Map<string, MidiClip>();
   for (const c of clips) for (const id of c.eventIds) clipOf.set(id, c);
-  const faded = track.mute || (project.tracks.some((t) => t.solo) && !track.solo);
+  const faded = track.mute || (project.tracks.some((tk) => tk.solo) && !track.solo);
   const top = y + CLIP_PAD;
   const h = TRACK_H - CLIP_PAD * 2;
   const dark = luminance(th.panel) < 0.5;
@@ -946,8 +947,8 @@ function TrackHeader({
       <span
         className="track-grip"
         role="button"
-        aria-label={`${track.name} を並べ替え`}
-        title="ドラッグで並べ替え（Alt / Option+↑↓ でも移動）"
+        aria-label={t('{name} を並べ替え', { name: track.name })}
+        title={t('ドラッグで並べ替え（Alt / Option+↑↓ でも移動）')}
         draggable={false}
         onPointerDown={(e) => {
           if (e.button !== 0 || press.current) return;
@@ -977,7 +978,7 @@ function TrackHeader({
           className="track-name-input"
           defaultValue={track.name}
           autoFocus
-          aria-label="トラック名"
+          aria-label={t('トラック名')}
           onFocus={() => (renameDone.current = false)}
           onBlur={(e) => !renameDone.current && onRename(e.target.value)}
           onKeyDown={(e) => {
@@ -987,7 +988,7 @@ function TrackHeader({
           }}
         />
       ) : (
-        <span className="track-name" onDoubleClick={onStartRename} title="ダブルクリックで名前を変更">
+        <span className="track-name" onDoubleClick={onStartRename} title={t('ダブルクリックで名前を変更')}>
           {track.name}
         </span>
       )}
@@ -996,13 +997,13 @@ function TrackHeader({
         {track.channel + 1}
         {track.displayMode === 'drum' ? ' 🥁' : ''}
       </span>
-      <button className={`toggle${track.mute ? ' on' : ''}`} aria-pressed={track.mute} aria-label={`${track.name} をミュート`} onClick={(e) => (e.stopPropagation(), onFlag({ mute: !track.mute }))}>
+      <button className={`toggle${track.mute ? ' on' : ''}`} aria-pressed={track.mute} aria-label={t('{name} をミュート', { name: track.name })} onClick={(e) => (e.stopPropagation(), onFlag({ mute: !track.mute }))}>
         M
       </button>
-      <button className={`toggle${track.solo ? ' on' : ''}`} aria-pressed={track.solo} aria-label={`${track.name} をソロ`} onClick={(e) => (e.stopPropagation(), onFlag({ solo: !track.solo }))}>
+      <button className={`toggle${track.solo ? ' on' : ''}`} aria-pressed={track.solo} aria-label={t('{name} をソロ', { name: track.name })} onClick={(e) => (e.stopPropagation(), onFlag({ solo: !track.solo }))}>
         S
       </button>
-      <button className={`toggle arm${track.recordArm ? ' on' : ''}`} aria-pressed={track.recordArm} aria-label={`${track.name} を録音待機`} title="録音待機（R キー / ● で録音するトラック）" onClick={(e) => (e.stopPropagation(), onFlag({ recordArm: !track.recordArm }))}>
+      <button className={`toggle arm${track.recordArm ? ' on' : ''}`} aria-pressed={track.recordArm} aria-label={t('{name} を録音待機', { name: track.name })} title={t('録音待機（R キー / ● で録音するトラック）')} onClick={(e) => (e.stopPropagation(), onFlag({ recordArm: !track.recordArm }))}>
         R
       </button>
     </div>

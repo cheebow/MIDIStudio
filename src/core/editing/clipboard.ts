@@ -7,6 +7,7 @@ import { newId } from '../model/ids';
 import { compareEvents } from '../events/order';
 import { addEvents, type NewEvent } from './operations';
 import type { Command, ProjectPatch } from './history';
+import { t } from '../../i18n';
 
 export interface ClipboardClip {
   /** source track: a paste goes back to it while it exists */
@@ -78,7 +79,7 @@ export function copyClips(project: MidiProject, clipIds: Iterable<string>): Clip
 
 function scaleTo(project: MidiProject, data: ClipboardData, v: number): number {
   const r = (v * project.ppq) / data.ppq;
-  if (!Number.isInteger(r)) throw new Error('PPQ の異なる曲からの貼り付けで Tick が整数になりません。');
+  if (!Number.isInteger(r)) throw new Error(t('PPQ の異なる曲からの貼り付けで Tick が整数になりません。'));
   return r;
 }
 
@@ -101,7 +102,7 @@ export function pasteEvents(project: MidiProject, trackId: string, tick: number,
  */
 export function pasteClips(project: MidiProject, tick: number, data: ClipboardData, trackFor: (clip: ClipboardClip) => TrackId | undefined, label = '貼り付け'): { command: Command; clipIds: string[] } | null {
   if (!data.clips || data.clips.length === 0) return null;
-  if (!Number.isSafeInteger(tick) || tick < 0) throw new Error('貼り付け位置が不正です。');
+  if (!Number.isSafeInteger(tick) || tick < 0) throw new Error(t('貼り付け位置が不正です。'));
   let p = project;
   const patch: ProjectPatch = {};
   const clipIds: string[] = [];

@@ -1,5 +1,6 @@
 import { newId } from './ids';
 import type { MidiProject, MidiTrack, ProjectViewSettings, SavedInputPresets } from './types';
+import { t } from '../../i18n';
 
 export const DEFAULT_PPQ = 480;
 export const DEFAULT_TEMPO_US = 500_000; // 120 BPM
@@ -75,7 +76,7 @@ export function createEmptyProject(opts: { title?: string; ppq?: number; default
   return {
     schemaVersion: 1,
     id: newId('prj'),
-    title: opts.title ?? '無題',
+    title: opts.title ?? t('無題'),
     ppq,
     conductor: [
       { id: newId('evt'), kind: 'tempo', tick: 0, usPerQuarter: DEFAULT_TEMPO_US, originOrder: 0 },
@@ -111,13 +112,13 @@ export const STARTER_TRACKS: readonly { name: string; channel: number; program: 
 export function createStarterProject(opts: { title?: string; ppq?: number } = {}): MidiProject {
   const p = createEmptyProject(opts);
   let order = p.nextOriginOrder;
-  const tracks = STARTER_TRACKS.map((t, i) =>
+  const tracks = STARTER_TRACKS.map((s, i) =>
     createTrack(
       {
-        name: t.name,
-        channel: t.channel,
-        displayMode: t.channel === 9 ? 'drum' : 'melodic',
-        events: t.program === null ? [] : [{ id: newId('evt'), kind: 'program', tick: 0, program: t.program, originOrder: order++ }],
+        name: t(s.name),
+        channel: s.channel,
+        displayMode: s.channel === 9 ? 'drum' : 'melodic',
+        events: s.program === null ? [] : [{ id: newId('evt'), kind: 'program', tick: 0, program: s.program, originOrder: order++ }],
       },
       i,
     ),

@@ -7,6 +7,7 @@ import type { ConductorEvent, MidiEvent, MidiProject, MidiTrack, SourceText } fr
 import { compareEvents } from '../events/order';
 import { writeSmf } from '../smf/writer';
 import type { SmfEvent, SmfFile, SmfTrack } from '../smf/types';
+import { t } from '../../i18n';
 
 export interface ExportWarning {
   code: string;
@@ -119,7 +120,7 @@ function trackToSmf(track: MidiTrack, warnings: ExportWarning[]): SmfTrack {
         if (bytes.length >= 2 && bytes[0] >= 0x80 && bytes[0] < 0xf0) {
           push(e.tick, 0, e.originOrder, { kind: 'channel', tick: e.tick, status: bytes[0], data: [...bytes.subarray(1)] });
         } else {
-          warnings.push({ code: 'W_EXPORT_RAW_SKIPPED', message: `トラック「${track.name}」の Tick ${e.tick}: 書き出せない形式の raw イベントがあります（${e.reason}）。`, trackId: track.id });
+          warnings.push({ code: 'W_EXPORT_RAW_SKIPPED', message: t('トラック「{name}」の Tick {tick}: 書き出せない形式の raw イベントがあります（{reason}）。', { name: track.name, tick: e.tick, reason: e.reason }), trackId: track.id });
         }
         break;
       }

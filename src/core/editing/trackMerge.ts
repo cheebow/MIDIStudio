@@ -5,6 +5,7 @@ import type { MidiEvent, MidiProject, MidiTrack } from '../model/types';
 import { sortEvents } from '../events/order';
 import type { Command } from './history';
 import { EditError } from './operations';
+import { t } from '../../i18n';
 
 const hasChannelData = (t: MidiTrack) => t.events.some((e) => e.kind !== 'sysex' && e.kind !== 'meta');
 
@@ -13,7 +14,7 @@ function mergeInto(tracks: MidiTrack[], ids: string[], name?: string): MidiTrack
   const targets = ids.map((id) => tracks.find((t) => t.id === id)).filter((t): t is MidiTrack => !!t);
   if (targets.length < 2) return tracks;
   const [first, ...rest] = targets;
-  if (rest.some((t) => t.port !== first.port)) throw new EditError('ポートの異なるトラックはまとめられません。');
+  if (rest.some((t) => t.port !== first.port)) throw new EditError(t('ポートの異なるトラックはまとめられません。'));
   const events: MidiEvent[] = [...first.events];
   for (const t of rest) {
     for (const e of t.events) {

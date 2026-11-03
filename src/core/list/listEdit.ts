@@ -9,31 +9,32 @@ import type { MidiProject } from '../model/types';
 import { classic48ToTicks } from '../timing/classic48';
 import { sortedTrackEvents, type ListUnit } from './listRows';
 import { setGsValue } from '../gs/gsProject';
+import { t } from '../../i18n';
 
 export type ParsedTicks = { ok: true; ticks: number } | { ok: false; message: string };
 
 /** Parses a ST / GT / tick cell in the current display unit. */
 export function parseTicksInput(text: string, unit: ListUnit, ppq: number): ParsedTicks {
-  const t = text.trim();
+  const s = text.trim();
   if (unit === 'native') {
-    if (!/^\d+$/.test(t)) return { ok: false, message: 'Tick は 0 以上の整数で入力してください。' };
-    return { ok: true, ticks: Number(t) };
+    if (!/^\d+$/.test(s)) return { ok: false, message: t('Tick は 0 以上の整数で入力してください。') };
+    return { ok: true, ticks: Number(s) };
   }
-  const r = classic48ToTicks(t, ppq);
-  if (r.ok) return r.ticks >= 0 ? { ok: true, ticks: r.ticks } : { ok: false, message: '0 以上の値を入力してください。' };
-  if (r.reason === 'syntax') return { ok: false, message: '数値（例: 12、12.5、25/2）を入力してください。' };
-  return { ok: false, message: `PPQ ${ppq} では Tick ${r.display} になり整数になりません。丸めずに中止しました（Native Tick 表示で入力してください）。` };
+  const r = classic48ToTicks(s, ppq);
+  if (r.ok) return r.ticks >= 0 ? { ok: true, ticks: r.ticks } : { ok: false, message: t('0 以上の値を入力してください。') };
+  if (r.reason === 'syntax') return { ok: false, message: t('数値（例: 12、12.5、25/2）を入力してください。') };
+  return { ok: false, message: t('PPQ {ppq} では Tick {display} になり整数になりません。丸めずに中止しました（Native Tick 表示で入力してください）。', { ppq, display: r.display }) };
 }
 
 export function setStepTime(project: MidiProject, trackId: string, eventId: string, newSt: number, label = 'ST を変更'): Command | null {
   const track = project.tracks.find((t) => t.id === trackId);
   if (!track) throw new EditError('track not found');
-  if (!Number.isSafeInteger(newSt) || newSt < 0) throw new EditError('ST は 0 以上の整数 Tick です。');
+  if (!Number.isSafeInteger(newSt) || newSt < 0) throw new EditError(t('ST は 0 以上の整数 Tick です。'));
   const events = sortedTrackEvents(track);
   const i = events.findIndex((e) => e.id === eventId);
   if (i < 0) throw new EditError('event not found');
   const next = events[i + 1];
-  if (!next) throw new EditError('最後のイベントの ST は変更できません（次のイベントがありません）。');
+  if (!next) throw new EditError(t('最後のイベントの ST は変更できません（次のイベントがありません）。'));
   const delta = newSt - (next.tick - events[i].tick);
   if (delta === 0) return null;
   const updates = events.slice(i + 1).map((e) => ({ id: e.id, changes: { tick: e.tick + delta } }));
@@ -41,12 +42,12 @@ export function setStepTime(project: MidiProject, trackId: string, eventId: stri
 }
 
 export function setGateTime(project: MidiProject, eventId: string, gt: number): Command | null {
-  if (!Number.isSafeInteger(gt) || gt < 1) throw new EditError('GT は 1 以上の整数 Tick です。');
+  if (!Number.isSafeInteger(gt) || gt < 1) throw new EditError(t('GT は 1 以上の整数 Tick です。'));
   return updateEvents(project, [{ id: eventId, changes: { durationTicks: gt } }], 'GT を変更');
 }
 
 export function setAbsoluteTick(project: MidiProject, eventId: string, tick: number): Command | null {
-  if (!Number.isSafeInteger(tick) || tick < 0) throw new EditError('Tick は 0 以上の整数です。');
+  if (!Number.isSafeInteger(tick) || tick < 0) throw new EditError(t('Tick は 0 以上の整数です。'));
   return updateEvents(project, [{ id: eventId, changes: { tick } }], '位置を変更');
 }
 
@@ -69,7 +70,7 @@ export function setRowValue(project: MidiProject, eventId: string, value: number
     case 'sysex':
       return setGsValue(project, eventId, value);
     default:
-      throw new EditError('この行の値は編集できません。');
+      throw new EditError(t('この行の値は編集できません。'));
   }
 }
 

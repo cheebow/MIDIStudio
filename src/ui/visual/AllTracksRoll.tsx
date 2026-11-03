@@ -1,6 +1,7 @@
 // Visual mode: piano roll of every track, scrolling under a fixed playhead. Notes use the track
 // colour; sounding notes light up. Drawn on one canvas per animation frame (only this view).
 import { useEffect, useMemo, useRef } from 'react';
+import { t } from '../../i18n';
 import type { MidiProject } from '../../core/model/types';
 import { buildMonitorData, notesIn } from '../../core/visual/monitorData';
 import { useServices } from '../../app/store/context';
@@ -15,7 +16,7 @@ export function AllTracksRoll({ project }: { project: MidiProject }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const data = useMemo(() => buildMonitorData(project), [project]);
   const sig = useSignatureMap(project);
-  const anySolo = project.tracks.some((t) => t.solo);
+  const anySolo = project.tracks.some((tk) => tk.solo);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -40,7 +41,7 @@ export function AllTracksRoll({ project }: { project: MidiProject }) {
         const lo = Math.max(0, data.minPitch - 2);
         const hi = Math.min(127, data.maxPitch + 2);
         const rowH = h / (hi - lo + 1);
-        const x = (t: number) => (t - t0) * pxPerTick;
+        const x = (tk: number) => (tk - t0) * pxPerTick;
         const y = (p: number) => (hi - p) * rowH;
         // octave bands and bar / beat lines
         ctx.fillStyle = 'rgba(255,255,255,0.035)';
@@ -67,15 +68,15 @@ export function AllTracksRoll({ project }: { project: MidiProject }) {
         ctx.globalAlpha = 1;
         ctx.lineWidth = 1;
         // notes
-        for (const t of data.tracks) {
-          const silent = t.track.mute || (anySolo && !t.track.solo);
-          for (const n of notesIn(t, t0, t1)) {
+        for (const tk of data.tracks) {
+          const silent = tk.track.mute || (anySolo && !tk.track.solo);
+          for (const n of notesIn(tk, t0, t1)) {
             const nx = x(n.tick);
             const nw = Math.max(2, n.durationTicks * pxPerTick);
             const ny = y(n.pitch);
             const now = n.tick <= tick && tick < n.tick + n.durationTicks;
             ctx.globalAlpha = silent ? 0.15 : now ? 1 : 0.55;
-            ctx.fillStyle = t.track.color;
+            ctx.fillStyle = tk.track.color;
             ctx.fillRect(nx, ny + 0.5, nw, Math.max(1.5, rowH - 1));
             if (now && !silent) {
               ctx.strokeStyle = '#fff';
@@ -105,14 +106,14 @@ export function AllTracksRoll({ project }: { project: MidiProject }) {
   return (
     <div className="visual-roll">
       <div className="visual-legend">
-        {data.tracks.map((t) => (
-          <span key={t.track.id} className={t.track.mute || (anySolo && !t.track.solo) ? 'off' : ''}>
-            <i style={{ background: t.track.color }} />
-            {t.track.name}
+        {data.tracks.map((tk) => (
+          <span key={tk.track.id} className={tk.track.mute || (anySolo && !tk.track.solo) ? 'off' : ''}>
+            <i style={{ background: tk.track.color }} />
+            {tk.track.name}
           </span>
         ))}
       </div>
-      <canvas ref={ref} className="visual-canvas" data-testid="visual-roll" aria-label="全トラックのピアノロール（再生に追従）" />
+      <canvas ref={ref} className="visual-canvas" data-testid="visual-roll" aria-label={t('全トラックのピアノロール（再生に追従）')} />
     </div>
   );
 }

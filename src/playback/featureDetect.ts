@@ -1,6 +1,8 @@
 // Browser capability detection. Takes the global object as a parameter so it can be unit-tested
 // without a DOM (pass a plain object in tests).
 
+import { t } from '../i18n';
+
 export interface BrowserFeatures {
   audioContext: boolean;
   audioWorklet: boolean;
@@ -31,7 +33,7 @@ export function detectFeatures(g: GlobalLike): BrowserFeatures {
 /** Human readable (Japanese) list of problems that block audio playback; empty when fine. */
 export function audioBlockers(f: BrowserFeatures): string[] {
   const out: string[] = [];
-  if (!f.audioContext) out.push('このブラウザは Web Audio (AudioContext) に対応していません。');
-  else if (!f.audioWorklet) out.push('このブラウザは AudioWorklet に対応していないため、内蔵音源を使えません。');
+  if (!f.audioContext) out.push(t('このブラウザは Web Audio (AudioContext) に対応していません。'));
+  else if (!f.audioWorklet) out.push(t('このブラウザは AudioWorklet に対応していないため、内蔵音源を使えません。'));
   return out;
 }

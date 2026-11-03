@@ -3,6 +3,7 @@
 import type { MidiEvent, MidiProject } from '../model/types';
 import type { Command } from './history';
 import { addEvents, EditError, type NewEvent } from './operations';
+import { t } from '../../i18n';
 
 /**
  * The clip new setup events should join: the clip that held one of the replaced events, else the
@@ -33,7 +34,7 @@ export function setBankProgram(project: MidiProject, trackId: string, v: { msb: 
 
 /** Pitch Bend Sensitivity (RPN 0/0) at tick 0, followed by RPN Null so later Data Entry is safe. */
 export function setPitchBendRange(project: MidiProject, trackId: string, semitones: number): Command {
-  if (!Number.isInteger(semitones) || semitones < 0 || semitones > 24) throw new EditError('ベンド幅は 0〜24 半音です。');
+  if (!Number.isInteger(semitones) || semitones < 0 || semitones > 24) throw new EditError(t('ベンド幅は 0〜24 半音です。'));
   const events: NewEvent[] = [
     { kind: 'cc', tick: 0, controller: 101, value: 0 },
     { kind: 'cc', tick: 0, controller: 100, value: 0 },
@@ -49,7 +50,7 @@ export function setPitchBendRange(project: MidiProject, trackId: string, semiton
 export function setInitialController(project: MidiProject, trackId: string, controller: number, value: number): Command {
   const track = project.tracks.find((t) => t.id === trackId);
   if (!track) throw new EditError('track not found');
-  if (!Number.isInteger(value) || value < 0 || value > 127) throw new EditError('値は 0〜127 です。');
+  if (!Number.isInteger(value) || value < 0 || value > 127) throw new EditError(t('値は 0〜127 です。'));
   const first = track.events.find((e) => e.kind === 'cc' && e.tick === 0 && e.controller === controller && (e.channelOverride === undefined || e.channelOverride === track.channel));
   if (first) {
     const tracks = project.tracks.map((t) => (t.id === trackId ? { ...t, events: t.events.map((e) => (e.id === first.id ? { ...e, value } : e)) } : t));
@@ -90,7 +91,7 @@ export function controllerAt(track: MidiProject['tracks'][number], controller: n
 export function setControllerAt(project: MidiProject, trackId: string, controller: number, value: number, tick: number): Command | null {
   const track = project.tracks.find((t) => t.id === trackId);
   if (!track) throw new EditError('track not found');
-  if (!Number.isInteger(value) || value < 0 || value > 127) throw new EditError('値は 0〜127 です。');
+  if (!Number.isInteger(value) || value < 0 || value > 127) throw new EditError(t('値は 0〜127 です。'));
   const { event } = controllerAt(track, controller, tick);
   if (!event) return setInitialController(project, trackId, controller, value);
   if (event.value === value) return null;

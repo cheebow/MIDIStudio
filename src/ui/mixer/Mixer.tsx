@@ -2,6 +2,7 @@
 // vertical Volume fader edit the track's tick-0 controller events (saved in the SMF); while moving,
 // the value is sent to the synth for preview, and it is committed once when the gesture ends.
 import { useEffect, useRef } from 'react';
+import { t } from '../../i18n';
 import { controllerAt, programAt, setControllerAt } from '../../core/editing/channelSetup';
 import { usePlaybackPosition } from '../../app/hooks/usePlayback';
 import { programLabel } from '../../core/gm/instruments';
@@ -41,56 +42,56 @@ export function Mixer() {
   }, [adapter]);
   // Values follow the playhead (re-rendered every frame only while playing).
   const tick = Math.max(0, Math.round(usePlaybackPosition(transport).tick));
-  const at = (t: MidiTrack, c: number) => controllerAt(t, c, tick);
-  const initial = (t: MidiTrack, c: number) => at(t, c).event?.value ?? null;
-  const preview = (t: MidiTrack, c: number) => (v: number) => transport.sendToTrack(t.id, [0xb0, c, v]);
-  const commit = (t: MidiTrack, c: number) => (v: number) => {
-    if (initial(t, c) === v) return;
+  const at = (tk: MidiTrack, c: number) => controllerAt(tk, c, tick);
+  const initial = (tk: MidiTrack, c: number) => at(tk, c).event?.value ?? null;
+  const preview = (tk: MidiTrack, c: number) => (v: number) => transport.sendToTrack(tk.id, [0xb0, c, v]);
+  const commit = (tk: MidiTrack, c: number) => (v: number) => {
+    if (initial(tk, c) === v) return;
     try {
       // a controller-only edit at the playhead is applied live by the Transport: no reload (ADR-039)
-      store.run(setControllerAt(store.project, t.id, c, v, tick));
+      store.run(setControllerAt(store.project, tk.id, c, v, tick));
     } catch (e) {
       reportError((e as Error).message);
     }
   };
-  const anySolo = project.tracks.some((t) => t.solo);
+  const anySolo = project.tracks.some((tk) => tk.solo);
   /** tooltip when a controller changes during the song (automation) */
-  const autoNote = (t: MidiTrack, c: number) => {
-    const a = at(t, c);
-    if (a.count > 1) return `CC${c} の変化が ${a.count} 個あります。表示は再生位置の値で、動かすとその時点で有効なイベントを書き換えます。`;
-    if (a.event && a.event.tick > 0) return `CC${c} は Tick ${a.event.tick} にあります。`;
+  const autoNote = (tk: MidiTrack, c: number) => {
+    const a = at(tk, c);
+    if (a.count > 1) return t('CC{c} の変化が {n} 個あります。表示は再生位置の値で、動かすとその時点で有効なイベントを書き換えます。', { c, n: a.count });
+    if (a.event && a.event.tick > 0) return t('CC{c} は Tick {tick} にあります。', { c, tick: a.event.tick });
     return undefined;
   };
 
   return (
-    <div className="mixer" role="region" aria-label="ミキサー">
+    <div className="mixer" role="region" aria-label={t('ミキサー')}>
       <div className="mixer-strips">
-        {project.tracks.map((t, i) => {
-          const pc = programAt(t, tick).event;
-          const silent = t.mute || (anySolo && !t.solo);
-          const selected = project.settings.selectedTrackId === t.id;
+        {project.tracks.map((tk, i) => {
+          const pc = programAt(tk, tick).event;
+          const silent = tk.mute || (anySolo && !tk.solo);
+          const selected = project.settings.selectedTrackId === tk.id;
           const knob = (c: number, name: string, def: number, extra: { bipolar?: boolean; format?: (v: number) => string } = {}) => (
-            <Knob label={`${t.name} ${name}`} value={initial(t, c)} defaultValue={def} color={t.color} onChange={preview(t, c)} onCommit={commit(t, c)} automation={autoNote(t, c)} {...extra} />
+            <Knob label={`${tk.name} ${name}`} value={initial(tk, c)} defaultValue={def} color={tk.color} onChange={preview(tk, c)} onCommit={commit(tk, c)} automation={autoNote(tk, c)} {...extra} />
           );
           const meter = (
-            <div className="meter" aria-hidden="true" title={`${t.name} の出力レベル（${t.port}${t.channel + 1}。同じチャンネル番号のトラックは同じメーターです）`}>
+            <div className="meter" aria-hidden="true" title={t('{name} の出力レベル（{ch}。同じチャンネル番号のトラックは同じメーターです）', { name: tk.name, ch: `${tk.port}${tk.channel + 1}` })}>
               <div
                 className="meter-cover"
-                data-channel={t.channel}
+                data-channel={tk.channel}
                 ref={(el) => {
-                  if (el) meterEls.current.set(t.id, el);
-                  else meterEls.current.delete(t.id);
+                  if (el) meterEls.current.set(tk.id, el);
+                  else meterEls.current.delete(tk.id);
                 }}
               />
             </div>
           );
           return (
-            <div key={t.id} className={`strip${selected ? ' selected' : ''}${silent ? ' silent' : ''}`} data-testid="mixer-strip" onPointerDown={() => !selected && store.updateSettings({ selectedTrackId: t.id })}>
-              <div className="strip-head" style={{ borderTopColor: t.color }} title={t.name}>
+            <div key={tk.id} className={`strip${selected ? ' selected' : ''}${silent ? ' silent' : ''}`} data-testid="mixer-strip" onPointerDown={() => !selected && store.updateSettings({ selectedTrackId: tk.id })}>
+              <div className="strip-head" style={{ borderTopColor: tk.color }} title={tk.name}>
                 <span className="strip-index">{i + 1}</span>
-                <span className="strip-name">{t.name}</span>
+                <span className="strip-name">{tk.name}</span>
               </div>
-              <div className="strip-program note" title={pc && pc.kind === 'program' ? programLabel(pc.program) : '音色未設定'}>
+              <div className="strip-program note" title={pc && pc.kind === 'program' ? programLabel(pc.program) : t('音色未設定')}>
                 {pc && pc.kind === 'program' ? programLabel(pc.program).slice(4) : '—'}
               </div>
               <div className="strip-knobs">
@@ -99,32 +100,32 @@ export function Mixer() {
                 {knob(93, 'Chorus', 0)}
                 {knob(11, 'Expr', 127)}
               </div>
-              <Fader label={`${t.name} Volume`} value={initial(t, 7)} defaultValue={100} color={t.color} onChange={preview(t, 7)} onCommit={commit(t, 7)} automation={autoNote(t, 7)} meter={meter} />
+              <Fader label={`${tk.name} Volume`} value={initial(tk, 7)} defaultValue={100} color={tk.color} onChange={preview(tk, 7)} onCommit={commit(tk, 7)} automation={autoNote(tk, 7)} meter={meter} />
               <div className="strip-volume" aria-hidden="true">
-                {initial(t, 7) ?? '--'}
+                {initial(tk, 7) ?? '--'}
               </div>
               <div className="strip-buttons">
-                <button className={`toggle${t.mute ? ' on' : ''}`} aria-pressed={t.mute} aria-label={`${t.name} をミュート`} onClick={() => store.setTrackFlags(t.id, { mute: !t.mute })}>
+                <button className={`toggle${tk.mute ? ' on' : ''}`} aria-pressed={tk.mute} aria-label={t('{name} をミュート', { name: tk.name })} onClick={() => store.setTrackFlags(tk.id, { mute: !tk.mute })}>
                   M
                 </button>
-                <button className={`toggle solo${t.solo ? ' on' : ''}`} aria-pressed={t.solo} aria-label={`${t.name} をソロ`} onClick={() => store.setTrackFlags(t.id, { solo: !t.solo })}>
+                <button className={`toggle solo${tk.solo ? ' on' : ''}`} aria-pressed={tk.solo} aria-label={t('{name} をソロ', { name: tk.name })} onClick={() => store.setTrackFlags(tk.id, { solo: !tk.solo })}>
                   S
                 </button>
-                <button className={`toggle arm${t.recordArm ? ' on' : ''}`} aria-pressed={t.recordArm} aria-label={`${t.name} を録音待機`} onClick={() => store.setTrackFlags(t.id, { recordArm: !t.recordArm })}>
+                <button className={`toggle arm${tk.recordArm ? ' on' : ''}`} aria-pressed={tk.recordArm} aria-label={t('{name} を録音待機', { name: tk.name })} onClick={() => store.setTrackFlags(tk.id, { recordArm: !tk.recordArm })}>
                   R
                 </button>
               </div>
               <div className="strip-channel">
-                {t.port}
-                {t.channel + 1}
-                {t.displayMode === 'drum' ? ' 🥁' : ''}
+                {tk.port}
+                {tk.channel + 1}
+                {tk.displayMode === 'drum' ? ' 🥁' : ''}
               </div>
             </div>
           );
         })}
       </div>
       <p className="note mixer-note">
-        表示は再生位置で有効な CC の値です（再生中は追従。A はその CC が曲の途中で変化するもの＝オートメーション）。フェーダー右のメーターは実際の出力レベルです。動かすと表示中のイベントを書き換え、まだ無い CC は曲頭（Tick 0）に追加します。薄い表示は未設定。ドラッグ・ホイール・矢印キーで変更、ダブルクリックで初期値。変化の形はピアノロールの CC レーンで編集します。
+        {t('表示は再生位置で有効な CC の値です（再生中は追従。A はその CC が曲の途中で変化するもの＝オートメーション）。フェーダー右のメーターは実際の出力レベルです。動かすと表示中のイベントを書き換え、まだ無い CC は曲頭（Tick 0）に追加します。薄い表示は未設定。ドラッグ・ホイール・矢印キーで変更、ダブルクリックで初期値。変化の形はピアノロールの CC レーンで編集します。')}
       </p>
     </div>
   );

@@ -1,6 +1,7 @@
 // Track inspector (UI_DESIGN 1/8): port / channel / display mode / name / colour, Bank / Program
 // (or GS drum kit) and pitch bend range as real MIDI events at tick 0, GS rhythm part setup.
 import { useState } from 'react';
+import { t } from '../../i18n';
 import { updateTrack, addEvents } from '../../core/editing/operations';
 import { programAt, setProgramAt, setPitchBendRange } from '../../core/editing/channelSetup';
 import { usePlaybackPosition } from '../../app/hooks/usePlayback';
@@ -39,19 +40,19 @@ export function TrackInspector() {
   const isDrum = track.displayMode === 'drum';
 
   return (
-    <aside className="inspector" aria-label="トラックインスペクター">
-      <h3>トラック</h3>
+    <aside className="inspector" aria-label={t('トラックインスペクター')}>
+      <h3>{t('トラック')}</h3>
       <label>
-        名前
+        {t('名前')}
         <input key={track.id + track.name} defaultValue={track.name} onBlur={(e) => e.target.value !== track.name && set({ name: e.target.value }, 'トラック名を変更')} />
       </label>
       <label>
-        色
+        {t('色')}
         <input type="color" value={track.color.slice(0, 7)} onChange={(e) => set({ color: e.target.value }, 'トラックの色を変更')} />
       </label>
       <div className="inspector-row">
         <label>
-          ポート
+          {t('ポート')}
           <select value={track.port} onChange={(e) => set({ port: e.target.value }, 'ポートを変更')}>
             {['A', 'B', 'C', 'D'].map((p) => (
               <option key={p}>{p}</option>
@@ -60,7 +61,7 @@ export function TrackInspector() {
           </select>
         </label>
         <label>
-          チャンネル
+          {t('チャンネル')}
           <select value={track.channel} onChange={(e) => set({ channel: Number(e.target.value) }, 'チャンネルを変更')}>
             {Array.from({ length: 16 }, (_, i) => (
               <option key={i} value={i}>
@@ -71,21 +72,21 @@ export function TrackInspector() {
         </label>
       </div>
       <label>
-        表示
+        {t('表示')}
         <select value={track.displayMode} onChange={(e) => set({ displayMode: e.target.value as MidiTrack['displayMode'] }, '表示モードを変更')}>
-          <option value="melodic">メロディ（ピアノロール）</option>
-          <option value="drum">ドラム</option>
+          <option value="melodic">{t('メロディ（ピアノロール）')}</option>
+          <option value="drum">{t('ドラム')}</option>
         </select>
       </label>
       {isDrum ? (
         <label>
-          ドラムキット（再生位置の Program Change）
+          {t('ドラムキット（再生位置の Program Change）')}
           <select value={firstProgram?.program ?? ''} onChange={(e) => run(() => setSound({ msb: null, lsb: null, program: Number(e.target.value) }))}>
-            {!firstProgram && <option value="">（未設定）</option>}
+            {!firstProgram && <option value="">{t('（未設定）')}</option>}
             {GS_DRUM_KITS.map((k) => (
               <option key={k.program} value={k.program}>
                 {String(k.program + 1).padStart(3, '0')} {k.name}
-                {kits && !kits.includes(k.program) ? '（この SoundFont にはありません）' : ''}
+                {kits && !kits.includes(k.program) ? t('（この SoundFont にはありません）') : ''}
               </option>
             ))}
             {firstProgram && !GS_DRUM_KITS.some((k) => k.program === firstProgram.program) && <option value={firstProgram.program}>{String(firstProgram.program + 1).padStart(3, '0')}</option>}
@@ -94,9 +95,9 @@ export function TrackInspector() {
       ) : (
         <>
           <label>
-            音色（再生位置の Program Change）
+            {t('音色（再生位置の Program Change）')}
             <select value={firstProgram?.program ?? ''} onChange={(e) => run(() => setSound({ msb, lsb, program: Number(e.target.value) }))}>
-              {!firstProgram && <option value="">（未設定）</option>}
+              {!firstProgram && <option value="">{t('（未設定）')}</option>}
               {GM_PROGRAMS.map((_, p) => (
                 <option key={p} value={p}>
                   {programLabel(p)}
@@ -118,18 +119,20 @@ export function TrackInspector() {
       )}
       {firstProgram && where && (
         <p className="note" data-testid="program-where">
-          {cur.inEffect ? '' : 'この位置より前に音色指定がないため、最初の '}
-          {where.bar}小節{where.beat}拍目の Program Change{cur.count > 1 ? `（このトラックに ${cur.count} 個）` : ''}。変更するとこのイベントを書き換えます。
+          {cur.inEffect ? '' : t('この位置より前に音色指定がないため、最初の ')}
+          {t('{bar}小節{beat}拍目の Program Change', { bar: where.bar, beat: where.beat })}
+          {cur.count > 1 ? t('（このトラックに {n} 個）', { n: cur.count }) : ''}
+          {t('。変更するとこのイベントを書き換えます。')}
         </p>
       )}
-      {!firstProgram && <p className="note">音色を選ぶと Tick 0 に Program Change を追加します。</p>}
+      {!firstProgram && <p className="note">{t('音色を選ぶと Tick 0 に Program Change を追加します。')}</p>}
       <div className="inspector-row">
         <label>
-          ベンド幅（半音）
+          {t('ベンド幅（半音）')}
           <input type="number" min={0} max={24} value={pbRange} onChange={(e) => setPbRange(Number(e.target.value))} />
         </label>
-        <button style={{ alignSelf: 'flex-end' }} onClick={() => run(() => store.run(setPitchBendRange(store.project, track.id, pbRange)))} title="RPN 0/0 を Tick 0 に挿入">
-          設定
+        <button style={{ alignSelf: 'flex-end' }} onClick={() => run(() => store.run(setPitchBendRange(store.project, track.id, pbRange)))} title={t('RPN 0/0 を Tick 0 に挿入')}>
+          {t('設定')}
         </button>
       </div>
       {isDrum && track.channel !== 9 && (
@@ -140,12 +143,12 @@ export function TrackInspector() {
               if (r) store.run(r.command);
             })
           }
-          title="GS: Use for Rhythm Part = MAP1 をこのチャンネル用に Tick 0 へ挿入"
+          title={t('GS: Use for Rhythm Part = MAP1 をこのチャンネル用に Tick 0 へ挿入')}
         >
-          GS: Ch{track.channel + 1} をリズムパートにする
+          {t('GS: Ch{ch} をリズムパートにする', { ch: track.channel + 1 })}
         </button>
       )}
-      <p className="note">音色名は GM / GS の表記です。実際の音は読み込んだ SoundFont によります（Roland 実機の音色ではありません）。</p>
+      <p className="note">{t('音色名は GM / GS の表記です。実際の音は読み込んだ SoundFont によります（Roland 実機の音色ではありません）。')}</p>
     </aside>
   );
 }

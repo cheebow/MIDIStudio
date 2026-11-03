@@ -2,6 +2,7 @@
 // track with the sound, Volume / Expression bars, Pan / Pitch Bend markers, a level meter and a
 // full-range keyboard that lights the sounding keys in the track colour.
 import { useEffect, useMemo, useRef } from 'react';
+import { t } from '../../i18n';
 import type { MidiProject } from '../../core/model/types';
 import { buildMonitorData, notesAt, valueAt } from '../../core/visual/monitorData';
 import { GM_PROGRAMS } from '../../core/gm/instruments';
@@ -23,7 +24,7 @@ export function KeyboardMonitor({ project }: { project: MidiProject }) {
   const { transport } = useServices();
   const ref = useRef<HTMLCanvasElement>(null);
   const data = useMemo(() => buildMonitorData(project), [project]);
-  const anySolo = project.tracks.some((t) => t.solo);
+  const anySolo = project.tracks.some((tk) => tk.solo);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -61,16 +62,16 @@ export function KeyboardMonitor({ project }: { project: MidiProject }) {
         ctx.font = '11px system-ui, sans-serif';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = dim;
-        for (const [label, x] of [['トラック', xName], ['音色', xVoice], ['Vol', xVol], ['Exp', xExp], ['Pan', xPan], ['PB', xPb], ['Level', xLvl]] as const) ctx.fillText(label, x, head / 2);
+        for (const [label, x] of [[t('トラック'), xName], [t('音色'), xVoice], ['Vol', xVol], ['Exp', xExp], ['Pan', xPan], ['PB', xPb], ['Level', xLvl]] as const) ctx.fillText(label, x, head / 2);
         for (let oct = 0; oct <= 9; oct++) {
           const x = xKeys + WHITE_BEFORE[oct * 12 + 12] * wk;
           if (x < xKeys + keysW - 12) ctx.fillText(`C${oct}`, x + 1, head / 2);
         }
         const labels: string[] = [];
-        data.tracks.forEach((t, i) => {
+        data.tracks.forEach((tk, i) => {
           const y = head + i * rowH;
           const mid = y + rowH / 2;
-          const silent = t.track.mute || (anySolo && !t.track.solo);
+          const silent = tk.track.mute || (anySolo && !tk.track.solo);
           ctx.globalAlpha = silent ? 0.35 : 1;
           const clip = (s: string, x: number, width: number) => {
             ctx.save();
@@ -80,16 +81,16 @@ export function KeyboardMonitor({ project }: { project: MidiProject }) {
             ctx.fillText(s, x, mid);
             ctx.restore();
           };
-          ctx.fillStyle = t.track.color;
+          ctx.fillStyle = tk.track.color;
           ctx.fillRect(xName - 4, y + 3, 3, rowH - 6);
           ctx.fillStyle = text;
-          clip(`${t.track.port}${t.track.channel + 1} ${t.track.name}`, xName, nameW);
-          const prog = valueAt(t.program, tick, -1);
-          clip(t.track.displayMode === 'drum' ? 'ドラム' : prog >= 0 ? `${prog + 1} ${GM_PROGRAMS[prog] ?? ''}` : '—', xVoice, voiceW);
+          clip(`${tk.track.port}${tk.track.channel + 1} ${tk.track.name}`, xName, nameW);
+          const prog = valueAt(tk.program, tick, -1);
+          clip(tk.track.displayMode === 'drum' ? t('ドラム') : prog >= 0 ? `${prog + 1} ${GM_PROGRAMS[prog] ?? ''}` : '—', xVoice, voiceW);
           const bar = (x: number, v: number) => {
             ctx.fillStyle = 'rgba(255,255,255,0.12)';
             ctx.fillRect(x, mid - 4, meter, 8);
-            ctx.fillStyle = t.track.color;
+            ctx.fillStyle = tk.track.color;
             ctx.fillRect(x, mid - 4, (meter * v) / 127, 8);
           };
           const centre = (x: number, r: number) => {
@@ -97,33 +98,33 @@ export function KeyboardMonitor({ project }: { project: MidiProject }) {
             ctx.fillRect(x, mid - 1, meter, 2);
             ctx.fillStyle = dim;
             ctx.fillRect(x + meter / 2 - 0.5, mid - 5, 1, 10);
-            ctx.fillStyle = t.track.color;
+            ctx.fillStyle = tk.track.color;
             ctx.fillRect(x + r * (meter - 4), mid - 5, 4, 10);
           };
-          bar(xVol, valueAt(t.volume, tick, 100));
-          bar(xExp, valueAt(t.expression, tick, 127));
-          centre(xPan, valueAt(t.pan, tick, 64) / 127);
-          centre(xPb, (valueAt(t.bend, tick, 0) + 8192) / 16383);
-          const sounding = notesAt(t, tick);
+          bar(xVol, valueAt(tk.volume, tick, 100));
+          bar(xExp, valueAt(tk.expression, tick, 127));
+          centre(xPan, valueAt(tk.pan, tick, 64) / 127);
+          centre(xPb, (valueAt(tk.bend, tick, 0) + 8192) / 16383);
+          const sounding = notesAt(tk, tick);
           const level = sounding.reduce((m, n) => Math.max(m, n.velocity), 0) / 127;
           ctx.fillStyle = 'rgba(255,255,255,0.12)';
           ctx.fillRect(xLvl, mid - 4, 50, 8);
-          ctx.fillStyle = t.track.color;
+          ctx.fillStyle = tk.track.color;
           ctx.fillRect(xLvl, mid - 4, 50 * level, 8);
           const lit = new Set(sounding.map((n) => n.pitch));
-          if (lit.size) labels.push(`${t.track.name}:${[...lit].sort((a, b) => a - b).join(',')}`);
+          if (lit.size) labels.push(`${tk.track.name}:${[...lit].sort((a, b) => a - b).join(',')}`);
           const ky = y + 3;
           const kh = rowH - 6;
           ctx.fillStyle = '#555';
           ctx.fillRect(xKeys, ky, keysW, kh);
           for (let p = 0; p < 128; p++) {
             if (isBlackKey(p)) continue;
-            ctx.fillStyle = lit.has(p) ? t.track.color : '#f2f2f2';
+            ctx.fillStyle = lit.has(p) ? tk.track.color : '#f2f2f2';
             ctx.fillRect(xKeys + WHITE_BEFORE[p] * wk + 0.5, ky, Math.max(1, wk - 1), kh);
           }
           for (let p = 0; p < 128; p++) {
             if (!isBlackKey(p)) continue;
-            ctx.fillStyle = lit.has(p) ? t.track.color : '#222';
+            ctx.fillStyle = lit.has(p) ? tk.track.color : '#222';
             ctx.fillRect(xKeys + WHITE_BEFORE[p] * wk - wk * 0.3, ky, wk * 0.6, kh * 0.6);
           }
           ctx.globalAlpha = 1;
@@ -140,5 +141,5 @@ export function KeyboardMonitor({ project }: { project: MidiProject }) {
     return () => cancelAnimationFrame(raf);
   }, [data, transport, anySolo]);
 
-  return <canvas ref={ref} className="visual-canvas" data-testid="visual-keys" aria-label="トラックごとの鍵盤（鳴っている音が光る）" />;
+  return <canvas ref={ref} className="visual-canvas" data-testid="visual-keys" aria-label={t('トラックごとの鍵盤（鳴っている音が光る）')} />;
 }

@@ -10,6 +10,7 @@ import { CC_NAMES } from '../gm/ccNames';
 import { GM_PROGRAMS } from '../gm/instruments';
 import { drumName, findDrumMap } from '../gm/drumMaps';
 import { decodeGs } from '../gs/gsSysex';
+import { t } from '../../i18n';
 
 export type ListUnit = 'native' | 'classic48';
 export type RowCategory = 'note' | 'cc' | 'program' | 'pitch-bend' | 'pressure' | 'sysex' | 'meta' | 'raw';
@@ -114,7 +115,7 @@ function describe(e: MidiEvent, track: MidiTrack, drumLabel?: (pitch: number) =>
       const b = base64ToBytes(e.dataBase64);
       const gs = e.status === 'F0' && b ? decodeGs(b) : null;
       if (gs?.param) {
-        const engine = gs.param.engine ? '' : '（内蔵音源は未対応）';
+        const engine = gs.param.engine ? '' : t('（内蔵音源は未対応）');
         return { name: gs.param.name === 'GS Reset' ? 'GS Reset' : 'GS', key: null, gtTicks: null, value: gs.param.max > gs.param.min ? gs.data[0] : null, detail: `${gs.text}${engine}` };
       }
       if (gs) return { name: 'SysEx', key: null, gtTicks: null, value: null, detail: `${gs.text}: ${hex(b)}` };

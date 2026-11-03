@@ -6,6 +6,7 @@ import { gridTicks, snapTickSwing } from '../timing/grid';
 import type { Rational } from '../timing/rational';
 import { updateEvents, EditError } from './operations';
 import type { Command } from './history';
+import { t } from '../../i18n';
 
 export interface QuantizeOptions {
   grid: Rational;
@@ -28,7 +29,7 @@ export function quantizeOptionsFrom(ppq: number, s: QuantizeSettings): QuantizeO
 
 export function quantizeNotes(project: MidiProject, ids: Iterable<string>, opts: QuantizeOptions): Command | null {
   if ((opts.grid.den !== 1 || (opts.lengthGrid && opts.lengthGrid.den !== 1)) && !opts.allowRounding) {
-    throw new EditError('このグリッドは Tick の整数にならないため、クオンタイズすると位置が丸められます。確認のうえ実行してください。');
+    throw new EditError(t('このグリッドは Tick の整数にならないため、クオンタイズすると位置が丸められます。確認のうえ実行してください。'));
   }
   const strength = Math.min(1, Math.max(0, opts.strength ?? 1));
   const swing = opts.swing ?? 50;

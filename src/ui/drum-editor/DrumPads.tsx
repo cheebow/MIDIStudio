@@ -1,5 +1,6 @@
 // On-screen drum pads (INPUT_RECORDING 3): usable with mouse / touch, lit by keyboard input too.
 import { useSyncExternalStore } from 'react';
+import { t } from '../../i18n';
 import { drumName, type DrumMap } from '../../core/gm/drumMaps';
 import { keyLabel } from '../../input/keyLabels';
 import { drumColor } from '../drumColors';
@@ -15,7 +16,7 @@ export function DrumPads({ map }: { map: DrumMap }) {
   const presets = project.inputPresets;
   const layout = presets.layout;
   return (
-    <div className="drum-pads" aria-label="ドラムパッド">
+    <div className="drum-pads" aria-label={t('ドラムパッド')}>
       <div className="pad-grid">
         {[...new Set([...SLOT_ORDER, ...Object.values(presets.drumPadKeys), ...Object.values(presets.numpadKeys)])].map((pitch) => {
           const keys = [...Object.entries(presets.drumPadKeys), ...Object.entries(presets.numpadKeys)].filter(([, p]) => p === pitch).map(([code]) => keyLabel(code, layout));
@@ -33,13 +34,13 @@ export function DrumPads({ map }: { map: DrumMap }) {
               onPointerCancel={() => input.padUp(pitch)}
             >
               <span className="pad-name">{drumName(map, pitch)}</span>
-              <span className="pad-keys">{keys.length ? keys.join(' / ') : '（キーなし）'}</span>
+              <span className="pad-keys">{keys.length ? keys.join(' / ') : t('（キーなし）')}</span>
             </button>
           );
         })}
       </div>
       <p className="note">
-        {snap.mode === 'drum-performance' ? 'ドラムパッドモード: 文字キー・テンキーで演奏できます。' : 'パッドはクリックで試聴できます。キーで演奏するには入力モードを「ドラムパッド」にしてください。'}
+        {snap.mode === 'drum-performance' ? t('ドラムパッドモード: 文字キー・テンキーで演奏できます。') : t('パッドはクリックで試聴できます。キーで演奏するには入力モードを「ドラムパッド」にしてください。')}
       </p>
     </div>
   );

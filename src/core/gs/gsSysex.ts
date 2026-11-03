@@ -4,6 +4,8 @@
 // spessasynth_core@4.4.3 (`rolandSystemExclusive`), which also tells whether the built-in engine
 // processes the parameter (DECISIONS ADR-023). Not a claim of complete GS / SC-88Pro support.
 
+import { t } from '../../i18n';
+
 export type GsCategory = 'system' | 'reverb' | 'chorus' | 'delay' | 'part';
 
 export interface GsParamDef {
@@ -100,8 +102,8 @@ export function decodeGs(payload: ArrayLike<number>): GsDecoded | null {
   const channel = isPart ? gsPartToChannel(address[1]) : undefined;
   const hexAddr = address.map((x) => x.toString(16).toUpperCase().padStart(2, '0')).join(' ');
   let text: string;
-  if (!checksumOk) text = `Roland DT1 ${hexAddr}（チェックサム不一致 — 解釈しません）`;
-  else if (!param) text = `Roland GS DT1 ${hexAddr}（未対応のアドレス）`;
+  if (!checksumOk) text = t('Roland DT1 {addr}（チェックサム不一致 — 解釈しません）', { addr: hexAddr });
+  else if (!param) text = t('Roland GS DT1 {addr}（未対応のアドレス）', { addr: hexAddr });
   else if (param.name === 'GS Reset') text = 'GS Reset';
   else text = `${param.name}${channel !== undefined ? ` Ch${channel + 1}` : ''} = ${param.format ? param.format(data[0]) : data[0]}`;
   return { deviceId, address, data, checksumOk, param, channel, text };

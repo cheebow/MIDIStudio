@@ -6,6 +6,7 @@
 // Verified against node_modules/spessasynth_lib@4.4.2 dist/index.d.ts (see docs/DECISIONS.md ADR-012).
 import type { Sequencer, WorkletSynthesizer } from 'spessasynth_lib';
 import type { EngineSong, PlaybackEngine } from './PlaybackEngine';
+import { t } from '../i18n';
 
 /** Minimal structural type of spessasynth's MIDIPatchFull (kept local to the adapter). */
 interface MIDIPatchFull {
@@ -128,7 +129,7 @@ export class SpessaAdapter implements PlaybackEngine {
 
   private async createEngine(): Promise<Engine> {
     if (typeof AudioWorkletNode === 'undefined') {
-      throw new PlaybackError('audioworklet-unsupported', 'このブラウザは AudioWorklet に対応していません。');
+      throw new PlaybackError('audioworklet-unsupported', t('このブラウザは AudioWorklet に対応していません。'));
     }
     const context = this.pendingContext ?? new AudioContext();
     this.pendingContext = null;
@@ -142,7 +143,7 @@ export class SpessaAdapter implements PlaybackEngine {
       return fail(
         new PlaybackError(
           'audiocontext-resume',
-          'ブラウザが音声の再生を開始できませんでした（自動再生の制限）。画面をもう一度クリックしてください。',
+          t('ブラウザが音声の再生を開始できませんでした（自動再生の制限）。画面をもう一度クリックしてください。'),
           { cause },
         ),
       );
@@ -156,7 +157,7 @@ export class SpessaAdapter implements PlaybackEngine {
         withTimeout(context.audioWorklet.addModule(this.workletUrl), TIMEOUTS.workletMs, () => new Error('timeout')),
       ]);
     } catch (cause) {
-      return fail(new PlaybackError('worklet-load', `AudioWorklet (${this.workletUrl}) を読み込めませんでした。ページを再読み込みしてください。`, { cause }));
+      return fail(new PlaybackError('worklet-load', t('AudioWorklet ({url}) を読み込めませんでした。ページを再読み込みしてください。', { url: this.workletUrl }), { cause }));
     }
     const synth = new lib.WorkletSynthesizer(context);
     synth.connect(context.destination);
@@ -164,7 +165,7 @@ export class SpessaAdapter implements PlaybackEngine {
       await withTimeout(synth.isReady, TIMEOUTS.synthMs, () => new Error('timeout'));
     } catch (cause) {
       synth.destroy();
-      return fail(new PlaybackError('synth-init', 'シンセサイザーを初期化できませんでした。ページを再読み込みしてください。', { cause }));
+      return fail(new PlaybackError('synth-init', t('シンセサイザーを初期化できませんでした。ページを再読み込みしてください。'), { cause }));
     }
     const preview = new lib.WorkletSynthesizer(context);
     preview.connect(context.destination);
@@ -173,7 +174,7 @@ export class SpessaAdapter implements PlaybackEngine {
     } catch (cause) {
       synth.destroy();
       preview.destroy();
-      return fail(new PlaybackError('synth-init', '試聴用シンセサイザーを初期化できませんでした。ページを再読み込みしてください。', { cause }));
+      return fail(new PlaybackError('synth-init', t('試聴用シンセサイザーを初期化できませんでした。ページを再読み込みしてください。'), { cause }));
     }
     const sequencer = new lib.Sequencer(synth, { skipToFirstNoteOn: false });
     this.engine = { context, synth, preview, previewChannels: 16, sequencer, lib, core };
@@ -203,7 +204,7 @@ export class SpessaAdapter implements PlaybackEngine {
       await synth.soundBankManager.addSoundBank(buffer, 'main');
       await this.engine!.preview.soundBankManager.addSoundBank(copy, 'main');
     } catch (cause) {
-      throw new PlaybackError('soundfont-load', 'SoundFont を読み込めませんでした（SF2 として不正な可能性があります）。', { cause });
+      throw new PlaybackError('soundfont-load', t('SoundFont を読み込めませんでした（SF2 として不正な可能性があります）。'), { cause });
     }
     this.soundBankLoaded = true;
     return gmCoverage(await presets);
@@ -223,7 +224,7 @@ export class SpessaAdapter implements PlaybackEngine {
     try {
       midi = core.BasicMIDI.fromArrayBuffer(song.smf.slice().buffer, song.fileName);
     } catch (cause) {
-      throw new PlaybackError('midi-load', `再生用の MIDI を準備できませんでした: ${(cause as Error).message}`, { cause });
+      throw new PlaybackError('midi-load', t('再生用の MIDI を準備できませんでした: {message}', { message: (cause as Error).message }), { cause });
     }
     if (song.loop) {
       midi.loop = { start: song.loop.startTick, end: song.loop.endTick, type: 'hard' };
@@ -234,11 +235,11 @@ export class SpessaAdapter implements PlaybackEngine {
     const done = new Promise<void>((resolve, reject) => {
       sequencer.eventHandler.addEvent('songChange', 'midi-studio-load', () => resolve());
       sequencer.eventHandler.addEvent('midiError', 'midi-studio-load', (e) =>
-        reject(new PlaybackError('midi-load', `MIDI を読み込めませんでした: ${e.message}`, { cause: e })),
+        reject(new PlaybackError('midi-load', t('MIDI を読み込めませんでした: {message}', { message: e.message }), { cause: e })),
       );
     });
     sequencer.loadNewSongList([midi]);
-    await withTimeout(done, TIMEOUTS.songMs, () => new PlaybackError('midi-load', 'MIDI の読み込みが時間内に終わりませんでした。'));
+    await withTimeout(done, TIMEOUTS.songMs, () => new PlaybackError('midi-load', t('MIDI の読み込みが時間内に終わりませんでした。')));
     if (generation !== this.loadGeneration) return;
     sequencer.loopCount = song.loop ? Infinity : 0;
     sequencer.pause();
@@ -280,7 +281,7 @@ export class SpessaAdapter implements PlaybackEngine {
 
   private requireSoundBank(): void {
     if (!this.soundBankLoaded) {
-      throw new PlaybackError('soundfont-missing', '音源（SoundFont）が読み込まれていません。標準 SoundFont を読み込むか、ローカルの .sf2 を選んでください。');
+      throw new PlaybackError('soundfont-missing', t('音源（SoundFont）が読み込まれていません。標準 SoundFont を読み込むか、ローカルの .sf2 を選んでください。'));
     }
   }
 

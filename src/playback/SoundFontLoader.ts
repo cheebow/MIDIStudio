@@ -1,4 +1,6 @@
 // Adapted from MML Studio src/audio/SoundFontLoader.ts (same author).
+import { t } from '../i18n';
+
 export const DEFAULT_SOUNDFONT_URL = `${import.meta.env.BASE_URL}soundfonts/GeneralUser-GS.sf2`;
 export const WORKLET_URL = `${import.meta.env.BASE_URL}spessasynth_processor.min.js`;
 
@@ -22,15 +24,15 @@ export async function fetchSoundFont(
     res = await fetch(url, { signal });
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw e;
-    throw new SoundFontFetchError('network', `標準 SoundFont を取得できませんでした（ネットワーク/CORS）: ${url}`);
+    throw new SoundFontFetchError('network', t('標準 SoundFont を取得できませんでした（ネットワーク/CORS）: {url}', { url }));
   }
   if (res.status === 404) {
     throw new SoundFontFetchError(
       'not-found',
-      `標準 SoundFont が見つかりません（404）: ${url}。開発環境では "npm run fetch-soundfont" を実行するか、ローカル SF2 を読み込んでください。`,
+      t('標準 SoundFont が見つかりません（404）: {url}。開発環境では "npm run fetch-soundfont" を実行するか、ローカル SF2 を読み込んでください。', { url }),
     );
   }
-  if (!res.ok) throw new SoundFontFetchError('http', `標準 SoundFont の取得に失敗しました（HTTP ${res.status}）`);
+  if (!res.ok) throw new SoundFontFetchError('http', t('標準 SoundFont の取得に失敗しました（HTTP {status}）', { status: res.status }));
   const total = Number(res.headers.get('content-length')) || 0;
   if (!res.body) {
     onProgress?.(null);

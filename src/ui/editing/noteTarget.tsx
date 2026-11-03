@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { selectedTrack } from '../../core/model/selectedTrack';
 import { useEditorState } from '../../app/store/context';
+import { t } from '../../i18n';
 
 export function useNoteTarget() {
   const { project, selection } = useEditorState();
@@ -17,12 +18,12 @@ export function useNoteTarget() {
   const ids = target === 'selection' ? selectedNotes : trackNotes;
   const fieldset = (
     <fieldset>
-      <legend>対象</legend>
+      <legend>{t('対象')}</legend>
       <label>
-        <input type="radio" name="note-target" checked={target === 'selection'} disabled={selectedNotes.length === 0} onChange={() => setTarget('selection')} /> 選択中のノート（{selectedNotes.length} 個）
+        <input type="radio" name="note-target" checked={target === 'selection'} disabled={selectedNotes.length === 0} onChange={() => setTarget('selection')} /> {t('選択中のノート（{n} 個）', { n: selectedNotes.length })}
       </label>
       <label>
-        <input type="radio" name="note-target" checked={target === 'track'} disabled={!track} onChange={() => setTarget('track')} /> {track ? `トラック「${track.name}」のすべてのノート（${trackNotes.length} 個）` : 'トラックがありません'}
+        <input type="radio" name="note-target" checked={target === 'track'} disabled={!track} onChange={() => setTarget('track')} /> {track ? t('トラック「{name}」のすべてのノート（{n} 個）', { name: track.name, n: trackNotes.length }) : t('トラックがありません')}
       </label>
     </fieldset>
   );

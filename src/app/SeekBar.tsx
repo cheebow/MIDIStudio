@@ -11,6 +11,7 @@ import { draggedLoop, hitLoop, loopCursor, loopSnap, type LoopDrag } from '../ui
 import { useThemeVersion } from './theme';
 import { usePlaybackPosition } from './hooks/usePlayback';
 import { useServices } from './store/context';
+import { t } from '../i18n';
 
 const H = 22;
 type Drag = { kind: 'seek' } | LoopDrag;
@@ -143,7 +144,7 @@ export function SeekBar({ transport, project, sig, endTick }: { transport: Trans
         ref={canvasRef}
         role="slider"
         tabIndex={0}
-        aria-label="再生位置"
+        aria-label={t('再生位置')}
         aria-valuemin={0}
         aria-valuemax={endTick}
         aria-valuenow={Math.round(pos.tick)}

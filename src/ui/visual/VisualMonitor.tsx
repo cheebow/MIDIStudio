@@ -3,6 +3,7 @@
 // classic RCM screen (own implementation, no copied artwork: ADR-006). It is a pure view of the
 // Transport position: opening / closing it never touches playback.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '../../i18n';
 import { followState, topRow, type FollowMode } from '../../core/list/follow';
 import { formatTicks, listRows, type ListRow } from '../../core/list/listRows';
 import { bpmFromUs } from '../../core/timing/tempoMap';
@@ -66,7 +67,7 @@ export function VisualMonitor({ onClose }: { onClose: () => void }) {
   const n = PANES[tm.layout];
   const paneTracks: (MidiTrack | undefined)[] = Array.from({ length: n }, (_, i) => {
     const id = tm.paneTracks[i];
-    return (id && project.tracks.find((t) => t.id === id)) || (i === 0 ? selected : project.tracks[i]) || selected;
+    return (id && project.tracks.find((tk) => tk.id === id)) || (i === 0 ? selected : project.tracks[i]) || selected;
   });
 
   // Position / tempo: written straight to the DOM each frame (no React re-render per frame).
@@ -97,41 +98,41 @@ export function VisualMonitor({ onClose }: { onClose: () => void }) {
   const view = tm.view ?? 'list';
 
   return (
-    <div className={`tm-root tm-${tm.theme}`} ref={rootRef} style={{ fontSize: tm.fontSize }} role="region" aria-label="ビジュアルモード" data-testid="visual-monitor">
+    <div className={`tm-root tm-${tm.theme}`} ref={rootRef} style={{ fontSize: tm.fontSize }} role="region" aria-label={t('ビジュアルモード')} data-testid="visual-monitor">
       <div className="tm-titlebar">
         <span className="tm-tag">SONG</span>
         <span className="tm-num">1</span>
         <span className="tm-title">{project.title}</span>
         <span className="tm-pos" ref={posRef} data-testid="tm-clock" />
       </div>
-      <div className="tm-statusbar" role="toolbar" aria-label="ビジュアルモードの操作">
+      <div className="tm-statusbar" role="toolbar" aria-label={t('ビジュアルモードの操作')}>
         {/* 1. transport: state box + the three transport buttons */}
         <span className="tm-group tm-transport">
           <span className="tm-mode-box" data-testid="tm-state" data-status={tstate.status}>
             + {status} +
           </span>
-          <button onClick={() => transport.seek(0)} aria-label="先頭へ" title="先頭へ">
+          <button onClick={() => transport.seek(0)} aria-label={t('先頭へ')} title={t('先頭へ')}>
             ⏮
           </button>
-          <button onClick={() => transport.stop()} aria-label="停止" title="停止">
+          <button onClick={() => transport.stop()} aria-label={t('停止')} title={t('停止')}>
             ■
           </button>
-          <button className={tstate.status === 'playing' ? 'on' : ''} onClick={() => void transport.togglePlay().catch(() => undefined)} aria-label={tstate.status === 'playing' ? '一時停止' : '再生'} title="再生 / 一時停止（Space）">
+          <button className={tstate.status === 'playing' ? 'on' : ''} onClick={() => void transport.togglePlay().catch(() => undefined)} aria-label={tstate.status === 'playing' ? t('一時停止') : t('再生')} title={t('再生 / 一時停止（Space）')}>
             {tstate.status === 'playing' ? '❚❚' : '▶'}
           </button>
         </span>
         <span className="tm-sep" aria-hidden="true" />
         {/* 2. what is shown, followed by the options that belong to that view */}
         <span className="tm-group">
-          <span className="tm-views" role="group" aria-label="表示">
+          <span className="tm-views" role="group" aria-label={t('表示')}>
             {(
               [
-                ['list', '数値リスト'],
-                ['roll', 'ピアノロール'],
-                ['keys', '鍵盤'],
+                ['list', t('数値リスト')],
+                ['roll', t('ピアノロール')],
+                ['keys', t('鍵盤')],
               ] as const
             ).map(([v, label]) => (
-              <button key={v} className={view === v ? 'on' : ''} aria-pressed={view === v} onClick={() => set({ view: v })} data-testid={`visual-view-${v}`} title={v === 'list' ? 'レコンポーザ風の数値リスト' : undefined}>
+              <button key={v} className={view === v ? 'on' : ''} aria-pressed={view === v} onClick={() => set({ view: v })} data-testid={`visual-view-${v}`} title={v === 'list' ? t('レコンポーザ風の数値リスト') : undefined}>
                 {label}
               </button>
             ))}
@@ -139,25 +140,25 @@ export function VisualMonitor({ onClose }: { onClose: () => void }) {
           {view === 'list' && (
             <>
               <label>
-                分割
-                <select aria-label="分割" value={tm.layout} onChange={(e) => set({ layout: e.target.value as TmSettings['layout'] })}>
-                  <option value="single">1 画面</option>
-                  <option value="columns-2">左右 2 分割</option>
-                  <option value="rows-2">上下 2 分割</option>
-                  <option value="quad">4 分割</option>
+                {t('分割')}
+                <select aria-label={t('分割')} value={tm.layout} onChange={(e) => set({ layout: e.target.value as TmSettings['layout'] })}>
+                  <option value="single">{t('1 画面')}</option>
+                  <option value="columns-2">{t('左右 2 分割')}</option>
+                  <option value="rows-2">{t('上下 2 分割')}</option>
+                  <option value="quad">{t('4 分割')}</option>
                 </select>
               </label>
               <label>
-                追従
-                <select aria-label="追従方式" value={tm.mode} onChange={(e) => set({ mode: e.target.value as FollowMode })} data-testid="tm-mode">
+                {t('追従')}
+                <select aria-label={t('追従方式')} value={tm.mode} onChange={(e) => set({ mode: e.target.value as FollowMode })} data-testid="tm-mode">
                   <option value="fixed-cursor">Fixed Cursor</option>
                   <option value="page-turn">Page Turn</option>
                   <option value="smooth">Smooth Follow</option>
                 </select>
               </label>
               <label>
-                単位
-                <select aria-label="単位" value={tm.unit} onChange={(e) => set({ unit: e.target.value as TmSettings['unit'] })}>
+                {t('単位')}
+                <select aria-label={t('単位')} value={tm.unit} onChange={(e) => set({ unit: e.target.value as TmSettings['unit'] })}>
                   <option value="classic48">♩=48</option>
                   <option value="native">Tick</option>
                 </select>
@@ -168,19 +169,19 @@ export function VisualMonitor({ onClose }: { onClose: () => void }) {
         {/* 3. appearance, then the window actions, "back" last and apart */}
         <span className="tm-group tm-right">
           <label>
-            配色
-            <select aria-label="配色" value={tm.theme} onChange={(e) => set({ theme: e.target.value as TmSettings['theme'] })}>
-              <option value="rcm">レコンポーザ風</option>
-              <option value="retro-blue">レトロ（青）</option>
-              <option value="retro-green">レトロ（緑）</option>
-              <option value="modern">モダン</option>
+            {t('配色')}
+            <select aria-label={t('配色')} value={tm.theme} onChange={(e) => set({ theme: e.target.value as TmSettings['theme'] })}>
+              <option value="rcm">{t('レコンポーザ風')}</option>
+              <option value="retro-blue">{t('レトロ（青）')}</option>
+              <option value="retro-green">{t('レトロ（緑）')}</option>
+              <option value="modern">{t('モダン')}</option>
             </select>
           </label>
-          <span className="tm-views" role="group" aria-label="文字の大きさ">
-            <button onClick={() => set({ fontSize: Math.max(10, tm.fontSize - 2) })} aria-label="文字を小さく" title="文字を小さく">
+          <span className="tm-views" role="group" aria-label={t('文字の大きさ')}>
+            <button onClick={() => set({ fontSize: Math.max(10, tm.fontSize - 2) })} aria-label={t('文字を小さく')} title={t('文字を小さく')}>
               A−
             </button>
-            <button onClick={() => set({ fontSize: Math.min(48, tm.fontSize + 2) })} aria-label="文字を大きく" title="文字を大きく">
+            <button onClick={() => set({ fontSize: Math.min(48, tm.fontSize + 2) })} aria-label={t('文字を大きく')} title={t('文字を大きく')}>
               A+
             </button>
           </span>
@@ -190,12 +191,12 @@ export function VisualMonitor({ onClose }: { onClose: () => void }) {
               if (document.fullscreenElement) void document.exitFullscreen();
               else void rootRef.current?.requestFullscreen?.().catch(() => undefined);
             }}
-            title="全画面（Esc で戻る）"
+            title={t('全画面（Esc で戻る）')}
           >
-            全画面
+            {t('全画面')}
           </button>
-          <button className="tm-back" onClick={onClose} data-testid="tm-close" title="DAW の画面に戻る（T / Esc）。再生は止まりません">
-            ← DAW に戻る
+          <button className="tm-back" onClick={onClose} data-testid="tm-close" title={t('DAW の画面に戻る（T / Esc）。再生は止まりません')}>
+            {t('← DAW に戻る')}
           </button>
         </span>
       </div>
@@ -203,12 +204,12 @@ export function VisualMonitor({ onClose }: { onClose: () => void }) {
       {view === 'keys' && <KeyboardMonitor project={project} />}
       {view === 'list' && (
       <div className={`tm-panes tm-layout-${tm.layout}`}>
-        {paneTracks.map((t, i) =>
-          t ? (
+        {paneTracks.map((tk, i) =>
+          tk ? (
             <TmPane
               key={i}
               index={i}
-              track={t}
+              track={tk}
               project={project}
               sig={sig}
               mode={tm.mode}
@@ -292,7 +293,7 @@ function TmPane({ index, track, project, sig, mode, unit, showStaff, onTrackChan
 
   const start = mode === 'smooth' ? 0 : view.top;
   const end = mode === 'smooth' ? display.length : Math.min(display.length, view.top + rowsPerPage + 1);
-  const silenced = (project.tracks.some((t) => t.solo) && !track.solo) || track.mute;
+  const silenced = (project.tracks.some((tk) => tk.solo) && !track.solo) || track.mute;
   const cur = view.current;
 
   return (
@@ -300,15 +301,15 @@ function TmPane({ index, track, project, sig, mode, unit, showStaff, onTrackChan
       <div className="tm-trackbar">
         <span className="tm-tag">TR.</span>
         <span className="tm-num">{trackNo}</span>
-        <select className="tm-track-select" aria-label={`ペイン ${index + 1} のトラック`} value={track.id} onChange={(e) => onTrackChange(e.target.value)}>
-          {project.tracks.map((t, i) => (
-            <option key={t.id} value={t.id}>
-              {i + 1}: {t.name}（{t.port}
-              {t.channel + 1}）
+        <select className="tm-track-select" aria-label={t('ペイン {n} のトラック', { n: index + 1 })} value={track.id} onChange={(e) => onTrackChange(e.target.value)}>
+          {project.tracks.map((tk, i) => (
+            <option key={tk.id} value={tk.id}>
+              {i + 1}: {tk.name}（{tk.port}
+              {tk.channel + 1}）
             </option>
           ))}
         </select>
-        {silenced && <span className="tm-muted">{track.mute ? 'MUTE' : 'SOLO外'}</span>}
+        {silenced && <span className="tm-muted">{track.mute ? 'MUTE' : t('SOLO外')}</span>}
       </div>
       <div className="tm-pane-body">
         <div className="tm-list">
@@ -351,12 +352,12 @@ function TmPane({ index, track, project, sig, mode, unit, showStaff, onTrackChan
                   </div>
                 );
               })}
-              {rows.length === 0 && <div className="tm-row">（イベントなし）</div>}
+              {rows.length === 0 && <div className="tm-row">{t('（イベントなし）')}</div>}
             </div>
           </div>
           <div className="tm-rest" ref={restRef} aria-live="off" />
         </div>
-        {showStaff && <canvas ref={staffRef} className="tm-staff" aria-label="鳴っている音の譜表表示" />}
+        {showStaff && <canvas ref={staffRef} className="tm-staff" aria-label={t('鳴っている音の譜表表示')} />}
       </div>
     </div>
   );

@@ -3,6 +3,8 @@
 import type { ReactNode } from 'react';
 import { GS_PARAMS } from '../../core/gs/gsSysex';
 import { ALT_LABEL as ALT, IS_MAC, MOD_LABEL as MOD } from '../../ui/platform';
+import { locale } from '../../i18n';
+import { HELP_SECTIONS_EN, SHORTCUTS_EN } from './content.en';
 
 export interface HelpSection {
   id: string;
@@ -39,6 +41,16 @@ export const SHORTCUTS: [string, string][] = [
   [`${MOD}+ドラッグ / ${MOD}+ホイール`, 'スナップを一時的に無効 / ピアノロールの拡大・縮小'],
   [`${MOD}S / ${MOD}O`, 'ブラウザに保存 / プロジェクトを開く'],
 ];
+
+/** The help sections in the current UI language (ADR-061). */
+export function helpSections(): HelpSection[] {
+  return locale() === 'en' ? HELP_SECTIONS_EN : HELP_SECTIONS;
+}
+
+/** The shortcut table in the current UI language. */
+export function shortcuts(): [string, string][] {
+  return locale() === 'en' ? SHORTCUTS_EN : SHORTCUTS;
+}
 
 export const HELP_SECTIONS: HelpSection[] = [
   {

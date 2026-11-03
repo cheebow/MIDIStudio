@@ -9,6 +9,7 @@ import { useThemeVersion } from '../../app/theme';
 import { addEvents, deleteEvents, updateEvents } from '../../core/editing/operations';
 import type { MidiEvent, MidiTrack } from '../../core/model/types';
 import { useEditorState, useServices } from '../../app/store/context';
+import { t } from '../../i18n';
 import { fitCanvas, readTheme } from '../canvas';
 import { CC_NAMES } from '../../core/gm/ccNames';
 import { Splitter } from '../Splitter';
@@ -241,7 +242,7 @@ export function ControllerLane({ track, viewX, width, offsetLeft, pxPerTick, sna
       const tick = Math.max(0, snap((d.x + viewX) / pxPerTick));
       const value = yToValue(d.y);
       const ev = isPb ? { kind: 'pitch-bend' as const, tick, value } : { kind: 'cc' as const, tick, controller: lane as number, value };
-      const r = addEvents(store.project, track.id, [ev], { label: isPb ? 'Pitch Bend を入力' : `CC${lane} を入力` });
+      const r = addEvents(store.project, track.id, [ev], { label: isPb ? 'Pitch Bend を入力' : t('CC{n} を入力', { n: lane }) });
       if (r) store.run(r.command, { select: r.ids });
     } else {
       const ids = pointsInBox(d.x0, d.y0, d.x1, d.y1);
@@ -256,24 +257,24 @@ export function ControllerLane({ track, viewX, width, offsetLeft, pxPerTick, sna
     const selectedIds = selectedPoints.map((p) => p.id);
     const what = isPb ? 'Pitch Bend' : `CC${lane}`;
     ctxMenu.open(e, [
-      ...(hit ? [{ label: 'このポイントを削除', action: () => deletePoints([hit.id]) }] : []),
-      { label: `選択したポイントを削除（${selectedIds.length}）`, shortcut: 'Delete', disabled: selectedIds.length === 0, reason: 'ポイントをクリックまたはドラッグで選択してください', action: () => deletePoints(selectedIds) },
+      ...(hit ? [{ label: t('このポイントを削除'), action: () => deletePoints([hit.id]) }] : []),
+      { label: t('選択したポイントを削除（{n}）', { n: selectedIds.length }), shortcut: 'Delete', disabled: selectedIds.length === 0, reason: t('ポイントをクリックまたはドラッグで選択してください'), action: () => deletePoints(selectedIds) },
       { separator: true, label: '' },
-      { label: `このレーンの ${what} をすべて選択（${laneEvents.length}）`, disabled: laneEvents.length === 0, reason: 'ポイントがありません', action: () => store.selectEvents(laneEvents.map((p) => p.id)) },
+      { label: t('このレーンの {what} をすべて選択（{n}）', { what, n: laneEvents.length }), disabled: laneEvents.length === 0, reason: t('ポイントがありません'), action: () => store.selectEvents(laneEvents.map((p) => p.id)) },
     ]);
   }
 
   return (
     <>
-    {!collapsed && <Splitter label="コントローラーレーンの高さ" height={LANE_H} min={40} max={320} onResize={(h) => store.updateSettings({ laneHeight: h })} onToggle={() => store.updateSettings({ laneCollapsed: true })} />}
+    {!collapsed && <Splitter label={t('コントローラーレーンの高さ')} height={LANE_H} min={40} max={320} onResize={(h) => store.updateSettings({ laneHeight: h })} onToggle={() => store.updateSettings({ laneCollapsed: true })} />}
     <div className={`controller-lane${collapsed ? ' collapsed' : ''}`}>
       <div className="lane-label" style={{ width: offsetLeft }}>
-      <button className="collapse-btn" onClick={() => store.updateSettings({ laneCollapsed: !collapsed })} aria-label={collapsed ? 'レーンを開く' : 'レーンを折り畳む'} title={collapsed ? 'レーンを開く' : 'レーンを折り畳む'}>
+      <button className="collapse-btn" onClick={() => store.updateSettings({ laneCollapsed: !collapsed })} aria-label={collapsed ? t('レーンを開く') : t('レーンを折り畳む')} title={collapsed ? t('レーンを開く') : t('レーンを折り畳む')}>
         {collapsed ? '▴' : '▾'}
       </button>
       <select
         className="lane-select"
-        aria-label="コントローラーレーン"
+        aria-label={t('コントローラーレーン')}
         value={String(lane)}
         onChange={(e) => {
           const v = e.target.value;
@@ -292,8 +293,8 @@ export function ControllerLane({ track, viewX, width, offsetLeft, pxPerTick, sna
       {!collapsed && <canvas
         ref={canvasRef}
         className="lane-canvas"
-        aria-label={`コントローラーレーン: ${lane === 'velocity' ? 'Velocity' : isPb ? 'Pitch Bend' : `CC${lane}`}`}
-        title={lane === 'velocity' ? 'ドラッグでベロシティを描く' : 'クリックでポイントを追加、ポイントをクリックで選択（Shift で追加）、空いているところをドラッグで範囲選択、選択したポイントをドラッグで値を変更、Delete / Alt+クリックで削除'}
+        aria-label={t('コントローラーレーン: {lane}', { lane: lane === 'velocity' ? 'Velocity' : isPb ? 'Pitch Bend' : `CC${lane}` })}
+        title={lane === 'velocity' ? t('ドラッグでベロシティを描く') : t('クリックでポイントを追加、ポイントをクリックで選択（Shift で追加）、空いているところをドラッグで範囲選択、選択したポイントをドラッグで値を変更、Delete / Alt+クリックで削除')}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

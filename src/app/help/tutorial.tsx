@@ -4,6 +4,13 @@
 import type { HelpSection } from './content';
 import { ALT_LABEL as ALT, MOD_LABEL as MOD } from '../../ui/platform';
 import type { ReactNode } from 'react';
+import { locale } from '../../i18n';
+import { TUTORIAL_CHAPTERS_EN } from './tutorial.en';
+
+/** The tutorial chapters in the current UI language (ADR-061). */
+export function tutorialChapters(): HelpSection[] {
+  return locale() === 'en' ? TUTORIAL_CHAPTERS_EN : TUTORIAL_CHAPTERS;
+}
 
 const K = ({ children }: { children: ReactNode }) => <kbd className="help-key">{children}</kbd>;
 

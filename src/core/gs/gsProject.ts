@@ -6,6 +6,7 @@ import type { Command } from '../editing/history';
 import { EditError } from '../editing/operations';
 import { sortEvents } from '../events/order';
 import { decodeGs, encodeGsDt1, gsResetPayload } from './gsSysex';
+import { t } from '../../i18n';
 
 /** Channels set as rhythm parts by "Use for Rhythm Part" (value > 0) anywhere in the song. */
 export function gsRhythmChannels(project: MidiProject): Map<string, number> {
@@ -47,7 +48,7 @@ export function insertGsReset(project: MidiProject, trackId: string): Command {
   const track = project.tracks.find((t) => t.id === trackId);
   if (!track) throw new EditError('track not found');
   const already = track.events.some((e) => e.kind === 'sysex' && e.tick === 0 && decodeGs(base64ToBytes(e.dataBase64) ?? [])?.param?.name === 'GS Reset');
-  if (already) throw new EditError('このトラックの曲頭にはすでに GS Reset があります。');
+  if (already) throw new EditError(t('このトラックの曲頭にはすでに GS Reset があります。'));
   let minOrder = 0;
   for (const e of track.events) if (e.tick === 0 && e.originOrder < minOrder) minOrder = e.originOrder;
   const ev: SysExEvent = { id: newId('evt'), kind: 'sysex', tick: 0, status: 'F0', dataBase64: bytesToBase64(gsResetPayload()), originOrder: minOrder - 1 };
@@ -57,16 +58,16 @@ export function insertGsReset(project: MidiProject, trackId: string): Command {
 
 /** Changes the value of a decoded single-byte GS parameter, recomputing the checksum (bytes are rebuilt only on edit). */
 export function setGsValue(project: MidiProject, eventId: string, value: number): Command {
-  for (const t of project.tracks) {
-    const e = t.events.find((x) => x.id === eventId);
+  for (const track of project.tracks) {
+    const e = track.events.find((x) => x.id === eventId);
     if (!e) continue;
-    if (e.kind !== 'sysex') throw new EditError('SysEx ではありません。');
+    if (e.kind !== 'sysex') throw new EditError(t('SysEx ではありません。'));
     const d = decodeGs(base64ToBytes(e.dataBase64) ?? []);
-    if (!d?.param) throw new EditError('解釈できない SysEx は値を変更できません（16進で編集してください）。');
-    if (!Number.isInteger(value) || value < d.param.min || value > d.param.max) throw new EditError(`${d.param.name} の範囲は ${d.param.min}〜${d.param.max} です。`);
+    if (!d?.param) throw new EditError(t('解釈できない SysEx は値を変更できません（16進で編集してください）。'));
+    if (!Number.isInteger(value) || value < d.param.min || value > d.param.max) throw new EditError(t('{name} の範囲は {min}〜{max} です。', { name: d.param.name, min: d.param.min, max: d.param.max }));
     const payload = encodeGsDt1(d.address, [value], d.deviceId);
-    const tracks = project.tracks.map((tr) => (tr.id === t.id ? { ...tr, events: tr.events.map((x) => (x.id === eventId ? { ...e, dataBase64: bytesToBase64(payload) } : x)) } : tr));
-    return { label: `${d.param.name} を変更`, patch: { tracks } };
+    const tracks = project.tracks.map((tr) => (tr.id === track.id ? { ...tr, events: tr.events.map((x) => (x.id === eventId ? { ...e, dataBase64: bytesToBase64(payload) } : x)) } : tr));
+    return { label: t('{name} を変更', { name: d.param.name }), patch: { tracks } }; // GS parameter names are English already
   }
   throw new EditError('event not found');
 }
@@ -84,8 +85,8 @@ export function parseHexPayload(text: string): number[] | null {
 }
 
 export function setSysExPayload(project: MidiProject, eventId: string, payload: number[]): Command {
-  if (payload.some((b) => b > 0xff)) throw new EditError('不正なバイトがあります。');
-  if (payload.slice(0, -1).some((b) => b >= 0x80)) throw new EditError('SysEx の途中に 0x80 以上のバイトは置けません（最後の F7 を除く）。');
+  if (payload.some((b) => b > 0xff)) throw new EditError(t('不正なバイトがあります。'));
+  if (payload.slice(0, -1).some((b) => b >= 0x80)) throw new EditError(t('SysEx の途中に 0x80 以上のバイトは置けません（最後の F7 を除く）。'));
   const tracks = project.tracks.map((t) => ({ ...t, events: t.events.map((e) => (e.id === eventId && e.kind === 'sysex' ? { ...e, dataBase64: bytesToBase64(payload) } : e)) }));
   return { label: 'SysEx を編集', patch: { tracks } };
 }

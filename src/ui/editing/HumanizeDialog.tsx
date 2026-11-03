@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { HumanizeSettings } from '../../core/model/types';
 import { humanizeNotes } from '../../core/editing/humanize';
 import { useServices } from '../../app/store/context';
+import { t } from '../../i18n';
 import { Dialog } from '../Dialog';
 import { useNoteTarget } from './noteTarget';
 
@@ -33,7 +34,7 @@ export function HumanizeDialog({ onClose }: { onClose: () => void }) {
     </label>
   );
   return (
-    <Dialog title="ヒューマナイズ" onClose={onClose}>
+    <Dialog title={t('ヒューマナイズ')} onClose={onClose}>
       <form
         className="form-grid quantize-form"
         data-testid="humanize-dialog"
@@ -43,15 +44,15 @@ export function HumanizeDialog({ onClose }: { onClose: () => void }) {
         }}
       >
         {fieldset}
-        {row('位置', 'timingTicks', Math.max(1, project.ppq / 2), ' Tick')}
-        {row('ベロシティ', 'velocity', 64, '')}
-        {row('長さ', 'lengthPercent', 50, '%')}
+        {row(t('位置'), 'timingTicks', Math.max(1, project.ppq / 2), ' Tick')}
+        {row(t('ベロシティ'), 'velocity', 64, '')}
+        {row(t('長さ'), 'lengthPercent', 50, '%')}
         <div className="row">
           <button type="submit" className="primary" disabled={ids.length === 0} data-testid="humanize-apply">
-            適用（{ids.length} 個）
+            {t('適用（{n} 個）', { n: ids.length })}
           </button>
           <button type="button" onClick={onClose}>
-            キャンセル
+            {t('キャンセル')}
           </button>
         </div>
       </form>

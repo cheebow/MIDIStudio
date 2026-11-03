@@ -9,6 +9,7 @@ import type { Command, ProjectPatch } from './history';
 import { SMF_LIMITS } from '../smf/types';
 import { maxOf, minOf } from '../model/numbers';
 import { TimeSignatureMap } from '../timing/timeSignatureMap';
+import { t } from '../../i18n';
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 /** A new event before it gets an ID and an origin order. */
@@ -477,14 +478,14 @@ export function duplicateTrack(project: MidiProject, trackId: TrackId, label = '
     const copy = { ...e, id, originOrder: next++ } as MidiEvent;
     return copy.kind === 'note' && copy.releaseOrder !== undefined ? dropReleaseOrder(copy) : copy;
   });
-  const t: MidiTrack = { ...src, id: newId('trk'), name: `${src.name} (コピー)`, events: sortEvents(events), solo: false, recordArm: false };
+  const dup: MidiTrack = { ...src, id: newId('trk'), name: t('{name} (コピー)', { name: src.name }), events: sortEvents(events), solo: false, recordArm: false };
   const tracks = [...project.tracks];
-  tracks.splice(project.tracks.indexOf(src) + 1, 0, t);
+  tracks.splice(project.tracks.indexOf(src) + 1, 0, dup);
   const clips = [
     ...project.clips,
-    ...project.clips.filter((c) => c.trackId === trackId).map((c) => ({ ...c, id: newId('clp'), trackId: t.id, eventIds: c.eventIds.map((id) => idMap.get(id)!).filter(Boolean) })),
+    ...project.clips.filter((c) => c.trackId === trackId).map((c) => ({ ...c, id: newId('clp'), trackId: dup.id, eventIds: c.eventIds.map((id) => idMap.get(id)!).filter(Boolean) })),
   ];
-  return { command: cmd(label, { tracks, clips, nextOriginOrder: next }), trackId: t.id };
+  return { command: cmd(label, { tracks, clips, nextOriginOrder: next }), trackId: dup.id };
 }
 
 /**

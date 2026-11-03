@@ -9,6 +9,7 @@ import type { MidiProject } from '../core/model/types';
 import { TempoMap } from '../core/timing/tempoMap';
 import { TimeSignatureMap } from '../core/timing/timeSignatureMap';
 import type { PlaybackEngine } from './PlaybackEngine';
+import { t } from '../i18n';
 
 export type TransportStatus = 'stopped' | 'playing' | 'paused';
 
@@ -273,9 +274,9 @@ export class Transport {
   }
 
   async play(fromTick?: number): Promise<void> {
-    if (!this.project || !this.tempo) throw new TransportError('曲が読み込まれていません。');
+    if (!this.project || !this.tempo) throw new TransportError(t('曲が読み込まれていません。'));
     if (!this.engine.ready) {
-      const msg = '音源（SoundFont）の準備ができていません。読み込みが終わるまでお待ちください（File → 「SoundFont を選ぶ」でローカルの .sf2 も使えます）。';
+      const msg = t('音源（SoundFont）の準備ができていません。読み込みが終わるまでお待ちください（File → 「SoundFont を選ぶ」でローカルの .sf2 も使えます）。');
       this.setState({ error: msg });
       throw new TransportError(msg);
     }

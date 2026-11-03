@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MIDI Studio: a MIDI sequencer that runs in your browser</title>
+    <meta name="description" content="A MIDI sequencer that runs in a web browser, combining DAW-style editing with Recomposer-style numeric entry. Load MIDI files, edit them and play them with the built-in GM/GS-compatible sound engine." />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="stylesheet" href="./site.css" />
+    <link rel="alternate" hreflang="ja" href="./about.html" />
+  </head>
+  <body>
+    <nav class="nav" aria-label="Site">
+      <a class="brand" href="./about.en.html"><img src="./favicon.svg" alt="" width="22" height="22" /> MIDI Studio</a>
+      <a class="item" href="./about.en.html" aria-current="page">About</a>
+      <a class="item" href="./tutorial.en.html">Getting started</a>
+      <a class="item" href="./help.en.html">Help</a>
+      <a class="item" href="./">Open the app</a>
+      <span class="spacer"></span>
+      <a class="item" href="./about.html" lang="ja" hreflang="ja">日本語</a>
+      <a class="github" href="https://github.com/cheebow/MIDIStudio">GitHub</a>
+    </nav>
+
+    <main>
+      <section class="hero">
+        <img class="logo" src="./favicon.svg" alt="" />
+        <h1>MIDI Studio</h1>
+        <p class="tagline">A sequencer built for MIDI, running in your web browser.</p>
+        <a class="cta" href="./">Open in your browser</a>
+        <p class="sub">Nothing to install. Your songs and the sound bank stay inside the browser; nothing is sent anywhere. New to sequencing? Read <a href="./tutorial.en.html">Getting started</a>; every operation is listed in the <a href="./help.en.html">help</a>. The app's language can be switched between Japanese and English in the View menu.</p>
+        <figure class="shot">
+          <img src="./images/daw.jpg" alt="The MIDI Studio screen: the track view on top, the piano roll below" width="1600" height="864" />
+          <figcaption>Track view and piano roll</figcaption>
+        </figure>
+      </section>
+
+      <section class="gallery">
+        <h2>Visual mode</h2>
+        <p>Watch the song as it plays: a Recomposer-style event list, a piano roll of every track, or one keyboard per track.</p>
+        <div class="shots">
+          <figure>
+            <a href="./images/visual-list.jpg"><img src="./images/visual-list.jpg" alt="Visual mode's event list, with a staff on the right" width="1600" height="864" loading="lazy" /></a>
+            <figcaption>Event list</figcaption>
+          </figure>
+          <figure>
+            <a href="./images/visual-roll.jpg"><img src="./images/visual-roll.jpg" alt="Visual mode's piano roll, every track in its own color" width="1600" height="864" loading="lazy" /></a>
+            <figcaption>Piano roll</figcaption>
+          </figure>
+          <figure>
+            <a href="./images/visual-keys.jpg"><img src="./images/visual-keys.jpg" alt="Visual mode's keyboards, showing the keys each track is playing" width="1600" height="864" loading="lazy" /></a>
+            <figcaption>Keyboards</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <div class="cards">
+        <article class="card">
+          <h2>Edit like a DAW</h2>
+          <p>Tracks and clips, a piano roll, Velocity / CC / Pitch Bend lanes. Quantize (strength and swing), humanize, bulk velocity edits.</p>
+        </article>
+        <article class="card">
+          <h2>Edit by the numbers</h2>
+          <p>A Recomposer-style list: enter MEAS / STEP / NOTE / ST / GT / VEL from the PC keyboard. ♩=48 display is supported.</p>
+        </article>
+        <article class="card">
+          <h2>Play and record</h2>
+          <p>Play with the PC's letter keys or a MIDI keyboard. Real-time recording and step input. Everything works without a numeric keypad.</p>
+        </article>
+        <article class="card">
+          <h2>Watch</h2>
+          <p>Visual mode shows the performance as a scrolling event list, an all-tracks piano roll or keyboards, with a choice of color schemes.</p>
+        </article>
+        <article class="card">
+          <h2>GM / GS MIDI files</h2>
+          <p>Import and export SMF. GS SysEx and unknown events are kept, never dropped. Export to WAV as well.</p>
+        </article>
+        <article class="card">
+          <h2>Entirely in the browser</h2>
+          <p>Sound comes from a SoundFont (GeneralUser GS by default) through Web Audio. Save to the browser or to a file. Nothing goes to a server.</p>
+        </article>
+      </div>
+
+      <section class="list">
+        <h2>What it does</h2>
+        <ul>
+          <li>Create, move, duplicate, split and resize clips; reorder tracks; drag the loop range</li>
+          <li>Piano roll, drum editor (lanes and pads named by instrument), list editor, mixer, conductor (tempo, time signature, key signature, markers)</li>
+          <li>DAW-style shortcuts (L for loop, M / S for mute / solo, Q for quantize and more) and PC keyboard, drum pad and step input modes</li>
+          <li>Import SMF format 0/1, export format 1, export WAV, save .midstudio projects, autosave inside the browser</li>
+          <li>Two sample songs included (VISION (GS Version), Merry X'mas For You!), ready to play right after launch</li>
+          <li>Light / dark themes; Japanese and English UI. Runs in recent versions of Chrome, Edge, Firefox and Safari (MIDI keyboards need a browser with Web MIDI)</li>
+        </ul>
+        <p class="note">This software is under development. GS SysEx is kept and editable, but the patches and effects of a real Roland SC-55 / SC-88Pro are not reproduced.</p>
+      </section>
+    </main>
+
+    <footer>
+      <p>MIDI Studio is released under the <a href="https://github.com/cheebow/MIDIStudio/blob/main/LICENSE">MIT license</a> (© 2026 cheebow). The source code and the specifications are on <a href="https://github.com/cheebow/MIDIStudio">GitHub</a>.</p>
+      <p>The sample songs (VISION (GS Version), Merry X'mas For You!) are © cheebow, for listening and editing; the songs themselves may not be redistributed or used commercially (<a href="./samples/LICENSE.txt">details</a>).</p>
+      <p>Default sound bank GeneralUser GS © S. Christian Collins; synthesis by SpessaSynth (Apache-2.0). “Recomposer” is a product name of Come On Music Co., Ltd.; this project is not affiliated with that company.</p>
+    </footer>
+  </body>
+</html>

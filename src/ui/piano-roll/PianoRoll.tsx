@@ -5,6 +5,7 @@ import { addEvents, deleteEvents, duplicateEvents, moveEvents, updateEvents } fr
 import { gridTicks, snapTick } from '../../core/timing/grid';
 import type { MidiTrack, NoteEvent } from '../../core/model/types';
 import { useEditActions, useEditorState, useServices } from '../../app/store/context';
+import { t } from '../../i18n';
 import { isSecondaryClick, useContextMenu } from '../menu/ContextMenu';
 import { emptyMenuItems, noteMenuItems } from '../menu/editMenus';
 import { conductorMarks, drawLoopRuler, drawPlayhead, drawRulerConductorMarks, drawStepCursor, fitCanvas, isBlackKey, pitchName, readTheme } from '../canvas';
@@ -314,7 +315,7 @@ export function PianoRoll() {
   }, [store]);
 
 
-  if (!track) return <p className="note">トラックがありません。トラックメニューから追加してください。</p>;
+  if (!track) return <p className="note">{t('トラックがありません。トラックメニューから追加してください。')}</p>;
 
   const toTick = (x: number) => Math.max(0, (x + view.x) / pxPerTick);
   const toPitch = (y: number) => Math.max(0, Math.min(127, 127 - Math.floor((y - RULER_H + view.y) / ROW_H)));
@@ -344,7 +345,7 @@ export function PianoRoll() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     const tick = snap(toTick(x));
-    if (y < RULER_H) return ctxMenu.open(e, [{ label: '再生位置をここに移動', action: () => transport.seek(tick) }]);
+    if (y < RULER_H) return ctxMenu.open(e, [{ label: t('再生位置をここに移動'), action: () => transport.seek(tick) }]);
     const n = hit(x, y)?.note;
     if (n) {
       // right-click on an unselected note selects just that note
@@ -393,7 +394,7 @@ export function PianoRoll() {
         const created = store.project.tracks.find((t) => t.id === track.id)!.events.find((ev) => ev.id === r.ids[0]) as NoteEvent;
         setDrag({ kind: 'resize', ids: r.ids, anchor: created, startX: x, dLen: 0, mergeKey: key });
         if (!settings.snapEnabled || snapTick(tick, grid).exact) setWarning(null);
-        else setWarning('グリッド線が整数 Tick にならないため、位置を最も近い Tick に丸めました。');
+        else setWarning(t('グリッド線が整数 Tick にならないため、位置を最も近い Tick に丸めました。'));
         audition(pitch);
       } catch (err) {
         setWarning((err as Error).message);
@@ -511,7 +512,7 @@ export function PianoRoll() {
         }}>
           <div style={{ width: totalW + KEYS_W, height: ALL_H + RULER_H }}>
             <div className="sticky-canvas roll-sticky" style={{ width: view.w, height: view.h }}>
-              <canvas ref={keysRef} className="roll-keys" aria-label="鍵盤（クリックで試聴）" onPointerDown={(e) => {
+              <canvas ref={keysRef} className="roll-keys" aria-label={t('鍵盤（クリックで試聴）')} onPointerDown={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 const y = e.clientY - rect.top;
                 if (y >= RULER_H) audition(toPitch(y));
@@ -521,7 +522,7 @@ export function PianoRoll() {
                 className="roll-grid"
                 style={{ left: KEYS_W }}
                 tabIndex={0}
-                aria-label={`ピアノロール: ${track.name}。${tool === 'draw' ? '描画ツール' : '選択ツール'}。矢印キーで移動・移調、Delete で削除`}
+                aria-label={t('ピアノロール: {name}。{tool}。矢印キーで移動・移調、Delete で削除', { name: track.name, tool: tool === 'draw' ? t('描画ツール') : t('選択ツール') })}
                 data-testid="piano-roll-grid"
                 onPointerDown={onPointerDown}
                 onContextMenu={onContextMenu}

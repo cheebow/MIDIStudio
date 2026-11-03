@@ -4,6 +4,7 @@ import { createHistory, execute, redo, undo, canRedo, canUndo, type Command, typ
 import { EMPTY_SELECTION, pruneSelection, type Selection } from '../../core/editing/selection';
 import type { ClipboardData } from '../../core/editing/clipboard';
 import type { MidiProject, ProjectViewSettings } from '../../core/model/types';
+import { t } from '../../i18n';
 
 export type Tool = 'select' | 'draw';
 
@@ -69,13 +70,13 @@ export class EditorStore {
   undo(): void {
     if (!canUndo(this.state.history)) return;
     const r = undo(this.state.project, this.state.history);
-    this.set({ project: r.project, history: r.history, selection: pruneSelection(this.state.selection, r.project), dirty: true, lastAction: r.label ? `元に戻す: ${r.label}` : null, revision: this.state.revision + 1 });
+    this.set({ project: r.project, history: r.history, selection: pruneSelection(this.state.selection, r.project), dirty: true, lastAction: r.label ? t('元に戻す: {label}', { label: t(r.label) }) : null, revision: this.state.revision + 1 });
   }
 
   redo(): void {
     if (!canRedo(this.state.history)) return;
     const r = redo(this.state.project, this.state.history);
-    this.set({ project: r.project, history: r.history, selection: pruneSelection(this.state.selection, r.project), dirty: true, lastAction: r.label ? `やり直し: ${r.label}` : null, revision: this.state.revision + 1 });
+    this.set({ project: r.project, history: r.history, selection: pruneSelection(this.state.selection, r.project), dirty: true, lastAction: r.label ? t('やり直し: {label}', { label: t(r.label) }) : null, revision: this.state.revision + 1 });
   }
 
   /** Replaces the whole project (new / open / import). Clears history and selection. */

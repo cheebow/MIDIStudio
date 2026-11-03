@@ -10,6 +10,7 @@ import type { MidiProject } from '../../core/model/types';
 import type { InputController, CapturedInput } from '../../input/InputController';
 import type { Transport } from '../../playback/Transport';
 import type { EditorStore } from '../store/EditorStore';
+import { t } from '../../i18n';
 
 export type RecordPhase = 'idle' | 'count-in' | 'recording';
 
@@ -30,10 +31,10 @@ export interface RecordTargets {
 /** Armed-track routing; ambiguous setups are refused (INPUT_RECORDING 1). */
 export function recordTargets(p: MidiProject): RecordTargets | { error: string } {
   const armed = p.tracks.filter((t) => t.recordArm);
-  if (armed.length === 0) return { error: '録音待機（R）のトラックがありません。録音したいトラックの R を押してください。' };
+  if (armed.length === 0) return { error: t('録音待機（R）のトラックがありません。録音したいトラックの R を押してください。') };
   const melodic = armed.filter((t) => t.displayMode !== 'drum');
   const drums = armed.filter((t) => t.displayMode === 'drum');
-  if (melodic.length > 1 || drums.length > 1) return { error: '録音待機のトラックが複数あり、録音先があいまいです。鍵盤用・ドラム用それぞれ 1 トラックだけ R を押してください。' };
+  if (melodic.length > 1 || drums.length > 1) return { error: t('録音待機のトラックが複数あり、録音先があいまいです。鍵盤用・ドラム用それぞれ 1 トラックだけ R を押してください。') };
   const piano = melodic[0]?.id ?? drums[0]?.id ?? null;
   const drum = drums[0]?.id ?? melodic[0]?.id ?? null;
   return { piano, drum };
@@ -93,16 +94,16 @@ export class Recorder {
   async start(): Promise<void> {
     if (this.state.phase !== 'idle') return;
     const project = this.store.project;
-    const t = recordTargets(project);
-    if ('error' in t) {
-      this.set({ message: t.error });
-      throw new Error(t.error);
+    const targets = recordTargets(project);
+    if ('error' in targets) {
+      this.set({ message: targets.error });
+      throw new Error(targets.error);
     }
-    this.targets = t;
+    this.targets = targets;
     const rec = project.settings.recording;
     const tempo = this.transport.tempoMap;
     const sig = this.transport.timeSignatureMap;
-    if (!tempo || !sig) throw new Error('曲が読み込まれていません。');
+    if (!tempo || !sig) throw new Error(t('曲が読み込まれていません。'));
     const startTick = Math.round(this.transport.getPosition().tick);
     this.startSeconds = this.transport.getPosition().seconds;
     this.early = 0;
@@ -112,7 +113,7 @@ export class Recorder {
     const punch = rec.punch && project.loop.endTick > project.loop.startTick ? { inTick: project.loop.startTick, outTick: project.loop.endTick } : undefined;
     this.takes.clear();
     const opts = { tempo, latencyMs: rec.latencyMs, loop, punch };
-    for (const id of new Set([t.piano, t.drum].filter((x): x is string => !!x))) this.takes.set(id, new LiveTake(opts));
+    for (const id of new Set([targets.piano, targets.drum].filter((x): x is string => !!x))) this.takes.set(id, new LiveTake(opts));
 
     // Count-in: clicks on the audio clock, then playback starts. Input during the last beat of the
     // count-in is an early hit and lands on the start position (ADR-047); earlier input is dropped.
@@ -201,7 +202,7 @@ export class Recorder {
     this.transport.stop();
     this.transport.setTail(0);
     if (phase === 'count-in') {
-      this.set({ phase: 'idle', countIn: 0, message: '録音を取り消しました（カウントイン中）。' });
+      this.set({ phase: 'idle', countIn: 0, message: t('録音を取り消しました（カウントイン中）。') });
       return;
     }
     const project = this.store.project;
@@ -224,9 +225,10 @@ export class Recorder {
     this.takes.clear();
     const cmd: Command = { label: rec.mode === 'replace' ? '録音（置き換え）' : '録音', patch };
     this.store.run(Object.keys(patch).length ? cmd : null);
-    const notes = closed ? `押されたままのノート ${closed} 個を停止位置で終わらせました。` : '';
-    const early = this.early ? `${this.early} 個のノートを開始位置に揃えました。` : '';
-    const dropped = this.dropped ? `早すぎたノート ${this.dropped} 個は記録していません。` : '';
-    this.set({ phase: 'idle', countIn: 0, message: count ? `${count} 個のイベントを録音しました。${notes}${early}${dropped}` : `録音されたイベントはありません。${dropped}` });
+    const notes = closed ? t('押されたままのノート {n} 個を停止位置で終わらせました。', { n: closed }) : '';
+    const early = this.early ? t('{n} 個のノートを開始位置に揃えました。', { n: this.early }) : '';
+    const dropped = this.dropped ? t('早すぎたノート {n} 個は記録していません。', { n: this.dropped }) : '';
+    const rest = [notes, early, dropped].filter(Boolean).join(' ');
+    this.set({ phase: 'idle', countIn: 0, message: count ? t('{count} 個のイベントを録音しました。{rest}', { count, rest }) : t('録音されたイベントはありません。{rest}', { rest }) });
   }
 }
