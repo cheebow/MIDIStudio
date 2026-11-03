@@ -30,7 +30,7 @@ import {
   type NewEvent,
 } from '../../src/core/editing/operations';
 import { EMPTY_SELECTION, pruneSelection, selectEvents } from '../../src/core/editing/selection';
-import { copyClips, duplicateClips, pasteClips } from '../../src/core/editing/clipboard';
+import { copyClips, duplicateClips, pasteClips, tracksRelativeTo } from '../../src/core/editing/clipboard';
 import { exportSmfBytes } from '../../src/core/project-io/exportSmf';
 import { openMidiFile } from '../../src/core/project-io/midiFile';
 import { build, cc, meta, off, on } from '../fixtures/songs';
@@ -757,6 +757,33 @@ describe('clip groups (ADR-057): copy / paste / duplicate / move / delete severa
       [b.id, 1440],
     ]);
     expect(ticks(s, 1)).toEqual([480, 960, 960, 960, 1440, 1440]);
+  });
+
+  it('ADR-062: moveClips with a track offset moves clips and their events to other tracks, keeping IDs; the offset is clamped for the group', () => {
+    const { s, a, b, ids } = setup();
+    const idsA = s.project.tracks[0].events.map((e) => e.id);
+    s.run(moveClips(s.project, [ids[0]], 0, { trackOffset: 1 })); // clip A → track B, same ticks
+    expect(s.project.clips[0].trackId).toBe(b.id);
+    expect(ticks(s, 0)).toEqual([]);
+    expect(ticks(s, 1)).toEqual([0, 480, 960, 960]);
+    expect(s.project.tracks[1].events.map((e) => e.id)).toEqual(expect.arrayContaining(idsA));
+    s.undo();
+    expect(ticks(s, 0)).toEqual([0, 480]);
+    expect(s.project.clips[0].trackId).toBe(a.id);
+    // the group (A on track 0, B on track 1) cannot move up: offset clamped to 0 → nothing happens; down is clamped too
+    expect(moveClips(s.project, ids, 0, { trackOffset: -1 })).toBeNull();
+    s.run(moveClips(s.project, ids, 480, { trackOffset: 5 }));
+    expect(s.project.clips.map((c) => c.trackId)).toEqual([a.id, b.id]); // shape kept: both stay
+    expect(s.project.clips.map((c) => c.startTick)).toEqual([480, 1440]);
+  });
+
+  it('ADR-062: tracksRelativeTo puts the topmost copied clip on the anchor track and keeps the lanes (clamped)', () => {
+    const { s, a, b, ids } = setup();
+    const data = copyClips(s.project, ids)!;
+    expect(data.clips!.map((c) => tracksRelativeTo(s.project, data, a.id)(c))).toEqual([a.id, b.id]);
+    expect(data.clips!.map((c) => tracksRelativeTo(s.project, data, b.id)(c))).toEqual([b.id, b.id]); // B's lane clamped to the last track
+    const one = copyClips(s.project, [ids[1]])!; // only the clip on track B
+    expect(one.clips!.map((c) => tracksRelativeTo(s.project, one, a.id)(c))).toEqual([a.id]);
   });
 
   it('moveClips moves the group together, never before tick 0; deleteClips removes them in one step', () => {

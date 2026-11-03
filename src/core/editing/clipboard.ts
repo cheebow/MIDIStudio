@@ -135,6 +135,18 @@ export function pasteClips(project: MidiProject, tick: number, data: ClipboardDa
  * Duplicates clips as a group: by default right after the group (its span), or shifted by
  * `deltaTick` from where they are and by `trackOffset` lanes (clamped to the track list).
  */
+/**
+ * Where copied clips go when pasted "onto" a track (ADR-062): the clip from the topmost copied track
+ * lands on `anchorTrackId`, the others keep their relative lanes (clamped to the track list).
+ */
+export function tracksRelativeTo(project: MidiProject, data: ClipboardData, anchorTrackId: TrackId): (clip: ClipboardClip) => TrackId | undefined {
+  const base = Math.min(...(data.clips ?? []).map((c) => c.trackIndex));
+  const anchor = project.tracks.findIndex((t) => t.id === anchorTrackId);
+  const last = project.tracks.length - 1;
+  const offset = anchor < 0 || !Number.isFinite(base) ? 0 : anchor - base;
+  return (c) => project.tracks[Math.max(0, Math.min(last, c.trackIndex + offset))]?.id;
+}
+
 export function duplicateClips(project: MidiProject, clipIds: Iterable<string>, opts: { deltaTick?: number; trackOffset?: number } = {}): { command: Command; clipIds: string[] } | null {
   const sel = new Set(clipIds);
   const data = copyClips(project, sel);

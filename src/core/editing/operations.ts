@@ -315,14 +315,50 @@ export function moveClip(project: MidiProject, clipId: string, deltaTick: number
   return cmd(label, { tracks: replaceTracks(project, new Map([[track.id, newTrack]])), clips });
 }
 
-/** Moves several clips by the same delta (clamped so the earliest stays at tick 0 or later), as one command. */
-export function moveClips(project: MidiProject, clipIds: Iterable<string>, deltaTick: number, label = 'クリップを移動'): Command | null {
+/**
+ * Moves several clips by the same delta (clamped so the earliest stays at tick 0 or later) and,
+ * with `trackOffset`, by that many tracks (clamped so the group stays inside the track list, ADR-062),
+ * as one command. Events keep their IDs when they change track.
+ */
+export function moveClips(project: MidiProject, clipIds: Iterable<string>, deltaTick: number, opts: { trackOffset?: number; label?: string } = {}): Command | null {
+  const label = opts.label ?? 'クリップを移動';
   const sel = new Set(clipIds);
   const clips = project.clips.filter((c) => sel.has(c.id));
   if (clips.length === 0) return null;
   const delta = Math.max(deltaTick, -Math.min(...clips.map((c) => c.startTick)));
-  if (delta === 0) return null;
-  return compose(project, label, clips.map((c) => (p) => moveClip(p, c.id, delta, label)));
+  const offset = clampedTrackOffset(project, clips, opts.trackOffset ?? 0);
+  if (delta === 0 && offset === 0) return null;
+  const steps: ((p: MidiProject) => Command | null)[] = [];
+  if (delta !== 0) steps.push(...clips.map((c) => (p: MidiProject) => moveClip(p, c.id, delta, label)));
+  if (offset !== 0) steps.push(...clips.map((c) => (p: MidiProject) => moveClipToTrack(p, c.id, project.tracks[project.tracks.findIndex((tk) => tk.id === c.trackId) + offset].id, label)));
+  return compose(project, label, steps);
+}
+
+/** The track offset limited so that none of the clips would leave the track list. */
+export function clampedTrackOffset(project: MidiProject, clips: readonly MidiClip[], offset: number): number {
+  if (clips.length === 0 || offset === 0) return 0;
+  const idx = clips.map((c) => project.tracks.findIndex((tk) => tk.id === c.trackId));
+  return Math.max(-Math.min(...idx), Math.min(project.tracks.length - 1 - Math.max(...idx), offset));
+}
+
+/** Moves a clip and its events to another track (same ticks, same IDs). */
+export function moveClipToTrack(project: MidiProject, clipId: string, trackId: TrackId, label = 'クリップを移動'): Command | null {
+  const clip = project.clips.find((c) => c.id === clipId);
+  if (!clip) throw new EditError(`clip ${clipId} not found`);
+  if (clip.trackId === trackId) return null;
+  const src = findTrack(project, clip.trackId);
+  const dst = findTrack(project, trackId);
+  const ids = new Set(clip.eventIds);
+  const moving = src.events.filter((e) => ids.has(e.id)).map((e) => (e.kind === 'note' && e.releaseOrder !== undefined ? dropReleaseOrder(e) : e));
+  const tracks = replaceTracks(
+    project,
+    new Map([
+      [src.id, { ...src, events: src.events.filter((e) => !ids.has(e.id)) }],
+      [dst.id, { ...dst, events: sortEvents([...dst.events, ...moving]) }],
+    ]),
+  );
+  const clips = project.clips.map((c) => (c.id === clipId ? { ...c, trackId } : c));
+  return cmd(label, { tracks, clips });
 }
 
 /** Deletes several clips as one command. */

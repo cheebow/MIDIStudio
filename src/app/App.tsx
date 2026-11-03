@@ -12,7 +12,7 @@ import { createStarterProject } from '../core/model/defaults';
 import type { MidiProject } from '../core/model/types';
 import type { ImportIssue } from '../core/smf/types';
 import { addEvents, addTrack, channelInsertIndex, deleteClips, deleteEvents, duplicateEvents, duplicateTrack, moveEvents, removeTrack, splitClip, updateEvents } from '../core/editing/operations';
-import { copyClips, copyEvents, duplicateClips, pasteClips, pasteEvents } from '../core/editing/clipboard';
+import { copyClips, copyEvents, duplicateClips, pasteClips, tracksRelativeTo, pasteEvents } from '../core/editing/clipboard';
 import type { Command } from '../core/editing/history';
 import type { Selection } from '../core/editing/selection';
 import { quantizeNotes } from '../core/editing/quantize';
@@ -384,8 +384,8 @@ export default function App() {
         if (!clip || !trk) return;
         const tick = Math.round(transport.getPosition().tick);
         if (clip.clips) {
-          // regions go back to their own tracks; a track that is gone falls back to the selected one
-          const r = pasteClips(store.project, tick, clip, (c) => (store.project.tracks.some((x) => x.id === c.trackId) ? c.trackId : trk.id));
+          // the topmost copied clip lands on the selected track, the others keep their relative lanes (ADR-062)
+          const r = pasteClips(store.project, tick, clip, tracksRelativeTo(store.project, clip, trk.id));
           if (r) runSelectingClips(r.command, r.clipIds);
           return;
         }
