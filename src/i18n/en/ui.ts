@@ -208,4 +208,6 @@ export const EN_UI: Record<string, string> = {
   メニュー: 'Menu',
   閉じる: 'Close',
   'ドラッグで高さを変更、ダブルクリックで折り畳み / 展開': 'Drag to resize, double-click to collapse / expand',
+  // ADR-065: merge clips (track view group menu)
+  '結合（同じトラックのクリップを 1 つに）': 'Merge (clips on the same track into one)',
 };

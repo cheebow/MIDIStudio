@@ -586,10 +586,13 @@ export function Arrangement() {
       store.setSelection({ ...store.getState().selection, eventIds: new Set(), clipIds: new Set(group), trackIds: new Set([track.id]) });
       if (group.size > 1) {
         const n = group.size;
+        const tracksOf = project.clips.filter((c) => group.has(c.id)).map((c) => c.trackId);
+        const mergeable = new Set(tracksOf).size < tracksOf.length; // some track has two of them
         ctxMenu.open(e, [
           { label: t('コピー（{n} 個のクリップ）', { n }), shortcut: `${MOD}C`, action: actions.copy },
           { label: t('切り取り'), shortcut: `${MOD}X`, action: run(actions.cut) },
           { label: t('複製（すぐ後ろへ）'), shortcut: `${MOD}D`, action: run(actions.duplicate) },
+          { label: t('結合（同じトラックのクリップを 1 つに）'), shortcut: `${MOD}J`, action: run(actions.mergeClips), disabled: !mergeable, reason: t('同じトラックのクリップを 2 つ以上選択してください') },
           { separator: true, label: '' },
           { label: t('削除（中のノートごと）'), shortcut: 'Delete', action: run(actions.delete) },
         ]);

@@ -8,6 +8,7 @@ import {
   addTrack,
   adoptFreeEvents,
   createClip,
+  mergeClips,
   freeEventsInClip,
   deleteClip,
   deleteClips,
@@ -784,6 +785,33 @@ describe('clip groups (ADR-057): copy / paste / duplicate / move / delete severa
     expect(data.clips!.map((c) => tracksRelativeTo(s.project, data, b.id)(c))).toEqual([b.id, b.id]); // B's lane clamped to the last track
     const one = copyClips(s.project, [ids[1]])!; // only the clip on track B
     expect(one.clips!.map((c) => tracksRelativeTo(s.project, one, a.id)(c))).toEqual([a.id]);
+  });
+
+  it('ADR-065: mergeClips joins the selected clips of a track into the earliest one, gap and free notes included; other tracks and lone clips stay', () => {
+    const { s, a, ids } = setup(); // A: one clip 0..960 on track a; B: 960..1920 on track b
+    const before = exportSmfBytes(s.project).bytes;
+    // split A's clip at 480, leave a free note in a gap after it, then merge the two halves with the gap
+    s.run(splitClip(s.project, ids[0], 480));
+    const [a1, a2] = s.project.clips.filter((c) => c.trackId === a.id).map((c) => c.id);
+    s.run(resizeClip(s.project, a2, { endTick: 720 })); // 480..720 → the note at 480 stays, nothing after
+    s.run({ label: 'free note', patch: { tracks: s.project.tracks.map((tr) => (tr.id === a.id ? { ...tr, events: [...tr.events, { id: 'free', kind: 'note', tick: 800, pitch: 70, velocity: 100, durationTicks: 100, releaseVelocity: 64, originOrder: 999 }] } : tr)) } });
+    s.run(mergeClips(s.project, [a1, a2, ids[1]])); // B's clip is alone on its track: untouched
+    const merged = s.project.clips.find((c) => c.id === a1)!;
+    expect(s.project.clips.map((c) => c.id)).toEqual([a1, ids[1]]);
+    expect(merged).toMatchObject({ startTick: 0, endTick: 720 });
+    expect(s.project.clips.find((c) => c.id === ids[1])).toMatchObject({ startTick: 960, endTick: 1920 });
+    const tickOf = (id: string) => s.project.tracks[0].events.find((e) => e.id === id)!.tick;
+    expect(merged.eventIds.map(tickOf)).toEqual([0, 480]); // the free note at 800 is outside 0..720
+    s.run(resizeClip(s.project, a1, { endTick: 960 }));
+    expect(s.project.clips.find((c) => c.id === a1)!.eventIds.map(tickOf)).toEqual([0, 480, 800]);
+    expect(mergeClips(s.project, [a1, ids[1]])).toBeNull(); // one clip per track: nothing to merge
+    expect(mergeClips(s.project, [])).toBeNull();
+    s.undo();
+    s.undo();
+    s.undo();
+    s.undo();
+    s.undo();
+    expect(exportSmfBytes(s.project).bytes).toEqual(before);
   });
 
   it('moveClips moves the group together, never before tick 0; deleteClips removes them in one step', () => {

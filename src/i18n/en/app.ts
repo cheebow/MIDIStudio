@@ -302,4 +302,8 @@ export const EN_APP: Record<string, string> = {
   クリップの外にノートはありません: 'There are no notes outside clips',
   クリップの外のノートを削除: 'Delete notes outside clips',
   'クリップの外にあるノート {n} 個は鳴らないので含めていません': '{n} notes outside clips are silent and were left out',
+  // ADR-065: merge clips
+  結合: 'Merge',
+  '同じトラックのクリップを 2 つ以上選択してください': 'Select two or more clips on the same track',
+  クリップを結合: 'Merge clips',
 };
