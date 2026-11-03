@@ -15,6 +15,7 @@ import { useAnimationLoop, useDragState, useElementSize, usePlayheadFollow, useS
 import { useThemeVersion } from '../../app/theme';
 import { draggedLoop, hitLoop, loopCursor, loopSnap, type LoopDrag } from '../loopDrag';
 import { selectedTrack } from '../../core/model/selectedTrack';
+import { pointerOf, useDragAutoScroll, type PointerLike } from '../dragAutoScroll';
 
 const ROW_H = 12;
 const KEYS_W = 72;
@@ -22,6 +23,8 @@ const RULER_H = 20;
 const EDGE_PX = 6;
 const ALL_H = 128 * ROW_H;
 
+// Drag coordinates (startX/startY, x0..y1) are content px: x from tick 0, y from the top of the
+// grid content (scroll offset included), so the drag survives scrolling while it is held (ADR-068).
 type Drag =
   | { kind: 'move'; anchor: NoteEvent; startX: number; startY: number; dTick: number; dPitch: number; duplicate: boolean }
   | { kind: 'resize'; ids: string[]; anchor: NoteEvent; startX: number; dLen: number; mergeKey?: string }
@@ -48,6 +51,9 @@ export function PianoRoll() {
   const [lastLength, setLastLength] = useState<number | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const auditionRef = useRef<number | null>(null);
+  /** last pointer of the active drag, re-applied when the view scrolls under it */
+  const lastPointer = useRef<PointerLike | null>(null);
+  const trackPointer = useDragAutoScroll(scrollRef, gridRef, drag !== null, { top: RULER_H, vertical: drag?.kind !== 'loop' });
 
   const ppq = project.ppq;
   const pxPerTick = settings.pianoRollZoom / ppq;
@@ -222,8 +228,8 @@ export function PianoRoll() {
     if (drag?.kind === 'box') {
       ctx.fillStyle = th.selection;
       ctx.strokeStyle = th.accent;
-      const x = Math.min(drag.x0, drag.x1);
-      const y = Math.min(drag.y0, drag.y1);
+      const x = Math.min(drag.x0, drag.x1) - view.x;
+      const y = Math.min(drag.y0, drag.y1) - view.y;
       ctx.fillRect(x, y, Math.abs(drag.x1 - drag.x0), Math.abs(drag.y1 - drag.y0));
       ctx.strokeRect(x + 0.5, y + 0.5, Math.abs(drag.x1 - drag.x0), Math.abs(drag.y1 - drag.y0));
     }
@@ -323,6 +329,16 @@ export function PianoRoll() {
 
   const toTick = (x: number) => Math.max(0, (x + view.x) / pxPerTick);
   const toPitch = (y: number) => Math.max(0, Math.min(127, 127 - Math.floor((y - RULER_H + view.y) / ROW_H)));
+  /** content px (see Drag) from a client point, read from the live scroll position */
+  const contentPoint = (clientX: number, clientY: number) => {
+    const el = scrollRef.current;
+    const r = gridRef.current?.getBoundingClientRect();
+    const x = clientX - (r?.left ?? 0);
+    const y = clientY - (r?.top ?? 0);
+    return { x, y, cx: x + (el?.scrollLeft ?? scroll.x) - leadPx, cy: y + (el?.scrollTop ?? scroll.y) };
+  };
+  const tickAt = (cx: number) => Math.max(0, cx / pxPerTick);
+  const pitchAt = (cy: number) => Math.max(0, Math.min(127, 127 - Math.floor((cy - RULER_H) / ROW_H)));
 
   function hit(x: number, y: number): { note: NoteEvent; edge: boolean } | null {
     const t = toTick(x);
@@ -363,11 +379,14 @@ export function PianoRoll() {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+    const { cx, cy } = contentPoint(e.clientX, e.clientY);
     e.currentTarget.setPointerCapture(e.pointerId);
     e.currentTarget.focus();
+    lastPointer.current = pointerOf(e);
+    trackPointer(e.clientX, e.clientY);
     if (y < RULER_H) {
       const lh = hitLoop(x, y, project.loop, pxPerTick, view.x, RULER_H);
-      if (lh) setDrag({ kind: 'loop', hit: lh, startX: x, origin: project.loop, preview: project.loop });
+      if (lh) setDrag({ kind: 'loop', hit: lh, startX: cx, origin: project.loop, preview: project.loop });
       else transport.seek(snap(toTick(x)));
       return;
     }
@@ -379,9 +398,9 @@ export function PianoRoll() {
         else sel.add(h.note.id);
       } else if (!sel.has(h.note.id)) sel = new Set([h.note.id]);
       store.selectEvents(sel);
-      if (h.edge) setDrag({ kind: 'resize', ids: [...sel].filter((id) => notes.some((n) => n.id === id)), anchor: h.note, startX: x, dLen: 0 });
+      if (h.edge) setDrag({ kind: 'resize', ids: [...sel].filter((id) => notes.some((n) => n.id === id)), anchor: h.note, startX: cx, dLen: 0 });
       else {
-        setDrag({ kind: 'move', anchor: h.note, startX: x, startY: y, dTick: 0, dPitch: 0, duplicate: e.altKey });
+        setDrag({ kind: 'move', anchor: h.note, startX: cx, startY: cy, dTick: 0, dPitch: 0, duplicate: e.altKey });
         audition(h.note.pitch);
       }
       return;
@@ -396,7 +415,7 @@ export function PianoRoll() {
         const key = `draw-${++dragCounter}`;
         store.run(r.command, { mergeKey: key, select: r.ids });
         const created = store.project.tracks.find((t) => t.id === track.id)!.events.find((ev) => ev.id === r.ids[0]) as NoteEvent;
-        setDrag({ kind: 'resize', ids: r.ids, anchor: created, startX: x, dLen: 0, mergeKey: key });
+        setDrag({ kind: 'resize', ids: r.ids, anchor: created, startX: cx, dLen: 0, mergeKey: key });
         if (!settings.snapEnabled || snapTick(tick, grid).exact) setWarning(null);
         else setWarning(t('グリッド線が整数 Tick にならないため、位置を最も近い Tick に丸めました。'));
         audition(pitch);
@@ -406,7 +425,7 @@ export function PianoRoll() {
       return;
     }
     if (!e.shiftKey) store.selectEvents([]);
-    setDrag({ kind: 'box', x0: x, y0: y, x1: x, y1: y, additive: e.shiftKey });
+    setDrag({ kind: 'box', x0: cx, y0: cy, x1: cx, y1: cy, additive: e.shiftKey });
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -414,31 +433,41 @@ export function PianoRoll() {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    if (!drag) {
-      if (y < RULER_H) {
-        e.currentTarget.style.cursor = loopCursor(hitLoop(x, y, project.loop, pxPerTick, view.x, RULER_H)) || 'default';
-        return;
-      }
-      const h = hit(x, y);
-      e.currentTarget.style.cursor = h ? (h.edge ? 'ew-resize' : 'grab') : tool === 'draw' ? 'crosshair' : 'default';
+    if (drag) {
+      lastPointer.current = pointerOf(e);
+      trackPointer(e.clientX, e.clientY);
+      applyDrag(lastPointer.current);
       return;
     }
+    if (y < RULER_H) {
+      e.currentTarget.style.cursor = loopCursor(hitLoop(x, y, project.loop, pxPerTick, view.x, RULER_H)) || 'default';
+      return;
+    }
+    const h = hit(x, y);
+    e.currentTarget.style.cursor = h ? (h.edge ? 'ew-resize' : 'grab') : tool === 'draw' ? 'crosshair' : 'default';
+  }
+
+  /** Updates the active drag for a pointer (also called when the view scrolls under a still pointer). */
+  function applyDrag(p: PointerLike) {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const { cx, cy } = contentPoint(p.clientX, p.clientY);
     if (drag.kind === 'loop') {
-      setDrag({ ...drag, preview: draggedLoop(drag.origin, drag.hit, (x - drag.startX) / pxPerTick, loopSnap(sig, e.shiftKey), sig.ticksPerBeat(0)) });
+      setDrag({ ...drag, preview: draggedLoop(drag.origin, drag.hit, (cx - drag.startX) / pxPerTick, loopSnap(sig, p.shiftKey), sig.ticksPerBeat(0)) });
       return;
     }
     if (drag.kind === 'move') {
-      const rawStart = drag.anchor.tick + (x - drag.startX) / pxPerTick;
-      const dTick = (e.ctrlKey || e.metaKey ? Math.round(rawStart) : snap(rawStart + gridLen / 2)) - drag.anchor.tick;
-      const dPitch = toPitch(y) - drag.anchor.pitch;
+      const rawStart = drag.anchor.tick + (cx - drag.startX) / pxPerTick;
+      const dTick = (p.ctrlKey || p.metaKey ? Math.round(rawStart) : snap(rawStart + gridLen / 2)) - drag.anchor.tick;
+      const dPitch = pitchAt(cy) - drag.anchor.pitch;
       if (dPitch !== drag.dPitch) audition(drag.anchor.pitch + dPitch);
-      setDrag({ ...drag, dTick, dPitch, duplicate: drag.duplicate || e.altKey });
+      setDrag({ ...drag, dTick, dPitch, duplicate: drag.duplicate || p.altKey });
     } else if (drag.kind === 'resize') {
-      const rawEnd = drag.anchor.tick + drag.anchor.durationTicks + (x - drag.startX) / pxPerTick;
-      const newEnd = e.ctrlKey || e.metaKey || !settings.snapEnabled ? Math.round(rawEnd) : snap(rawEnd + gridLen / 2);
+      const rawEnd = drag.anchor.tick + drag.anchor.durationTicks + (cx - drag.startX) / pxPerTick;
+      const newEnd = p.ctrlKey || p.metaKey || !settings.snapEnabled ? Math.round(rawEnd) : snap(rawEnd + gridLen / 2);
       const dLen = Math.max(1, newEnd - drag.anchor.tick) - drag.anchor.durationTicks;
       setDrag({ ...drag, dLen });
-    } else setDrag({ ...drag, x1: x, y1: y });
+    } else setDrag({ ...drag, x1: cx, y1: cy });
   }
 
   function onPointerUp() {
@@ -472,10 +501,10 @@ export function PianoRoll() {
         const [xa, xb] = [Math.min(d.x0, d.x1), Math.max(d.x0, d.x1)];
         const [ya, yb] = [Math.min(d.y0, d.y1), Math.max(d.y0, d.y1)];
         if (xb - xa < 2 && yb - ya < 2) return;
-        const ta = toTick(xa);
-        const tb = toTick(xb);
-        const pa = toPitch(yb);
-        const pb = toPitch(ya);
+        const ta = tickAt(xa);
+        const tb = tickAt(xb);
+        const pa = pitchAt(yb);
+        const pb = pitchAt(ya);
         const ids = notes.filter((n) => n.tick < tb && n.tick + n.durationTicks > ta && n.pitch >= pa && n.pitch <= pb).map((n) => n.id);
         store.selectEvents(d.additive ? [...selection.eventIds, ...ids] : ids);
       }
@@ -513,6 +542,7 @@ export function PianoRoll() {
         <div className="roll-scroll" ref={scrollRef} onScroll={(e) => {
           const { scrollLeft, scrollTop } = e.currentTarget;
           setScroll({ x: scrollLeft, y: scrollTop });
+          if (dragRef.current && lastPointer.current) applyDrag(lastPointer.current);
         }}>
           <div style={{ width: totalW + KEYS_W, height: ALL_H + RULER_H }}>
             <div className="sticky-canvas roll-sticky" style={{ width: view.w, height: view.h }}>
