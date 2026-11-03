@@ -29,6 +29,21 @@ function song(lang: Lang, parts: { piano?: number[][]; bass?: number[][]; drums?
   return build(1, ppq, [], track(piano, 0, 0, parts.piano), track(bass, 1, 33, parts.bass), track(guitar, 2, 25), track(drums, 9, 0, parts.drums));
 }
 
+/** Exactly what chapters 1–3 leave behind: two bars, C then F, quarter-note chords, bass and the drum pattern. */
+function afterChapter3(): { piano: number[][]; bass: number[][]; drums: number[][] } {
+  const piano: number[][] = [], bass: number[][] = [], drums: number[][] = [];
+  for (const bar of [0, 1]) {
+    const t0 = bar * 4 * Q, chord = bar === 0 ? [60, 64, 67] : [65, 69, 72];
+    for (let beat = 0; beat < 4; beat++) {
+      for (const p of chord) piano.push([t0 + beat * Q, p, Q]);
+      bass.push([t0 + beat * Q, bar === 0 ? 36 : 41, Q]);
+    }
+    drums.push([t0, 36, Q / 2, 110], [t0 + Q, 38, Q / 2, 110], [t0 + Q * 2, 36, Q / 2, 110], [t0 + Q * 3, 38, Q / 2, 110]);
+    for (let i = 0; i < 8; i++) drums.push([t0 + i * (Q / 2), 42, Q / 2, 85]);
+  }
+  return { piano, bass, drums };
+}
+
 async function open(page: Page, lang: Lang, startup = false) {
   await page.context().addInitScript(([l, s]) => {
     localStorage.setItem('midi-studio.locale', l);
@@ -96,14 +111,7 @@ for (const lang of ['ja', 'en'] as Lang[]) {
       await page.setViewportSize({ width: 1280, height: 920 });
       await open(page, lang);
       // --- 画面の見かた: a song with something in every track
-      await importMidi(
-        page,
-        song(lang, {
-          piano: [[0, 60, Q], [0, 64, Q], [0, 67, Q], [Q * 4, 65, Q], [Q * 4, 69, Q], [Q * 4, 72, Q]],
-          bass: [[0, 36, Q], [Q, 36, Q], [Q * 2, 36, Q], [Q * 3, 36, Q], [Q * 4, 41, Q], [Q * 5, 41, Q], [Q * 6, 41, Q], [Q * 7, 41, Q]],
-          drums: [0, 1].flatMap((bar) => [[bar * 4 * Q, 36, Q / 2, 110], [bar * 4 * Q + Q, 38, Q / 2, 110], [bar * 4 * Q + Q * 2, 36, Q / 2, 110], [bar * 4 * Q + Q * 3, 38, Q / 2, 110], ...Array.from({ length: 8 }, (_, i) => [bar * 4 * Q + i * (Q / 2), 42, Q / 2, 85])]),
-        }),
-      );
+      await importMidi(page, song(lang, afterChapter3()));
       await trackHeader(page, piano).click();
       await callout(page, page.locator('.transport'), 1);
       await callout(page, page.locator('.arrangement'), 2);
@@ -146,13 +154,7 @@ for (const lang of ['ja', 'en'] as Lang[]) {
       await gridSelect.selectOption('16:straight');
 
       // --- 3. ベースとコード: C chord then F chord over a bass line, grid 1/4
-      await importMidi(
-        page,
-        song(lang, {
-          piano: [[0, 60, Q], [0, 64, Q], [0, 67, Q], [Q * 4, 65, Q], [Q * 4, 69, Q], [Q * 4, 72, Q]],
-          bass: [[0, 36, Q], [Q, 36, Q], [Q * 2, 36, Q], [Q * 3, 36, Q], [Q * 4, 41, Q], [Q * 5, 41, Q], [Q * 6, 41, Q], [Q * 7, 41, Q]],
-        }),
-      );
+      await importMidi(page, song(lang, afterChapter3()));
       await trackHeader(page, piano).click();
       await tab(page, lang, 'ピアノロール', 'Piano roll').click();
       await page.getByRole('combobox', { name: lang === 'ja' ? 'グリッド' : 'Grid' }).selectOption('4:straight');
@@ -186,14 +188,7 @@ for (const lang of ['ja', 'en'] as Lang[]) {
       await page.keyboard.press('Escape');
 
       // --- 6. 曲の形にする: rubber-band the four clips
-      await importMidi(
-        page,
-        song(lang, {
-          piano: [[0, 60, Q], [0, 64, Q], [0, 67, Q], [Q * 4, 65, Q], [Q * 4, 69, Q], [Q * 4, 72, Q]],
-          bass: [[0, 36, Q], [Q, 36, Q], [Q * 2, 36, Q], [Q * 3, 36, Q], [Q * 4, 41, Q], [Q * 5, 41, Q], [Q * 6, 41, Q], [Q * 7, 41, Q]],
-          drums: [0, 1].flatMap((bar) => [[bar * 4 * Q, 36, Q / 2, 110], [bar * 4 * Q + Q, 38, Q / 2, 110], [bar * 4 * Q + Q * 2, 36, Q / 2, 110], [bar * 4 * Q + Q * 3, 38, Q / 2, 110], ...Array.from({ length: 8 }, (_, i) => [bar * 4 * Q + i * (Q / 2), 42, Q / 2, 85])]),
-        }),
-      );
+      await importMidi(page, song(lang, afterChapter3()));
       await page.keyboard.press('Escape');
       await page.getByTestId('arr-tool-select').click();
       const arr = (await page.getByTestId('arrangement-canvas').boundingBox())!;

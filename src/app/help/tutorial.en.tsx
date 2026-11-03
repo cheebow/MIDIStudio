@@ -84,7 +84,8 @@ export const TUTORIAL_CHAPTERS_EN: HelpSection[] = [
           <li>Select “Bass”, set the edit grid back to <strong>1/4</strong>, and place four quarter notes in the C2 row of the piano roll (one bar).</li>
           <li>Back on “Piano”, put E4 and G4 on top of each of the four notes from chapter 1 (C4, E4 and G4 on every beat: 12 notes in all). C, E and G together make a C chord.</li>
           <li>Now bar 2. Click the piano roll, press <K>{MOD}A</K> to select all the notes of bar 1, then <K>{MOD}D</K> to duplicate them: the same notes appear in bar 2 and stay selected. Press <K>↑</K> five times to raise them five semitones: F4, A4, C5 (an F chord).</li>
-          <li>The bass works the same way: select “Bass”, click the piano roll, then <K>{MOD}A</K> → <K>{MOD}D</K> → <K>↑</K> five times, and bar 2 is F2. For the drums just <K>{MOD}A</K> → <K>{MOD}D</K> (bar 2 gets the same pattern).</li>
+          <li>The bass works the same way: select “Bass”, click the piano roll, then <K>{MOD}A</K> → <K>{MOD}D</K> → <K>↑</K> five times, and bar 2 is F2.</li>
+          <li>Give the drums two bars as well: select “Drums”, then <K>{MOD}A</K> → <K>{MOD}D</K>. The one-bar pattern from chapter 2 now fills bar 2 too (no ↑ here).</li>
           <li>Set the right-hand “Bars” number in the transport to 3 (1 to 3 loops bars 1 and 2). <K>Space</K>. Just going C → F already sounds like a song.</li>
         </ol>
         <p>Select notes and <K>{MOD}C</K>, move the playhead and <K>{MOD}V</K> to paste; <K>{MOD}D</K> duplicates right after the selection. <K>↑↓</K> moves by a semitone, Shift+<K>↑↓</K> by an octave.</p>
