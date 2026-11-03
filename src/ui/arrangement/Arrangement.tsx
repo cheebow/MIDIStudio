@@ -5,8 +5,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { t } from '../../i18n';
 import { arrangementZoomPatch } from '../zoom';
 import { draggedLoop, hitLoop, loopCursor, loopSnap, type LoopDrag } from '../loopDrag';
-import { adoptFreeEvents, createClip, deleteClip, duplicateClip, freeEventsInClip, moveClips, reorderTracks, resizeClip, splitClip, updateClip, updateTrack } from '../../core/editing/operations';
-import { duplicateClips, pasteClips, pasteEvents } from '../../core/editing/clipboard';
+import { adoptFreeEvents, clampedTrackOffset, createClip, deleteClip, duplicateClip, freeEventsInClip, moveClips, reorderTracks, resizeClip, splitClip, updateClip, updateTrack } from '../../core/editing/operations';
+import { duplicateClips, pasteClips, pasteEvents, tracksRelativeTo } from '../../core/editing/clipboard';
 import { MOD_LABEL as MOD } from '../platform';
 import { isSecondaryClick, useContextMenu } from '../menu/ContextMenu';
 import { Dialog } from '../Dialog';
@@ -285,11 +285,13 @@ export function Arrangement() {
     if (drag?.kind === 'clip' && (drag.dx !== 0 || drag.trackOffset !== 0)) {
       const ids = new Set(drag.ids);
       const last = project.tracks.length - 1;
+      // a move keeps the group's shape (offset clamped for the group); a duplicate clamps each copy on its own
+      const groupOffset = drag.duplicate ? drag.trackOffset : clampedTrackOffset(project, project.clips.filter((c) => ids.has(c.id)), drag.trackOffset);
       ctx.strokeStyle = th.accent;
       ctx.setLineDash([4, 3]);
       for (const c of project.clips) {
         if (!ids.has(c.id)) continue;
-        const i = Math.max(0, Math.min(last, project.tracks.findIndex((tk) => tk.id === c.trackId) + drag.trackOffset));
+        const i = Math.max(0, Math.min(last, project.tracks.findIndex((tk) => tk.id === c.trackId) + groupOffset));
         ctx.strokeRect((c.startTick + drag.dx) * pxPerTick - scrollX + 0.5, HEAD_H + i * TRACK_H - scrollY + 3.5, (c.endTick - c.startTick) * pxPerTick, TRACK_H - 7);
       }
       ctx.setLineDash([]);
@@ -462,7 +464,7 @@ export function Arrangement() {
     } else {
       const raw = (x - drag.startX) / pxPerTick;
       const newStart = Math.max(0, snap(drag.clip.startTick + raw));
-      const trackOffset = drag.duplicate ? Math.round((y - drag.startY) / TRACK_H) : 0;
+      const trackOffset = Math.round((y - drag.startY) / TRACK_H); // up / down moves (or, with Alt, copies) to another track (ADR-062)
       setDrag({ ...drag, dx: newStart - drag.clip.startTick, duplicate: drag.duplicate || e.altKey, trackOffset });
     }
   }
@@ -495,7 +497,7 @@ export function Arrangement() {
             store.run(r.command);
             store.setSelection({ ...store.getState().selection, clipIds: new Set(r.clipIds) });
           }
-        } else store.run(moveClips(store.project, d.ids, d.dx));
+        } else store.run(moveClips(store.project, d.ids, d.dx, { trackOffset: d.trackOffset }));
       }
     } catch (err) {
       console.warn(err);
@@ -637,8 +639,8 @@ export function Arrangement() {
             { label: t('ここに貼り付け'), disabled: !clipboard, reason: t('コピーしたノートやクリップがありません'), action: run(() => {
               if (!clipboard) return;
               if (clipboard.clips) {
-                // copied regions return to their own tracks; a track that is gone falls back to the clicked one
-                const r = pasteClips(store.project, tick, clipboard, (c) => (store.project.tracks.some((x) => x.id === c.trackId) ? c.trackId : track.id));
+                // the topmost copied clip lands on the clicked track, the others keep their relative lanes (ADR-062)
+                const r = pasteClips(store.project, tick, clipboard, tracksRelativeTo(store.project, clipboard, track.id));
                 if (r) {
                   store.run(r.command);
                   store.setSelection({ ...store.getState().selection, eventIds: new Set(), clipIds: new Set(r.clipIds) });

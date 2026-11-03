@@ -149,3 +149,29 @@ test('ADR-057: Shift+click / rubber band select clips across tracks; ⌘D, copy 
   await page.keyboard.press('Escape');
 });
 
+test('ADR-062: dragging a clip up or down moves it to that track; paste here puts the copy on the right-clicked track', async ({ page }) => {
+  await page.goto('/');
+  await importMidi(page, build(1, 480, [program(0, 0, 0), on(0, 0, 60), off(480, 0, 60)], [on(0, 1, 64), off(480, 1, 64)]));
+  const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
+  const box = (await page.getByTestId('arrangement-canvas').boundingBox())!;
+  const bar = 96;
+  const p = await firstClip(page);
+  // pitches per exported track (track 0 is the conductor track of a Format 1 file)
+  const perTrack = async () => (await exportedSmf(page)).tracks.map((tr) => tr.events.filter((e) => e.kind === 'channel' && (e.status & 0xf0) === 0x90 && e.data[1] > 0).map((e) => (e.kind === 'channel' ? `${e.tick}:${e.data[0]}` : '')));
+  expect((await perTrack()).slice(1)).toEqual([['0:60'], ['0:64']]);
+  // plain drag one lane down (no Alt): the clip and its note now live on the second track
+  await page.mouse.move(p.x, p.y);
+  await page.mouse.down();
+  await page.mouse.move(p.x + 2, p.y + 48, { steps: 6 });
+  await page.mouse.up();
+  expect((await perTrack()).slice(1)).toEqual([[], ['0:60', '0:64']]);
+  await page.keyboard.press(`${mod}+z`);
+  expect((await perTrack()).slice(1)).toEqual([['0:60'], ['0:64']]);
+  // copy the first track's clip, right-click on the second track at bar 3: the copy lands there
+  await page.mouse.click(p.x, p.y);
+  await page.keyboard.press(`${mod}+c`);
+  await page.mouse.click(box.x + bar * 3 + 10, p.y + 48, { button: 'right' });
+  await page.getByTestId('context-menu').getByRole('menuitem', { name: 'ここに貼り付け' }).click();
+  expect((await perTrack()).slice(1)).toEqual([['0:60'], ['0:64', '3840:60']]);
+});
+
