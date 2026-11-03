@@ -42,7 +42,7 @@ DAW のような視覚的な編集と、レコンポーザのような数値入�
 
 ### GM / GS について
 
-音は読み込んだ SoundFont（標準は GeneralUser GS）で鳴ります。GS の SysEx は保持・編集できますが、**Roland SC-55 / SC-88Pro 実機の音色やエフェクトを再現するものではありません。**
+音は読み込んだ SoundFont（標準は GeneralUser GS。手元の .sf2 / .sf3 / .dls も 512 MiB まで使えます）で鳴ります。GS の SysEx は保持・編集できますが、**Roland SC-55 / SC-88Pro 実機の音色やエフェクトを再現するものではありません。**
 
 ## 技術構成
 

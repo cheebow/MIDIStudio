@@ -3,7 +3,7 @@
 // MIDI input is requested once alongside it. The startup dialog (ADR-049) shows what still needs a click.
 import { useEffect, useRef, useState } from 'react';
 import type { SpessaAdapter, SoundBankReport } from '../../playback/SpessaAdapter';
-import { DEFAULT_SOUNDFONT_URL, fetchSoundFont } from '../../playback/SoundFontLoader';
+import { DEFAULT_SOUNDFONT_URL, fetchSoundFont, soundBankSizeError } from '../../playback/SoundFontLoader';
 import type { Transport } from '../../playback/Transport';
 import type { MidiInputAdapter } from '../../input/MidiInputAdapter';
 import { errorText } from '../errorText';
@@ -57,7 +57,13 @@ export function useAudioEngine({ adapter, transport, midi, blockers, setError }:
   /** bytes of the bank the engine plays (for the offline WAV renderer, ADR-052) */
   const [soundBankBytes, setSoundBankBytes] = useState<ArrayBuffer | null>(null);
 
-  async function loadBank(load: () => Promise<ArrayBuffer>, name: string) {
+  /** `sizeBytes`: the file's size when known before reading it, so an oversized file is never read */
+  async function loadBank(load: () => Promise<ArrayBuffer>, name: string, sizeBytes?: number) {
+    const tooBig = sizeBytes === undefined ? null : soundBankSizeError(sizeBytes);
+    if (tooBig) {
+      setError(tooBig); // the current bank stays loaded
+      return;
+    }
     setError(null);
     // a SoundFont (re)load must not leave the transport playing, but keeps the playhead where it is
     if (transport.getState().status === 'playing') transport.pause();
@@ -65,6 +71,8 @@ export function useAudioEngine({ adapter, transport, midi, blockers, setError }:
     try {
       await adapter.initialize();
       const buffer = await load();
+      const sizeError = soundBankSizeError(buffer.byteLength);
+      if (sizeError) throw new Error(sizeError);
       // the engine transfers the buffer to its worklet (it is detached afterwards): keep a copy for the renderer
       const copy = buffer.slice(0);
       setReport(await adapter.loadSoundBank(buffer));

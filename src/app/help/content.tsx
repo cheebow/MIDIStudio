@@ -269,7 +269,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           <li>サンプル曲: ファイル › サンプル曲（起動ダイアログからも）。VISION (GS Version) と Merry X'mas For You!（作曲・制作: cheebow、試聴・編集用）。</li>
           <li>MIDI を読み込む: SMF Format 0 / 1。ノート・CC・SysEx・未知のイベントは捨てずに保持します。MIDI を書き出す: Format 1。</li>
           <li>WAV を書き出す: 内蔵音源でレンダリングします（ミュート／ソロは反映、ループは無視）。</li>
-          <li>SoundFont を選ぶ: 手元の .sf2 / .sf3 / .dls を音源にします。</li>
+          <li>SoundFont を選ぶ: 手元の .sf2 / .sf3 / .dls を音源にします（512 MiB まで。それより大きいとブラウザのメモリが足りなくなるため読み込みません）。</li>
         </ul>
       </>
     ),
