@@ -11,6 +11,7 @@ import { isSecondaryClick, useContextMenu } from '../menu/ContextMenu';
 import { emptyMenuItems, noteMenuItems } from '../menu/editMenus';
 import { conductorMarks, drawLoopRuler, drawPlayhead, drawRulerConductorMarks, drawStepCursor, fitCanvas, isBlackKey, pitchName, readTheme } from '../canvas';
 import { ControllerLane } from './ControllerLane';
+import { NoteInfoBar } from '../editing/NoteInfoBar';
 import { useAnimationLoop, useDragState, useElementSize, usePlayheadFollow, useSignatureMap, useZoomAnchor } from '../hooks';
 import { useThemeVersion } from '../../app/theme';
 import { draggedLoop, hitLoop, loopCursor, loopSnap, type LoopDrag } from '../loopDrag';
@@ -539,6 +540,7 @@ export function PianoRoll() {
 
   return (
     <div className="piano-roll">
+      <NoteInfoBar track={track} />
       <div className="roll-main">
         <div className="roll-scroll" ref={scrollRef} onScroll={(e) => {
           const { scrollLeft, scrollTop } = e.currentTarget;

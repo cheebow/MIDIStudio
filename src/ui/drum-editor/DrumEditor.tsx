@@ -15,6 +15,7 @@ import { isSecondaryClick, useContextMenu } from '../menu/ContextMenu';
 import { emptyMenuItems, noteMenuItems } from '../menu/editMenus';
 import { conductorMarks, drawLoopRuler, drawPlayhead, drawRulerConductorMarks, drawStepCursor, fitCanvas, readTheme } from '../canvas';
 import { ControllerLane } from '../piano-roll/ControllerLane';
+import { NoteInfoBar } from '../editing/NoteInfoBar';
 import { DrumPads } from './DrumPads';
 import { drumColor } from '../drumColors';
 import { useAnimationLoop, useDragState, useElementSize, usePlayheadFollow, useSignatureMap, useZoomAnchor } from '../hooks';
@@ -435,6 +436,7 @@ export function DrumEditor() {
         <span className="note" title={t('ドラムマップは表示名・並び順だけを変えます。ノート番号は変わりません。レーン名のクリックで試聴、ダブルクリックで名前の変更。')}>{t('ⓘ マップは表示名のみ')}</span>
         {track.displayMode !== 'drum' && <span className="warn-text" title={t('Track メニューの「ドラムトラックにする」で切り替えられます')}>{t('メロディ表示のトラックです')}</span>}
       </div>
+      <NoteInfoBar track={track} pitchLabel={(p) => `${p} ${lanes.find((l) => l.pitch === p)?.name ?? ''}`.trim()} />
       <div className="drum-main">
         <div className="drum-scroll" ref={scrollRef} onScroll={(e) => {
           const { scrollLeft, scrollTop } = e.currentTarget;

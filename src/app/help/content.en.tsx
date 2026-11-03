@@ -83,6 +83,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
           <li>Tools: select (<K>V</K>) and draw (<K>P</K>). With the draw tool, a click places a note of the grid length; keep dragging to set its length.</li>
           <li>Drag a note’s middle to move it, its right edge to change its length, <K>{ALT}</K>+drag to duplicate, Shift+click to add to the selection. Drag on empty space for a rubber-band selection.</li>
           <li>Snap and the edit grid (1/1 to 1/64, triplets, dotted) are in the tool row. Hold <K>{MOD}</K> while dragging to ignore snap for that drag.</li>
+          <li>The info bar above the editor shows the position, length, pitch, velocity and release velocity of the selected notes, and you can type over them (the drum editor has it too). With several notes, values that differ show as a range such as “30–100”. A number sets every note (position and pitch move the group and keep its shape), “+10” / “-10” changes each one, <K>↑</K><K>↓</K> step by 1 (Shift for bigger steps), Esc goes back.</li>
           <li>The lane below switches between Velocity, CC and Pitch Bend. Paint velocities by dragging; click to add CC / Pitch Bend points, then select, drag or Delete them.</li>
           <li>Edit › Notes: quantize (<K>Q</K> applies the edit grid at once, <K>Shift+Q</K> opens the dialog), humanize, velocity, align note lengths to the grid. The same commands are in a note’s right-click menu.</li>
           <li>Click the keyboard on the left to audition. Keys you play light up red; keys sounding during playback light up blue.</li>
