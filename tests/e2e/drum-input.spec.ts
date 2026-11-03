@@ -48,8 +48,11 @@ test('I02 / I03 / I06: keyboard drum pads light the on-screen pad; text fields k
   await page.locator('body').click({ position: { x: 5, y: 5 } });
   await page.keyboard.down('KeyM');
   await expect(page.getByTestId('pad-36')).toHaveClass(/on/);
+  await expect(page.locator('[data-testid="drum-lane"][data-pitch="36"]')).toHaveClass(/held/); // the lane name lights up too (ADR-067)
+  await expect(page.locator('[data-testid="drum-lane"][data-pitch="38"]')).not.toHaveClass(/held/);
   await page.keyboard.up('KeyM');
   await expect(page.getByTestId('pad-36')).not.toHaveClass(/on/);
+  await expect(page.locator('[data-testid="drum-lane"][data-pitch="36"]')).not.toHaveClass(/held/);
   // Same physical key in piano mode is not a drum pad
   await setInputMode(page, 'piano-performance');
   await page.locator('body').click({ position: { x: 5, y: 5 } });

@@ -1,7 +1,7 @@
 // Cubase-style drum editor (REQ-EDT-06/07/08, UI_DESIGN 5): instrument-name lanes + diamonds.
 // It edits the same track events as the piano roll. Lanes come from the track's drum map, which
 // only labels pitches (changing the map never changes Note.pitch).
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { t } from '../../i18n';
 import { looseNoteIds } from '../../core/model/looseNotes';
 import { addEvents, deleteEvents, duplicateEvents, moveEvents, updateEvents, updateTrack } from '../../core/editing/operations';
@@ -46,6 +46,17 @@ export function DrumEditor() {
   const size = useElementSize(scrollRef, { w: 800, h: 300 });
   const [drag, dragRef, setDrag] = useDragState<Drag>();
   const [onlyUsed, setOnlyUsed] = useState(false);
+  // Lane names light up like the piano roll's keys: red while the player holds the drum (PC keys,
+  // pads, MIDI keyboard, a click on the name), accent while the track's notes sound during playback.
+  const inputSnap = useSyncExternalStore(input.subscribe, input.getSnapshot);
+  const [auditionPitch, setAuditionPitch] = useState<number | null>(null);
+  const [playingPitches, setPlayingPitches] = useState<ReadonlySet<number>>(() => new Set());
+  const playingKey = useRef('');
+  const heldPitches = useMemo(() => {
+    const s = new Set<number>([...inputSnap.drumHeld, ...inputSnap.pianoHeld]);
+    if (auditionPitch !== null) s.add(auditionPitch);
+    return s;
+  }, [inputSnap.drumHeld, inputSnap.pianoHeld, auditionPitch]);
   const [renaming, setRenaming] = useState<number | null>(null);
 
   const map = findDrumMap(track?.drumMapId, project.drumMaps);
@@ -195,6 +206,14 @@ export function DrumEditor() {
     const pos = transport.getPosition();
     const x = Math.round(pos.tick * pxPerTick - view.x) + 0.5;
     drawPlayhead(ctx, canvas, x, view.h);
+    // lanes sounding now (state changes only at note boundaries, so the DOM is not touched every frame)
+    const sounding = new Set<number>();
+    if (pos.playing) for (const n of notes) if (n.tick <= pos.tick && pos.tick < n.tick + n.durationTicks) sounding.add(n.pitch);
+    const key = [...sounding].sort((a, b) => a - b).join(',');
+    if (key !== playingKey.current) {
+      playingKey.current = key;
+      setPlayingPitches(sounding);
+    }
     const live = recorder.livePreview().get(track?.id ?? '');
     if (live) {
       ctx.fillStyle = 'rgba(229,72,77,0.9)';
@@ -214,7 +233,7 @@ export function DrumEditor() {
     }
     if (input.mode === 'step-piano' || input.mode === 'step-drums') drawStepCursor(ctx, Math.round(step.cursor * pxPerTick - view.x) + 0.5, view.h);
     follow(pos, x, gridW, scrollRef.current, sig, pxPerTick, settings.followPlayback);
-  }, [transport, view, gridW, totalH, pxPerTick, settings.followPlayback, step, input, recorder, track?.id, laneOf, sig, follow]);
+  }, [transport, view, gridW, totalH, pxPerTick, settings.followPlayback, step, input, recorder, track?.id, laneOf, sig, follow, notes]);
 
   if (!track) return <p className="placeholder">{t('トラックがありません。')}</p>;
 
@@ -232,7 +251,10 @@ export function DrumEditor() {
   }
 
   const preview = (pitch: number, velocity = 100) => {
-    if (!audioReady || !track) return;
+    if (!track) return;
+    setAuditionPitch(pitch);
+    setTimeout(() => setAuditionPitch((p) => (p === pitch ? null : p)), 150);
+    if (!audioReady) return;
     transport.auditionNote(track.id, pitch, velocity, 'drum-editor');
     setTimeout(() => transport.releaseAuditionNote(track.id, pitch, 'drum-editor'), 150);
   };
@@ -397,7 +419,7 @@ export function DrumEditor() {
                 <div style={{ height: RULER_H }} />
                 <div style={{ transform: `translateY(${-view.y}px)` }}>
                   {lanes.map((l) => (
-                    <div key={l.pitch} className="drum-lane-name" style={{ height: LANE_H }} data-testid="drum-lane">
+                    <div key={l.pitch} className={`drum-lane-name${heldPitches.has(l.pitch) ? ' held' : ''}${playingPitches.has(l.pitch) ? ' playing' : ''}`} style={{ height: LANE_H }} data-testid="drum-lane" data-pitch={l.pitch}>
                       {renaming === l.pitch ? (
                         <input
                           autoFocus

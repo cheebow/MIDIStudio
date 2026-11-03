@@ -208,6 +208,9 @@ table.summary td { border-bottom: 1px solid var(--border); padding: 4px 6px; }
 .drum-lane-name { display: flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--grid); font-size: 0.78rem; padding-right: 2px; }
 .drum-lane-name .lane-name { flex: 1; min-width: 0; text-align: left; border: none; background: transparent; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: inherit; }
 .drum-lane-name .pitch { color: var(--muted); font-family: ui-monospace, monospace; }
+/* like the piano roll's keys: red while the player holds the drum, accent while the track's note sounds during playback */
+.drum-lane-name.playing { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.drum-lane-name.held { background: color-mix(in srgb, var(--playhead) 38%, transparent); }
 .drum-lane-name .lane-tools { display: none; }
 .drum-lane-name:hover .lane-tools { display: inline-flex; }
 .drum-lane-name .lane-tools button { padding: 0 3px; font-size: 0.65rem; border: none; background: transparent; }
