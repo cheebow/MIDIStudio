@@ -4,6 +4,7 @@
 import { base64ToBytes } from '../model/base64';
 import type { MidiEvent, MidiProject, MidiTrack } from '../model/types';
 import { exportSmfBytes } from './exportSmf';
+import { withoutLooseNotes } from '../model/looseNotes';
 
 export function audibleTrackIds(project: MidiProject): Set<string> {
   const anySolo = project.tracks.some((t) => t.solo);
@@ -28,7 +29,8 @@ export interface PlaybackSnapshot {
  * @param opts.tailTick keeps the engine running at least until this tick (recording past the end
  *   of the song, or into an empty song). Implemented as an empty text meta in the snapshot only.
  */
-export function buildPlaybackSnapshot(project: MidiProject, opts: { tailTick?: number } = {}): PlaybackSnapshot {
+export function buildPlaybackSnapshot(source: MidiProject, opts: { tailTick?: number } = {}): PlaybackSnapshot {
+  const project = withoutLooseNotes(source); // notes outside every clip do not sound (ADR-064)
   const audible = audibleTrackIds(project);
   const tracks: MidiTrack[] = project.tracks.map((t) => (audible.has(t.id) ? t : { ...t, events: t.events.filter((e) => !isNoteLike(e)) }));
   const loopOn = project.loop.enabled && project.loop.endTick > project.loop.startTick;

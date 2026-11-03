@@ -4,7 +4,8 @@ import type { MidiProject, MidiTrack } from '../core/model/types';
 import type { History } from '../core/editing/history';
 import { canRedo, canUndo } from '../core/editing/history';
 import type { ClipboardData } from '../core/editing/clipboard';
-import { moveTrack, sortTracksByChannel, updateTrack } from '../core/editing/operations';
+import { deleteEvents, moveTrack, sortTracksByChannel, updateTrack } from '../core/editing/operations';
+import { looseNoteIds } from '../core/model/looseNotes';
 import { mergeDrumTracks, mergeSameChannelTracks } from '../core/editing/trackMerge';
 import { insertGsReset } from '../core/gs/gsProject';
 import { gridLabel } from '../core/timing/grid';
@@ -71,6 +72,7 @@ export function buildMenus(d: MenuDeps): Menu[] {
   const { project, store, transport, actions, selectedTrack } = d;
   const settings = project.settings;
   const noSel = !d.hasSelection;
+  const looseCount = selectedTrack ? looseNoteIds(project, selectedTrack).size : 0;
   const panel = (activePanel: MidiProject['settings']['activePanel']) => () => store.updateSettings({ activePanel, editorCollapsed: false });
   return [
     {
@@ -178,6 +180,13 @@ export function buildMenus(d: MenuDeps): Menu[] {
         { label: t('トラックを追加'), action: actions.addTrack },
         { label: t('トラックを複製'), action: actions.duplicateTrack, disabled: !selectedTrack, reason: t('トラックを選択してください') },
         { label: t('トラックを削除'), action: actions.removeTrack, disabled: !selectedTrack, reason: t('トラックを選択してください') },
+        {
+          // notes outside every clip are silent (ADR-064); this is the way to get rid of them from the track view side
+          label: t('クリップの外のノートを削除（{n} 個）', { n: looseCount }),
+          disabled: looseCount === 0,
+          reason: t('クリップの外にノートはありません'),
+          action: () => selectedTrack && store.run(deleteEvents(store.project, looseNoteIds(store.project, selectedTrack), 'クリップの外のノートを削除')),
+        },
         sep,
         { label: t('上へ移動'), shortcut: IS_MAC ? '⌥↑' : 'Alt+↑', action: () => selectedTrack && store.run(moveTrack(store.project, selectedTrack.id, -1)), disabled: !selectedTrack || project.tracks[0] === selectedTrack, reason: t('いちばん上のトラックです') },
         { label: t('下へ移動'), shortcut: IS_MAC ? '⌥↓' : 'Alt+↓', action: () => selectedTrack && store.run(moveTrack(store.project, selectedTrack.id, 1)), disabled: !selectedTrack || project.tracks.at(-1) === selectedTrack, reason: t('いちばん下のトラックです') },

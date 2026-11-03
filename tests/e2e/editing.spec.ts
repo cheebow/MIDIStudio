@@ -166,11 +166,21 @@ test('ADR-040: dragging a clip edge changes the clip range; notes are not moved,
   await page.mouse.move(x0 + 24, y);
   await page.mouse.move(x0 + 48, y); // 2 beats at 24 px per quarter → tick 960
   await page.mouse.up();
-  expect(notesOf(await exportedSmf(page))).toEqual([{ tick: 0, pitch: 60 }, { tick: 960, pitch: 62 }]); // nothing moved
-  // the clip is now 960..1440 and holds only the second note: deleting it leaves the first note
+  // nothing moved, but the first note is outside every clip now: silent, so the export leaves it out (ADR-064)
+  expect(notesOf(await exportedSmf(page))).toEqual([{ tick: 960, pitch: 62 }]);
+  await expect(page.getByTestId('status-info')).toContainText('クリップの外にあるノート 1 個');
+  await page.getByRole('button', { name: 'トラック', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: 'クリップの外のノートを削除（1 個）' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  // the clip is 960..1440 and holds only the second note: deleting it leaves the (silent) first note
   await page.mouse.click(x0 + 60, y);
   await page.keyboard.press('Delete');
-  expect(notesOf(await exportedSmf(page))).toEqual([{ tick: 0, pitch: 60 }]);
+  expect(notesOf(await exportedSmf(page))).toEqual([]);
+  // Track › delete the notes outside clips removes it for good; Undo brings it back
+  await menu(page, 'トラック', 'クリップの外のノートを削除（1 個）');
+  await page.getByRole('button', { name: 'トラック', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: 'クリップの外のノートを削除（0 個）' })).toBeDisabled();
+  await page.keyboard.press('Escape');
 });
 
 test('ADR-040: tracks are reordered by dragging a header or with Alt+↑↓; the exported SMF follows', async ({ page }) => {

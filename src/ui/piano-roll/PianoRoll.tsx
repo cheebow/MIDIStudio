@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { addEvents, deleteEvents, duplicateEvents, moveEvents, updateEvents } from '../../core/editing/operations';
 import { gridTicks, snapTick } from '../../core/timing/grid';
+import { looseNoteIds } from '../../core/model/looseNotes';
 import type { MidiTrack, NoteEvent } from '../../core/model/types';
 import { useEditActions, useEditorState, useServices } from '../../app/store/context';
 import { t } from '../../i18n';
@@ -61,6 +62,7 @@ export function PianoRoll() {
   const geom = useRef({ pxPerTick, leadPx, anchorZoom });
   geom.current = { pxPerTick, leadPx, anchorZoom };
   const notes = useMemo(() => (track ? track.events.filter((e): e is NoteEvent => e.kind === 'note') : []), [track]);
+  const loose = useMemo(() => (track ? looseNoteIds(project, track) : new Set<string>()), [project, track]); // silent notes outside every clip (ADR-064)
   const end = useMemo(() => {
     let m = ppq * 4 * 32;
     for (const t of project.tracks) for (const e of t.events) m = Math.max(m, e.tick + (e.kind === 'note' ? e.durationTicks : 0));
@@ -198,15 +200,17 @@ export function PianoRoll() {
       const x = tick * pxPerTick - view.x;
       const y = yOf(pitch);
       const nw = Math.max(3, len * pxPerTick);
-      const alpha = 0.45 + (n.velocity / 127) * 0.55;
+      const isLoose = loose.has(n.id); // outside every clip: drawn faint, not played (ADR-064)
+      const alpha = (0.45 + (n.velocity / 127) * 0.55) * (isLoose ? 0.35 : 1);
       ctx.globalAlpha = alpha;
       ctx.fillStyle = isSel ? th.noteSelected : track.color;
       ctx.fillRect(x, y + 1, nw, ROW_H - 2);
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = isLoose ? 0.35 : 1;
       ctx.strokeStyle = th.text;
       ctx.lineWidth = isSel ? 1.5 : 0.5;
       ctx.strokeRect(x + 0.5, y + 1.5, nw - 1, ROW_H - 3);
       ctx.lineWidth = 1;
+      ctx.globalAlpha = 1;
       if (drag?.kind === 'move' && drag.duplicate && isSel) {
         // original stays in place when duplicating
         ctx.globalAlpha = 0.35;
@@ -223,7 +227,7 @@ export function PianoRoll() {
       ctx.fillRect(x, y, Math.abs(drag.x1 - drag.x0), Math.abs(drag.y1 - drag.y0));
       ctx.strokeRect(x + 0.5, y + 0.5, Math.abs(drag.x1 - drag.x0), Math.abs(drag.y1 - drag.y0));
     }
-  }, [project, track, notes, view, pxPerTick, gridLen, sig, selection.eventIds, drag, settings.showGhostNotes, themeVersion]);
+  }, [project, track, notes, loose, view, pxPerTick, gridLen, sig, selection.eventIds, drag, settings.showGhostNotes, themeVersion]);
 
   // Keyboard column: redrawn every frame by the overlay loop, with the keys being played (PC
   // keyboard / MIDI input / click audition) in the playhead colour and the track's sounding notes

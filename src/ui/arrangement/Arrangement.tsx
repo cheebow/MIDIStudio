@@ -619,7 +619,6 @@ export function Arrangement() {
         { label: t('複製（すぐ後ろへ）'), action: run(() => store.run(duplicateClip(store.project, clip.id, clip.endTick).command)) },
         { separator: true, label: '' },
         { label: t('削除（中のノートごと）'), shortcut: 'Delete', action: run(() => store.run(deleteClip(store.project, clip.id, { deleteEvents: true }))) },
-        { label: t('クリップだけ解除（ノートは残す）'), action: run(() => store.run(deleteClip(store.project, clip.id, { deleteEvents: false }, 'クリップを解除'))) },
       ]);
       return;
     }
@@ -891,14 +890,9 @@ function drawTrackClips(ctx: CanvasRenderingContext2D, project: MidiProject, tra
     const nx = e.tick * pxPerTick - scrollX;
     const ny = bodyTop + ((hi - e.pitch) / range) * (bodyH - 3);
     const nw = drums ? 3 : Math.max(2, e.durationTicks * pxPerTick - 0.5);
-    if (c) {
-      ctx.fillStyle = withAlpha(c.color ?? track.color, 0.95);
-      ctx.fillRect(nx, ny, nw, 3);
-    } else {
-      // not in any clip (an older project, or a note moved out): an outline, so it reads as "loose"
-      ctx.strokeStyle = withAlpha(th.accent, 0.8);
-      ctx.strokeRect(nx + 0.5, ny + 0.5, Math.max(2, nw - 1), 3);
-    }
+    if (!c) continue; // loose notes (outside every clip) are silent and not part of the arrangement (ADR-064)
+    ctx.fillStyle = withAlpha(c.color ?? track.color, 0.95);
+    ctx.fillRect(nx, ny, nw, 3);
   }
   ctx.restore();
 }
