@@ -1,4 +1,5 @@
 import type { ConductorEvent } from '../core/model/types';
+import { noteName } from '../core/list/noteNames';
 import { bpmFromUs } from '../core/timing/tempoMap';
 import { DEFAULT_TEMPO_US } from '../core/model/defaults';
 
@@ -82,12 +83,10 @@ export function readTheme(el: Element): Theme {
   };
 }
 
-export const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+export { NOTE_SHARP as NOTE_NAMES } from '../core/list/noteNames';
 
 /** C4 = MIDI 60 (UI_DESIGN 4). */
-export function pitchName(pitch: number): string {
-  return `${NOTE_NAMES[pitch % 12]}${Math.floor(pitch / 12) - 1}`;
-}
+export const pitchName = (pitch: number): string => noteName(pitch);
 
 export function isBlackKey(pitch: number): boolean {
   return [1, 3, 6, 8, 10].includes(pitch % 12);

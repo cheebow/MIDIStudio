@@ -10,6 +10,7 @@ import { CC_NAMES } from '../gm/ccNames';
 import { GM_PROGRAMS } from '../gm/instruments';
 import { drumName, findDrumMap } from '../gm/drumMaps';
 import { decodeGs } from '../gs/gsSysex';
+import { noteName } from './noteNames';
 import { t } from '../../i18n';
 
 export type ListUnit = 'native' | 'classic48';
@@ -39,14 +40,7 @@ export interface ListRow {
   detail: string;
 }
 
-const NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const NOTE_FLAT = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
-/**
- * Absolute note name ("C4", "F#4"). Black keys are named with sharps, or with flats ("Bb4") under a
- * flat key signature (sharpsFlats < 0). The name is never shortened by the key signature: a list
- * row must name the sounding pitch by itself.
- */
-export const noteName = (p: number, sharpsFlats = 0) => `${(sharpsFlats < 0 ? NOTE_FLAT : NOTE)[p % 12]}${Math.floor(p / 12) - 1}`;
+export { noteName } from './noteNames';
 
 /** Key signature (sharps > 0 / flats < 0) in effect at a tick, from the conductor; 0 when none. */
 export function keySignatureLookup(project: MidiProject): (tick: number) => number {
@@ -66,7 +60,8 @@ export function keySignatureLookup(project: MidiProject): (tick: number) => numb
   };
 }
 
-const META_NAMES: Record<number, string> = { 0x01: 'Text', 0x02: 'Copyright', 0x03: 'Track Name', 0x04: 'Instrument', 0x05: 'Lyric', 0x06: 'Marker', 0x07: 'Cue', 0x20: 'Channel Prefix', 0x21: 'Port', 0x54: 'SMPTE Offset', 0x7f: 'Sequencer Specific' };
+/** Track-level meta event names (conductor metas live in project.conductor). */
+export const META_NAMES: Record<number, string> = { 0x01: 'Text', 0x02: 'Copyright', 0x03: 'Track Name', 0x04: 'Instrument', 0x05: 'Lyric', 0x06: 'Marker', 0x07: 'Cue', 0x20: 'Channel Prefix', 0x21: 'Port', 0x54: 'SMPTE Offset', 0x7f: 'Sequencer Specific' };
 
 function hex(bytes: Uint8Array | null, max = 12): string {
   if (!bytes) return '';
