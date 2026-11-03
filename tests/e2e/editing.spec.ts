@@ -269,6 +269,34 @@ test('ADR-040: a header drag held at the top edge scrolls the list, so the last 
   expect((await names()).slice(0, 2)).toEqual([before[23], before[0]]);
 });
 
+test('ADR-071: a header drag held at the bottom edge scrolls down to the end, so the first track can be dropped last', async ({ page }) => {
+  await page.goto('/');
+  const tracks = Array.from({ length: 24 }, (_, t) => trackBytes([text(0, 3, `T${String(t + 1).padStart(2, '0')}`), on(0, t % 16, 60), off(480, t % 16, 60)]));
+  await importMidi(page, smf(1, 480, tracks), 'many.mid');
+  const scroller = page.locator('.arrangement-scroll');
+  const headers = page.getByTestId('track-header');
+  const names = () => headers.locator('.track-name').allTextContents();
+  await page.locator('.statusbar').click(); // start the engine first: the setup bar going away moves the list
+  await page.waitForTimeout(1000);
+  const clipBox = () => page.locator('.track-headers-clip').boundingBox();
+  const before = await names();
+  const grip = (await headers.nth(0).locator('.track-grip').boundingBox())!;
+  const x = grip.x + grip.width / 2;
+  await page.mouse.move(x, grip.y + grip.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(x, grip.y + grip.height / 2 + 20);
+  await expect
+    .poll(async () => {
+      const c = (await clipBox())!;
+      await page.mouse.move(x, c.y + c.height - 4); // hold in the bottom edge zone
+      return scroller.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop);
+    }, { timeout: 20_000 })
+    .toBeLessThan(1);
+  await page.mouse.up();
+  await expect.poll(async () => (await names()).at(-1), { timeout: 10_000 }).toBe(before[0]);
+  expect((await names()).slice(0, 23)).toEqual(before.slice(1));
+});
+
 test('ADR-043: the quantize dialog applies note value, shuffle-free strength and length rounding to the track; its values are kept', async ({ page }) => {
   await page.goto('/');
   // notes at 10 and 250 (PPQ 480), both 100 ticks long

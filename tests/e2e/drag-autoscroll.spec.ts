@@ -290,3 +290,17 @@ test('piano roll: lengthening past the edge and coming back shortens it again (o
   await page.getByTestId('piano-roll-grid').press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
   expect(notesWithLength(await exportedSmf(page))).toEqual([{ tick: 0, pitch: 60, len: 240 }]); // the whole drag was one step
 });
+
+test('piano roll: pressing in the margin before bar 1 starts a box, it does not grab a note at tick 0', async ({ page }) => {
+  await page.goto('/');
+  await importMidi(page, build(1, 480, [on(0, 0, 60), off(240, 0, 60)]));
+  await page.getByTestId('tool-select').click();
+  const a = await rollPoint(page, 0, 60);
+  await page.mouse.move(a.x - 40, a.y); // the margin, in the row of a note that starts at tick 0
+  await page.mouse.down();
+  await page.mouse.move(a.x + 200, a.y + 6, { steps: 4 });
+  await page.mouse.up();
+  expect(notesOf(await exportedSmf(page))).toEqual(['0:60']); // the note did not move
+  await page.getByTestId('piano-roll-grid').press('Delete');
+  expect(notesOf(await exportedSmf(page))).toEqual([]); // the box selected it instead
+});
