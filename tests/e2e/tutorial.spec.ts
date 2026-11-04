@@ -11,7 +11,7 @@ const grid = (page: Page) => page.getByRole('combobox', { name: 'グリッド' }
 async function showPitch(page: Page, pitch: number) {
   // scroll the roll so the row is in view; after a track switch the roll first settles its own scroll
   await page.waitForTimeout(150);
-  await page.locator('.roll-scroll').evaluate((el, p) => (el.scrollTop = Math.max(0, (127 - p) * 12 - 200)), pitch);
+  await page.locator('.roll-scroll').evaluate((el, p) => (el.scrollTop = Math.max(0, (127 - p) * 12 - el.clientHeight / 2)), pitch); // the row near the middle
   await page.waitForTimeout(100);
 }
 async function draw(page: Page, tick: number, pitch: number) {
@@ -61,7 +61,7 @@ test('ADR-063: the beginner\'s guide, followed literally, produces the eight-bar
   }
   // bar 2: click the roll (select tool), ⌘A, ⌘D, ↑ × 5
   await page.getByTestId('tool-select').click();
-  const empty = await rollPoint(page, 6 * Q, 80);
+  const empty = await rollPoint(page, 6 * Q, 70); // an empty row in view (bar 2 is still empty)
   await page.mouse.click(empty.x, empty.y);
   await duplicateBar(page, 5);
   await header(page, 'ベース').click();
