@@ -38,6 +38,14 @@ function sameConductor(a: readonly (ConductorEvent | TrackMetaEvent)[], b: reado
   return true;
 }
 
+function onlyOrderChanged(a: MidiEvent, b: MidiEvent): boolean {
+  const x = a as unknown as Record<string, unknown>;
+  const y = b as unknown as Record<string, unknown>;
+  const keys = new Set([...Object.keys(x), ...Object.keys(y)]);
+  for (const k of keys) if (k !== 'originOrder' && x[k] !== y[k]) return false;
+  return true;
+}
+
 function trackSettingsEqual(a: MidiTrack, b: MidiTrack): boolean {
   return a.port === b.port && a.channel === b.channel && a.mute === b.mute && a.solo === b.solo && a.endOfTrackTick === b.endOfTrackTick && a.hasPortPrefix === b.hasPortPrefix;
 }
@@ -83,6 +91,12 @@ export function classifyPlaybackChange(prev: MidiProject, next: MidiProject, pla
       }
       if (o) {
         old.delete(e.id);
+        // Only renumbered (an event added before it at the same tick, ADR-081) and already played:
+        // the change itself is the added event; the tick still marks the old song as stale here.
+        if (e.tick <= playheadTick && onlyOrderChanged(o, e)) {
+          maxTick = Math.max(maxTick, e.tick);
+          continue;
+        }
         if (!liveCc(o, a) || !liveCc(e, b)) return reload('event changed');
       } else if (!liveCc(e, b)) return reload('event added');
     }

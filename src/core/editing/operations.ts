@@ -81,7 +81,33 @@ export function addEvents(project: MidiProject, trackId: TrackId, events: readon
   let next = project.nextOriginOrder;
   const created: MidiEvent[] = new Array(events.length);
   for (const { e, i } of ordered) created[i] = { ...e, id: newId('evt'), originOrder: next++ } as MidiEvent;
-  const newTrack: MidiTrack = { ...track, events: sortEvents([...track.events, ...created]) };
+  // A new event takes the newest originOrder, so at a tick that already has events it would follow
+  // them all: a Program Change set after the notes at tick 0 would sound only after the first note
+  // (which then plays the previous / default sound). Follow the generation policy across old and new
+  // events at that tick (MIDI_GS_SPEC 3, ADR-081): existing events of a later rank (e.g. notes after a
+  // new Program Change) are renumbered after the new ones. Old events never move ahead of each other,
+  // and adding notes never renumbers anything (notes have the last rank).
+  const renumbered = new Map<string, number>();
+  const newAt = new Map<number, MidiEvent[]>();
+  for (const { i } of ordered) newAt.set(created[i].tick, [...(newAt.get(created[i].tick) ?? []), created[i]]);
+  for (const [tick, fresh] of newAt) {
+    const minRank = Math.min(...fresh.map(policyRank));
+    const later = sortEvents(track.events.filter((x) => x.tick === tick && policyRank(x) > minRank));
+    if (later.length === 0) continue;
+    const pending = [...fresh]; // already in policy order
+    const merged: MidiEvent[] = [];
+    for (const old of later) {
+      while (pending.length && policyRank(pending[0]) < policyRank(old)) merged.push(pending.shift()!);
+      merged.push(old);
+    }
+    merged.push(...pending);
+    for (const x of merged) {
+      if (x.originOrder >= project.nextOriginOrder) x.originOrder = next++; // created here: safe to mutate
+      else renumbered.set(x.id, next++);
+    }
+  }
+  const kept = renumbered.size ? track.events.map((x) => (renumbered.has(x.id) ? { ...x, originOrder: renumbered.get(x.id)! } : x)) : track.events;
+  const newTrack: MidiTrack = { ...track, events: sortEvents([...kept, ...created]) };
   const ids = created.map((e) => e.id);
   const patch: ProjectPatch = { tracks: replaceTracks(project, new Map([[trackId, newTrack]])), nextOriginOrder: next };
   if (opts.clipId) {
