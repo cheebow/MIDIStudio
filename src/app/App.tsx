@@ -177,9 +177,10 @@ export default function App() {
     // Serializing a large song takes tens of ms on the main thread (docs/PERFORMANCE.md), so it
     // runs when the browser is idle; the timeout keeps it from being postponed forever.
     let idle: number | null = null;
+    if (store.getState().previewBase) return; // a transform preview (ADR-076) is not content
     const save = () => {
       idle = null;
-      const p = store.project;
+      const p = store.committedProject;
       db.saveAutosave({ id: p.id, title: p.title, savedAt: new Date().toISOString(), json: serializeProject(p) }).catch((e: unknown) => {
         setError(e instanceof StorageError ? t('自動保存できませんでした: {message}', { message: t(e.message) }) : String(e));
       });
@@ -198,7 +199,7 @@ export default function App() {
   useEffect(() => {
     const flush = () => {
       if (!store.getState().dirty) return;
-      const p = store.project;
+      const p = store.committedProject;
       void db.saveAutosave({ id: p.id, title: p.title, savedAt: new Date().toISOString(), json: serializeProject(p) }).catch(() => undefined);
     };
     const onVisibility = () => document.visibilityState === 'hidden' && flush();
@@ -440,6 +441,7 @@ export default function App() {
     quantizeDialog: () => setDialog('quantize'),
     humanizeDialog: () => setDialog('humanize'),
     velocityDialog: () => setDialog('velocity'),
+    performDialog: (kind) => setDialog({ perform: kind }),
     transpose: (d: number) => tryRun(() => store.run(moveEvents(store.project, store.getState().selection.eventIds, 0, d, '移調'))),
     noteLength: () =>
       tryRun(() =>
@@ -486,7 +488,7 @@ export default function App() {
     openHelp: () => setDialog('help'),
   });
 
-  const services: AppServices = { store, transport, adapter, input, step, recorder, audioReady: audioPhase === 'ready', reportError: setError };
+  const services: AppServices = { store, transport, adapter, input, step, recorder, audioReady: audioPhase === 'ready', ensureAudio, reportError: setError };
   const setMode = (m: InputMode) => input.setMode(m);
   const MODE_LABEL: Record<InputMode, string> = { 'edit-shortcuts': t('編集（ショートカット）'), 'piano-performance': t('PC 鍵盤'), 'drum-performance': t('ドラムパッド'), 'step-piano': t('ステップ（鍵盤）'), 'step-drums': t('ステップ（ドラム）') };
   const stepMode = inputState.mode === 'step-piano' || inputState.mode === 'step-drums';

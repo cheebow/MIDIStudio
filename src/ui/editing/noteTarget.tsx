@@ -1,12 +1,15 @@
-// Shared "which notes" chooser for the note dialogs (quantize, humanize, velocity): the selected
-// notes, or every note of the selected track when nothing is selected.
+// Shared "which notes" chooser for the note dialogs (quantize, humanize, velocity, performance
+// tools): the selected notes, or every note of the selected track when nothing is selected. It
+// reads the committed project, so a preview (ADR-076) never feeds its own notes back in.
 import { useMemo, useState } from 'react';
 import { selectedTrack } from '../../core/model/selectedTrack';
 import { useEditorState } from '../../app/store/context';
 import { t } from '../../i18n';
 
 export function useNoteTarget() {
-  const { project, selection } = useEditorState();
+  const state = useEditorState();
+  const project = state.previewBase ?? state.project;
+  const selection = state.selection;
   const track = selectedTrack(project);
   const selectedNotes = useMemo(() => {
     const ids: string[] = [];

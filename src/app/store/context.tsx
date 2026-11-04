@@ -5,6 +5,7 @@ import type { SpessaAdapter } from '../../playback/SpessaAdapter';
 import type { InputController } from '../../input/InputController';
 import type { StepController } from '../recording/StepController';
 import type { Recorder } from '../recording/Recorder';
+import type { PerformKind } from '../../ui/perform';
 
 export interface AppServices {
   store: EditorStore;
@@ -15,6 +16,8 @@ export interface AppServices {
   recorder: Recorder;
   /** true once a SoundFont is loaded */
   audioReady: boolean;
+  /** unlocks / finishes loading the audio engine inside a user gesture (rejects with the reason) */
+  ensureAudio: () => Promise<void>;
   reportError: (message: string) => void;
 }
 
@@ -32,6 +35,8 @@ export interface EditActions {
   /** humanize / velocity dialogs (ADR-050) */
   humanizeDialog: () => void;
   velocityDialog: () => void;
+  /** performance tools (ADR-076): guitar voicing, strum, arpeggio, legato, velocity shaper */
+  performDialog: (kind: PerformKind) => void;
   transpose: (semitones: number) => void;
   noteLength: () => void;
   /** merges the selected clips of each track into one (track view menu, ⌘J; ADR-065) */

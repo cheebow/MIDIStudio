@@ -175,7 +175,7 @@ test('ADR-055: the about page is served next to the app and links into it; /?hel
   await page.getByRole('navigation', { name: 'サイト' }).getByRole('link', { name: 'ヘルプ' }).click();
   await expect(page).toHaveURL(/help\.html$/);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('ヘルプ');
-  await expect(page.locator('section.help-section')).toHaveCount(14);
+  await expect(page.locator('section.help-section')).toHaveCount(15);
   await expect(page.locator('#shortcuts')).toContainText('再生 / 一時停止');
   // ./?help still opens the in-app help
   await page.goto('/?help');

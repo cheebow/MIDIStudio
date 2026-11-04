@@ -164,6 +164,7 @@ export type ConductorEvent =
 
 ## D. クリップと編集コマンド
 
+- 打ち込み支援（ADR-076〜078）は `src/core/editing/perform/` の純粋関数で、既存の `updateEvents` / `addEvents` / `deleteEvents` を `compose` で 1 つの Command にまとめる。適用前のプレビューは `EditorStore.preview` が履歴・未保存フラグに触れずに `project` を差し替え、元の楽曲は `previewBase` に持つ（自動保存は `committedProject` を保存）。プレビュー中に別の編集・Undo・読み込み・設定変更が来たら、先にプレビューを捨ててから実行する。
 - 初回SMF取り込み時は、各トラックのイベント全体を包含するクリップを自動生成。
 - **イベントは Track.events だけが正本**。クリップは `eventIds` を通した編集グループ。移動時は属するイベントの Tick を差分移動。範囲に含まれるCC/Program/SysExもイベント単位で移動対象。
 - クリップの範囲内（onset が `[startTick, endTick)`）に後から追加されたイベント（録音・ピアノロールやドラムの入力・ステップ入力・貼り付け・CC 入力）は、そのクリップに自動的に所属する（`addEvents`、ADR-059）。範囲外にノートを加えたときは、隣のクリップとの隙間の中で小節に揃えた新しいクリップを作り、そこに所属させる（録音・入力した範囲にリージョンができる。ADR-060）。CC / Program / SysEx だけの追加（ミキサー・音色設定）ではクリップを作らない。既存クリップの範囲は広げない。**どのクリップにも属さないノートは鳴らず、MIDI / WAV の書き出しにも入らない**（ADR-064、`withoutLooseNotes`）。CC / Program / SysEx は常に効く。プロジェクトファイルを開くときは外れたノートにクリップを付ける（`adoptLooseNotes`）。ピアノロールでクリップ内のノートを範囲の外へ動かしたときは、ノートを外すのではなくクリップの範囲がノートを追って伸びる（`refreshClipBounds`）。

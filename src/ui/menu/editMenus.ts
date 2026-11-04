@@ -8,6 +8,17 @@ import type { MenuItem } from './MenuBar';
 
 const sep: MenuItem = { separator: true, label: '' };
 
+/** The performance tools (ADR-076), shared by the edit menu and the note right-click menu. */
+export function performMenuItems(a: EditActions): MenuItem[] {
+  return [
+    { label: t('ギターボイシング…'), action: () => a.performDialog('voicing') },
+    { label: t('ストラム…'), action: () => a.performDialog('strum') },
+    { label: t('アルペジオ…'), action: () => a.performDialog('arpeggio') },
+    { label: t('レガート調整…'), action: () => a.performDialog('legato') },
+    { label: t('ベロシティ・シェイパー…'), action: () => a.performDialog('velocity-shaper') },
+  ];
+}
+
 /** Menu for a right-click on a note (acts on the selection, which includes the clicked note). */
 export function noteMenuItems(a: EditActions, opts: { transpose?: boolean; noteLength?: boolean } = {}): MenuItem[] {
   return [
@@ -28,6 +39,7 @@ export function noteMenuItems(a: EditActions, opts: { transpose?: boolean; noteL
     { label: t('クオンタイズ…'), shortcut: '⇧Q', action: a.quantizeDialog },
     { label: t('ヒューマナイズ…'), action: a.humanizeDialog },
     { label: t('ベロシティ…'), action: a.velocityDialog },
+    { label: t('打ち込み支援'), items: performMenuItems(a) },
     ...(opts.noteLength === false ? [] : [{ label: t('ノート長をグリッドに揃える'), action: a.noteLength }]),
     sep,
     { label: t('削除'), shortcut: 'Delete', action: a.delete },

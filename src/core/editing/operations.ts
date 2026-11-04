@@ -412,8 +412,8 @@ export function deleteClips(project: MidiProject, clipIds: Iterable<string>, opt
   return compose(project, label, [...clipIds].map((id) => (p) => deleteClip(p, id, opts, label)));
 }
 
-/** Runs steps one after another on the intermediate project and merges their patches into one command. */
-function compose(project: MidiProject, label: string, steps: readonly ((p: MidiProject) => Command | null)[]): Command | null {
+/** Runs steps one after another on the intermediate project and merges their patches into one command (one undo step). */
+export function compose(project: MidiProject, label: string, steps: readonly ((p: MidiProject) => Command | null)[]): Command | null {
   let p = project;
   const patch: ProjectPatch = {};
   let any = false;

@@ -7,6 +7,7 @@ import { EN_APP } from './en/app';
 import { EN_CORE } from './en/core';
 import { EN_HELP } from './en/help';
 import { EN_LIST } from './en/list';
+import { EN_PERFORM } from './en/perform';
 import { EN_UI } from './en/ui';
 import { EN_UI2 } from './en/ui2';
 
@@ -15,7 +16,7 @@ export const LOCALES: readonly Locale[] = ['ja', 'en'];
 export const LOCALE_NAMES: Record<Locale, string> = { ja: '日本語', en: 'English' };
 
 const KEY = 'midi-studio.locale';
-const EN: Record<string, string> = { ...EN_CORE, ...EN_UI, ...EN_UI2, ...EN_APP, ...EN_HELP, ...EN_LIST };
+const EN: Record<string, string> = { ...EN_CORE, ...EN_UI, ...EN_UI2, ...EN_APP, ...EN_HELP, ...EN_LIST, ...EN_PERFORM };
 const listeners = new Set<() => void>();
 
 // Browser globals reached through globalThis with local types, so this file also type-checks in the

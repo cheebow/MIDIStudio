@@ -8,6 +8,7 @@ import { deleteEvents, moveTrack, sortTracksByChannel, updateTrack } from '../co
 import { looseNoteIds } from '../core/model/looseNotes';
 import { mergeDrumTracks, mergeSameChannelTracks } from '../core/editing/trackMerge';
 import { insertGsReset } from '../core/gs/gsProject';
+import { performMenuItems } from '../ui/menu/editMenus';
 import { gridLabel } from '../core/timing/grid';
 import type { InputMode } from '../input/KeyboardRouter';
 import type { InputController } from '../input/InputController';
@@ -128,6 +129,12 @@ export function buildMenus(d: MenuDeps): Menu[] {
             { label: t('ヒューマナイズ…'), action: actions.humanizeDialog, disabled: !selectedTrack, reason: t('トラックがありません') },
             { label: t('ベロシティ…'), action: actions.velocityDialog, disabled: !selectedTrack, reason: t('トラックがありません') },
           ],
+        },
+        {
+          label: t('打ち込み支援'),
+          disabled: !selectedTrack,
+          reason: t('トラックがありません'),
+          items: performMenuItems(actions),
         },
         {
           label: t('クリップ'),

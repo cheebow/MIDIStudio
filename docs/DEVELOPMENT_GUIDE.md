@@ -106,6 +106,7 @@ npm run dev               # http://localhost:5173
 | E08（グリッド・クオンタイズ）、E16（強さ・シャッフル・長さ） | `tests/unit/editing.test.ts`、`tests/e2e/editing.spec.ts`、`tests/integration/project-file.test.ts`（設定の保存） |
 | E17（DAW ショートカット・入力モードの切替） | `tests/e2e/shortcuts.spec.ts` |
 | E18（ヒューマナイズ・ベロシティ） | `tests/unit/editing.test.ts`、`tests/e2e/editing.spec.ts` |
+| E26〜E30（打ち込み支援: レガート・ベロシティ・シェイパー・アルペジオ・ストラム / カッティング・ギターボイシング） | `tests/unit/perform/*.test.ts`、`tests/unit/editor-store.test.ts`（プレビュー）、`tests/integration/performance-tools.test.ts`（SMF / .midstudio 往復、1,000 ノートの所要時間）、`tests/e2e/performance-tools.spec.ts` |
 | P02（DAW 内のタブ切替） | `tests/e2e/audio-spike.spec.ts` |
 | O01, O02, O04（UI） | `tests/e2e/project-io.spec.ts` |
 | I01〜I07（入力判定）、E09 | `tests/unit/keyboard-router.test.ts` |
