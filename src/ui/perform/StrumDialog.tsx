@@ -1,11 +1,11 @@
-// Strum / cutting dialog (PT-02): one dialog, the style switch shows the cutting presets.
+// Strum dialog (PT-02).
 import { useCallback, useState } from 'react';
 import type { MidiProject } from '../../core/model/types';
-import { strumChords, type CuttingPreset, type StrokeMode, type StrumOptions, type StrumSpeed, type StrumStyle } from '../../core/editing/perform';
+import { strumChords, type StrokeMode, type StrumOptions, type StrumSpeed } from '../../core/editing/perform';
 import { t } from '../../i18n';
 import { Choice, PerformDialog } from './PerformDialog';
 
-let last: StrumOptions = { style: 'strum', stroke: 'auto', speed: 'normal', natural: true, cutting: 'pop' };
+let last: StrumOptions = { stroke: 'auto', speed: 'normal', natural: true };
 
 export function StrumDialog({ onClose }: { onClose: () => void }) {
   const [o, setO] = useState<StrumOptions>(last);
@@ -13,29 +13,6 @@ export function StrumDialog({ onClose }: { onClose: () => void }) {
   const compute = useCallback((base: MidiProject, ids: string[]) => strumChords(base, ids, o), [o]);
   return (
     <PerformDialog title={t('ストラム')} testId="strum-dialog" compute={compute} onClose={onClose}>
-      <Choice<StrumStyle>
-        legend={t('奏法')}
-        name="strum-style"
-        value={o.style}
-        onChange={(style) => set({ style })}
-        options={[
-          { value: 'strum', label: t('通常ストラム') },
-          { value: 'cutting', label: t('カッティング'), hint: t('短いゲートとアクセント') },
-        ]}
-      />
-      {o.style === 'cutting' && (
-        <Choice<CuttingPreset>
-          legend={t('カッティングのタイプ')}
-          name="cutting-preset"
-          value={o.cutting}
-          onChange={(cutting) => set({ cutting })}
-          options={[
-            { value: 'pop', label: t('ポップ'), hint: t('軽く自然に') },
-            { value: 'funk', label: t('ファンク'), hint: t('とても短く、裏拍をはっきり') },
-            { value: 'rock', label: t('ロック'), hint: t('強いアタック') },
-          ]}
-        />
-      )}
       <Choice<StrokeMode>
         legend={t('ストローク')}
         name="strum-stroke"

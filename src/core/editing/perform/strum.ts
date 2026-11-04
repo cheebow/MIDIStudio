@@ -1,7 +1,7 @@
-// Strum and guitar cutting (PT-02, ADR-077). The chords keep their rhythm and notes; the strings
-// (low to high pitch) are spread in time by the stroke direction, which follows the hand's up /
-// down motion over the bar (eighth or sixteenth grid, rests included) rather than alternating per
-// chord. Cutting adds only shorter gates and accents on top of the same spread.
+// Strum (PT-02, ADR-077). The chords keep their rhythm and notes; the strings (low to high pitch)
+// are spread in time by the stroke direction, which follows the hand's up / down motion over the
+// bar (eighth or sixteenth grid, rests included) rather than alternating per chord. (The cutting
+// style was removed: without mute strokes it only sounded like a shortened strum.)
 import type { MidiProject, NoteEvent } from '../../model/types';
 import type { TimeSignatureMap } from '../../timing/timeSignatureMap';
 import { updateEvents } from '../operations';
@@ -10,19 +10,15 @@ import { t } from '../../../i18n';
 import { barStartOf, chordGroups, clampVelocity, msToTicks, signatureMapOf, tempoMapOf, type ChordGroup } from './chords';
 import type { TransformResult } from './types';
 
-export type StrumStyle = 'strum' | 'cutting';
 export type StrokeMode = 'auto' | 'down' | 'up';
 export type StrumSpeed = 'slow' | 'normal' | 'fast';
-export type CuttingPreset = 'pop' | 'funk' | 'rock';
 export type Stroke = 'down' | 'up';
 
 export interface StrumOptions {
-  style: StrumStyle;
   stroke: StrokeMode;
   speed: StrumSpeed;
   /** small timing jitter and a per-string velocity taper (fixed seed) */
   natural: boolean;
-  cutting: CuttingPreset;
 }
 
 /** Whole-strum width (first to last string) per speed, in milliseconds (spec 4.4.4). */
@@ -31,7 +27,7 @@ export const STRUM_WIDTH_MS: Record<StrumSpeed, number> = { fast: 20, normal: 45
 export const STRUM_JITTER = 0.15;
 /** Per-string velocity taper (natural = on): the n-th string sounds (1 - n * taper) as loud. */
 export const STRUM_TAPER = 0.02;
-/** Up strokes are lighter than down strokes (natural = on, normal strum). */
+/** Up strokes are lighter than down strokes (natural = on). */
 export const UP_STROKE_GAIN = 0.92;
 /**
  * Already-spread chords stay one chord: a note joins the chord when it starts within this many ms
@@ -40,13 +36,6 @@ export const UP_STROKE_GAIN = 0.92;
  */
 export const STRUM_GROUP_GAP_MS = 40;
 export const STRUM_GROUP_SPREAD_MS = 120;
-
-/** Cutting presets: gate = part of the available length, accents per stroke direction. */
-export const CUTTING: Record<CuttingPreset, { gate: number; down: number; up: number; backbeat: number }> = {
-  pop: { gate: 0.55, down: 1.0, up: 0.9, backbeat: 1.0 },
-  funk: { gate: 0.3, down: 1.05, up: 0.85, backbeat: 1.08 },
-  rock: { gate: 0.45, down: 1.1, up: 1.0, backbeat: 1.0 },
-};
 
 /**
  * Stroke directions of chord onsets from their place in the bar: the hand moves down on even and
@@ -92,20 +81,14 @@ export function strumChords(project: MidiProject, ids: Iterable<string>, opts: S
       const width = Math.min(msToTicks(STRUM_WIDTH_MS[opts.speed], g.tick, tempo), Math.floor(Math.min(gap, g.endTick - g.tick) / 2));
       const step = n > 1 ? width / (n - 1) : 0;
       const rnd = seededRandom(g.tick * 31 + n);
-      // cutting: the gate is a part of what the chord has (its own length or the time to the next chord)
-      const cut = opts.style === 'cutting' ? CUTTING[opts.cutting] : null;
-      const avail = Math.min(g.endTick - g.tick, gap);
-      const gateEnd = cut ? g.tick + Math.max(1, Math.floor(avail * cut.gate)) : null;
-      const bb = signature.tickToBarBeat(g.tick);
-      const backbeat = cut && bb.denominator <= 4 && bb.beat % 2 === 0 && bb.tickInBeat < 1e-9 ? cut.backbeat : 1;
-      const strokeGain = cut ? (stroke === 'down' ? cut.down : cut.up) * backbeat : opts.natural && stroke === 'up' ? UP_STROKE_GAIN : 1;
+      const strokeGain = opts.natural && stroke === 'up' ? UP_STROKE_GAIN : 1;
       let prev = 0;
       order.forEach((note, s) => {
         const jitter = opts.natural && n > 1 ? (rnd() * 2 - 1) * STRUM_JITTER * step : 0;
         const offset = s === 0 ? 0 : Math.max(prev, Math.round(step * s + jitter));
         prev = offset;
         const tick = g.tick + offset;
-        const end = gateEnd ?? note.tick + note.durationTicks;
+        const end = note.tick + note.durationTicks; // the end stays: a later string sounds a little shorter
         const durationTicks = Math.max(1, end - tick);
         const velocity = clampVelocity(note.velocity * strokeGain * (opts.natural ? 1 - STRUM_TAPER * s : 1));
         const changes: Partial<NoteEvent> = {};
@@ -116,8 +99,7 @@ export function strumChords(project: MidiProject, ids: Iterable<string>, opts: S
       });
     });
   }
-  const label = opts.style === 'cutting' ? 'カッティング' : 'ストラム';
-  const command = updates.length ? updateEvents(project, updates, label) : null;
+  const command = updates.length ? updateEvents(project, updates, 'ストラム') : null;
   const notice = spread > 0 ? t('{n} 個の和音はすでに広がっていたので、先頭の音の位置を基準にしました。', { n: spread }) : null;
   return { command, ids: all, notice, stats: { notes, groups, skipped: 0 } };
 }

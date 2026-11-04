@@ -135,7 +135,7 @@ test('E28: arpeggio adds the turning notes to the clip; undo removes them again'
   expect(notesOf(await exportedSmf(page)).length).toBe(3);
 });
 
-test('E29: strum and cutting in one dialog; the cutting type appears with the style; auto direction follows the beat', async ({ page }) => {
+test('E29: strum spreads every chord from its low string (all on the beat = down), keeps ends and rhythm; one undo step', async ({ page }) => {
   await page.goto('/');
   await importMidi(page, progression());
   await selectAllNotes(page);
@@ -143,18 +143,21 @@ test('E29: strum and cutting in one dialog; the cutting type appears with the st
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByTestId('strum-dialog')).toBeVisible();
   await expect(dialog.getByTestId('perform-status')).toContainText('和音 4 個');
-  await expect(dialog.getByRole('radio', { name: /ポップ/ })).toHaveCount(0);
-  await dialog.getByRole('radio', { name: /^カッティング/ }).check();
-  await expect(dialog.getByRole('radio', { name: /ポップ/ })).toBeChecked();
-  await dialog.getByRole('radio', { name: /ファンク/ }).check();
+  await expect(dialog.getByRole('radio', { name: /カッティング/ })).toHaveCount(0);
   await dialog.getByRole('checkbox', { name: /自然な強弱/ }).uncheck();
   await dialog.getByTestId('perform-apply').click();
   const rows = notesOf(await exportedSmf(page));
-  // every chord is on a beat (down strokes): low string first, 45 ms = 43 ticks spread, gate 30 % of 240 = 72, velocity 105 (beats 2 / 4: 113)
-  expect(rows.filter((r) => r[1] === 60 && r[0] < 480)).toEqual([[0, 60, 105, 72]]);
-  expect(rows.filter((r) => r[0] >= 0 && r[0] < 480).map((r) => r[0])).toEqual([0, 22, 43]);
-  expect(rows.filter((r) => r[0] >= 480 && r[0] < 960).map((r) => r[2])).toEqual([113, 113, 113]);
-  expect(rows.every((r) => r[3] <= 72)).toBe(true);
+  // the source C chord is 60 64 67: low to high, 45 ms = 43 ticks over 3 strings
+  expect(rows.filter((r) => r[0] < 480)).toEqual([
+    [0, 60, 100, 240],
+    [22, 64, 100, 218],
+    [43, 67, 100, 197],
+  ]);
+  expect(rows.filter((r) => r[0] >= 1440).map((r) => [r[0], r[1]])).toEqual([
+    [1440, 55],
+    [1462, 59],
+    [1483, 62],
+  ]);
   await page.getByTestId('piano-roll-grid').focus();
   await page.keyboard.press(UNDO);
   expect(notesOf(await exportedSmf(page)).every((r) => r[3] === 240)).toBe(true);

@@ -41,7 +41,7 @@ describe('performance tools: persistence', () => {
       ids = c.ids;
     };
     run(voiceChords(project, ids, { voicing: 'auto' }));
-    run(strumChords(project, ids, { style: 'cutting', stroke: 'auto', speed: 'normal', natural: true, cutting: 'pop' }));
+    run(strumChords(project, ids, { stroke: 'auto', speed: 'normal', natural: true }));
     run(shapeVelocities(project, ids, { shape: 'beat' }));
     const expected = notes(project);
     expect(expected.length).toBeGreaterThan(24);
@@ -64,7 +64,7 @@ describe('performance tools: 1,000 notes (spec 9.3)', () => {
       timings[name] = performance.now() - t0;
       return r;
     };
-    expect((time('strum', () => strumChords(project, ids, { style: 'strum', stroke: 'auto', speed: 'normal', natural: true, cutting: 'pop' })) as ReturnType<typeof strumChords>).command).not.toBeNull();
+    expect((time('strum', () => strumChords(project, ids, { stroke: 'auto', speed: 'normal', natural: true })) as ReturnType<typeof strumChords>).command).not.toBeNull();
     expect((time('legato', () => legatoNotes(project, ids, { mode: 'overlap' })) as ReturnType<typeof legatoNotes>).command).not.toBeNull();
     expect((time('velocity', () => shapeVelocities(project, ids, { shape: 'crescendo' })) as ReturnType<typeof shapeVelocities>).command).not.toBeNull();
     expect((time('arpeggio', () => arpeggiateChords(project, ids, { pattern: 'updown' })) as ReturnType<typeof arpeggiateChords>).command).not.toBeNull();

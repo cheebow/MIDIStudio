@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createCounterIdGenerator, setIdGenerator } from '../../../src/core/model/ids';
 import { detectStrokes, strumChords, type StrumOptions } from '../../../src/core/editing/perform';
 import { TimeSignatureMap } from '../../../src/core/timing/timeSignatureMap';
-import { note, Session, sig, tempo } from './helpers';
+import { note, Session, tempo } from './helpers';
 
 beforeEach(() => setIdGenerator(createCounterIdGenerator('e')));
 
-const base: StrumOptions = { style: 'strum', stroke: 'auto', speed: 'normal', natural: false, cutting: 'pop' };
+const base: StrumOptions = { stroke: 'auto', speed: 'normal', natural: false };
 const chord = (tick: number, len = 240, pitches = [48, 52, 55, 60]) => pitches.map((p) => note(tick, p, len));
 const sig44 = new TimeSignatureMap(480, []);
 
@@ -143,58 +143,5 @@ describe('strum (PT-02): note generation', () => {
     const rows = s.rows();
     expect(rows.filter((x) => ticks.includes(x[0])).map((x) => x[1])).toEqual([48, 48, 60, 48, 48, 60]);
     expect(rows.map((x) => x[0])).toEqual([0, 43, 480, 523, 720, 763, 960, 1003, 1440, 1483, 1680, 1723]);
-  });
-});
-
-describe('cutting (PT-02)', () => {
-  it('pop: gate 55 % of the chord, down 100 % / up 90 %', () => {
-    const s = new Session();
-    const ids = s.add([...chord(0, 480, [48, 60]), ...chord(480, 480, [48, 60]), ...chord(720, 240, [48, 60])]);
-    s.run(strumChords(s.project, ids, { ...base, style: 'cutting', cutting: 'pop' }).command);
-    expect(s.rows()).toEqual([
-      [0, 48, 264, 100],
-      [43, 60, 221, 100],
-      [480, 48, 132, 100], // the next chord is 240 away: 55 % of 240
-      [523, 60, 89, 100],
-      [720, 60, 132, 90], // up stroke: high string first, 90 %
-      [763, 48, 89, 90],
-    ]);
-  });
-
-  it('funk: gate 30 %, down 105 % / up 85 %, back-beats (2 and 4) 108 %', () => {
-    const s = new Session();
-    const ids = s.add([...chord(0, 480, [48]), ...chord(480, 480, [48]), ...chord(720, 240, [48])]);
-    s.run(strumChords(s.project, ids, { ...base, style: 'cutting', cutting: 'funk' }).command);
-    expect(s.rows()).toEqual([
-      [0, 48, 144, 105],
-      [480, 48, 72, 113], // 100 * 1.05 * 1.08
-      [720, 48, 72, 85],
-    ]);
-  });
-
-  it('rock: gate 45 %, down 110 % / up 100 %; sixteenth patterns use the sixteenth grid', () => {
-    const s = new Session();
-    const ids = s.add([0, 120, 240, 360].flatMap((t) => chord(t, 120, [48])));
-    s.run(strumChords(s.project, ids, { ...base, style: 'cutting', cutting: 'rock' }).command);
-    expect(s.rows()).toEqual([
-      [0, 48, 54, 110],
-      [120, 48, 54, 100],
-      [240, 48, 54, 110],
-      [360, 48, 54, 100],
-    ]);
-  });
-
-  it('gates never drop below one tick and the cutting of 1-tick chords is harmless', () => {
-    const s = new Session();
-    const ids = s.add(chord(0, 1, [48, 60]));
-    s.run(strumChords(s.project, ids, { ...base, style: 'cutting', cutting: 'funk' }).command);
-    expect(s.rows().map((x) => x[2])).toEqual([1, 1]);
-  });
-
-  it('signature change in 6/8: the eighth grid holds and no back-beat accent is applied', () => {
-    const s = new Session({ conductor: [sig(0, 6, 8)] });
-    const ids = s.add([0, 240, 480].flatMap((t) => chord(t, 240, [48])));
-    s.run(strumChords(s.project, ids, { ...base, style: 'cutting', cutting: 'funk' }).command);
-    expect(s.rows().map((x) => x[3])).toEqual([105, 85, 105]);
   });
 });
