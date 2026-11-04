@@ -25,7 +25,7 @@ export function legatoNotes(project: MidiProject, ids: Iterable<string>, opts: L
   let groups = 0;
   let pedal = 0;
   let lonely = 0;
-  for (const list of chordGroups(project, ids, 0)) {
+  for (const list of chordGroups(project, ids)) {
     groups += list.length;
     for (const g of list) for (const n of g.notes) all.push(n.id);
     if (list.length < 2) {

@@ -67,7 +67,7 @@ export function PerformDialog({ title, testId, compute, chords = true, children,
           </p>
         )}
         <div className="row">
-          <button type="submit" className="primary" disabled={ids.length === 0 || !result.command} data-testid="perform-apply">
+          <button type="submit" className="primary" disabled={ids.length === 0 || !result.command} title={ids.length > 0 && !result.command ? t('この設定では変わるノートがありません') : undefined} data-testid="perform-apply">
             {t('適用（{n} 個）', { n: ids.length })}
           </button>
           <button type="button" onClick={onAudition} disabled={ids.length === 0 || !audioReady} title={audioReady ? undefined : t('音源（SoundFont）の準備ができていません')} data-testid="perform-audition">

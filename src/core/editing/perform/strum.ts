@@ -7,7 +7,7 @@ import type { TimeSignatureMap } from '../../timing/timeSignatureMap';
 import { updateEvents } from '../operations';
 import { seededRandom } from '../humanize';
 import { t } from '../../../i18n';
-import { barStartOf, chordGroups, clampVelocity, msToTicks, signatureMapOf, tempoMapOf, type ChordGroup } from './chords';
+import { barStartOf, chordGroups, clampVelocity, groupByOnset, msToTicks, playedChordRule, signatureMapOf, tempoMapOf, type ChordGroup } from './chords';
 import type { TransformResult } from './types';
 
 export type StrokeMode = 'auto' | 'down' | 'up';
@@ -56,22 +56,22 @@ export function detectStrokes(signature: TimeSignatureMap, ppq: number, ticks: r
 export function strumChords(project: MidiProject, ids: Iterable<string>, opts: StrumOptions): TransformResult {
   const tempo = tempoMapOf(project);
   const signature = signatureMapOf(project);
-  const joins = (g: ChordGroup, n: NoteEvent) => {
-    const last = g.notes[g.notes.length - 1].tick;
-    return n.tick - last <= msToTicks(STRUM_GROUP_GAP_MS, last, tempo) && n.tick - g.tick <= msToTicks(STRUM_GROUP_SPREAD_MS, g.tick, tempo) && !g.notes.some((m) => m.pitch === n.pitch);
-  };
+  // wider than a played chord: a strum this tool made (up to 85 ms) is still one chord
+  const joins = playedChordRule(project, tempo, STRUM_GROUP_GAP_MS, STRUM_GROUP_SPREAD_MS, Infinity);
+  const played = playedChordRule(project, tempo);
   const updates: { id: string; changes: Partial<NoteEvent> }[] = [];
   const all: string[] = [];
   let notes = 0;
   let groups = 0;
   let spread = 0;
-  for (const list of chordGroups(project, ids, 0, joins)) {
+  for (const list of chordGroups(project, ids, joins)) {
     const strokes = opts.stroke === 'auto' ? detectStrokes(signature, project.ppq, list.map((g) => g.tick)) : list.map(() => opts.stroke as Stroke);
     list.forEach((g, i) => {
       groups++;
       notes += g.notes.length;
       for (const n of g.notes) all.push(n.id);
-      if (g.notes.some((n) => n.tick !== g.tick)) spread++;
+      // wider than a played chord: probably strummed already (re-applying recomputes from its first note)
+      if (groupByOnset(g.trackId, g.clipId, g.notes, played).length > 1) spread++;
       const next: ChordGroup | undefined = list[i + 1];
       const gap = next ? next.tick - g.tick : Infinity;
       const stroke = strokes[i];

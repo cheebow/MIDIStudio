@@ -44,14 +44,27 @@ export function sortNotes(notes: NoteEvent[]): NoteEvent[] {
 export type JoinRule = (group: ChordGroup, note: NoteEvent) => boolean;
 
 /**
- * Groups notes (sorted by tick) whose onset lies within `toleranceTicks` of the group's first
- * onset (0 = exactly simultaneous notes only), or by a custom `joins` rule.
+ * A played chord is not exactly simultaneous (a recorded take spreads its notes by a few ticks).
+ * A note joins the chord when it starts within `CHORD_GAP_MS` of the chord's previous note, the chord
+ * stays within `CHORD_SPREAD_MS`, both capped at a 32nd note so fast passages are not merged, and
+ * its pitch is not in the chord yet (a repeated note starts a new chord). Spec 2.3, ADR-077 追記.
  */
-export function groupByOnset(trackId: TrackId, clipId: string | undefined, notes: readonly NoteEvent[], toleranceTicks = 0, joins?: JoinRule): ChordGroup[] {
+export const CHORD_GAP_MS = 35;
+export const CHORD_SPREAD_MS = 70;
+
+export function playedChordRule(project: MidiProject, tempo: TempoMap = tempoMapOf(project), gapMs = CHORD_GAP_MS, spreadMs = CHORD_SPREAD_MS, capTicks = Math.floor(project.ppq / 8)): JoinRule {
+  return (g, n) => {
+    const last = g.notes[g.notes.length - 1].tick;
+    return n.tick - last <= Math.min(msToTicks(gapMs, last, tempo), capTicks) && n.tick - g.tick <= Math.min(msToTicks(spreadMs, g.tick, tempo), capTicks) && !g.notes.some((m) => m.pitch === n.pitch);
+  };
+}
+
+/** Groups notes (sorted by tick) into chords by `joins`. */
+export function groupByOnset(trackId: TrackId, clipId: string | undefined, notes: readonly NoteEvent[], joins: JoinRule): ChordGroup[] {
   const groups: ChordGroup[] = [];
   let g: ChordGroup | null = null;
   for (const n of notes) {
-    if (g && (joins ? joins(g, n) : n.tick - g.tick <= toleranceTicks)) {
+    if (g && joins(g, n)) {
       g.notes.push(n);
       g.endTick = Math.max(g.endTick, n.tick + n.durationTicks);
     } else {
@@ -62,9 +75,9 @@ export function groupByOnset(trackId: TrackId, clipId: string | undefined, notes
   return groups;
 }
 
-/** All selected notes of the project as chord groups, per track and clip. */
-export function chordGroups(project: MidiProject, ids: Iterable<string>, toleranceTicks = 0, joins?: JoinRule): ChordGroup[][] {
-  return selectedNoteLists(project, ids).map((l) => groupByOnset(l.trackId, l.clipId, l.notes, toleranceTicks, joins));
+/** All selected notes of the project as chord groups, per track and clip (played chords by default). */
+export function chordGroups(project: MidiProject, ids: Iterable<string>, joins: JoinRule = playedChordRule(project)): ChordGroup[][] {
+  return selectedNoteLists(project, ids).map((l) => groupByOnset(l.trackId, l.clipId, l.notes, joins));
 }
 
 export function tempoMapOf(project: MidiProject): TempoMap {

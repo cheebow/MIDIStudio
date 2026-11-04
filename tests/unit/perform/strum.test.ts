@@ -128,11 +128,17 @@ describe('strum (PT-02): note generation', () => {
     const once = s.rows();
     const again = strumChords(s.project, ids, base);
     expect(again.command).toBeNull();
-    expect(again.notice).toContain('1');
+    expect(again.notice).toBeNull(); // 45 ms is within the spread of a played chord: nothing to warn about
     expect(s.rows()).toEqual(once);
     // and a different speed recomputes from the same origin instead of drifting further
     s.run(strumChords(s.project, ids, { ...base, speed: 'fast' }).command);
     expect(s.rows().map((x) => x[0])).toEqual([0, 6, 13, 19]);
+    // a slow strum (85 ms) is wider than a played chord: re-applying says it was spread already
+    s.run(strumChords(s.project, ids, { ...base, speed: 'slow' }).command);
+    expect(s.rows().map((x) => x[0])).toEqual([0, 27, 55, 82]);
+    const slowAgain = strumChords(s.project, ids, { ...base, speed: 'slow' });
+    expect(slowAgain.command).toBeNull();
+    expect(slowAgain.notice).toContain('1');
   });
 
   it('rests and syncopation: an 8-beat pattern keeps its rhythm; every chord gets its own direction', () => {

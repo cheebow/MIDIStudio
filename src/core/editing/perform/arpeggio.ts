@@ -24,7 +24,7 @@ export function arpeggiateChords(project: MidiProject, ids: Iterable<string>, op
   let groups = 0;
   let single = 0;
   let tooShort = 0;
-  for (const list of chordGroups(project, ids, 0)) {
+  for (const list of chordGroups(project, ids)) {
     for (let i = 0; i < list.length; i++) {
       const g = list[i];
       groups++;

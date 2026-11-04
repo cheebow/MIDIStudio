@@ -131,7 +131,7 @@ export function voiceChords(project: MidiProject, ids: Iterable<string>, opts: V
   let notes = 0;
   let groups = 0;
   let unknown = 0;
-  for (const list of chordGroups(project, ids, 0)) {
+  for (const list of chordGroups(project, ids)) {
     let previous: ChordForm | null = null;
     const chosen = new Map<string, ChordForm>(); // same chord name -> same form within the selection
     for (const g of list) {

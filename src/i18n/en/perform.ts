@@ -27,6 +27,7 @@ export const EN_PERFORM: Record<string, string> = {
   '対象: ノート {notes} 個、和音 {groups} 個': 'Target: {notes} notes, {groups} chords',
   '対象: ノート {notes} 個': 'Target: {notes} notes',
   '変わるノートはありません': 'nothing would change',
+  'この設定では変わるノートがありません': 'Nothing would change with these settings',
   '音源（SoundFont）の準備ができていません': 'The sound source (SoundFont) is not ready',
   '試聴': 'Audition',
   // --- LegatoDialog.tsx

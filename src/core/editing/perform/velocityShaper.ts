@@ -4,7 +4,7 @@ import type { MidiProject, NoteEvent } from '../../model/types';
 import type { BarBeat } from '../../timing/timeSignatureMap';
 import { updateEvents } from '../operations';
 import { t } from '../../../i18n';
-import { clampVelocity, selectedNoteLists, signatureMapOf, sortNotes } from './chords';
+import { clampVelocity, groupByOnset, playedChordRule, selectedNoteLists, signatureMapOf, sortNotes } from './chords';
 import type { TransformResult } from './types';
 
 export type VelocityShape = 'crescendo' | 'decrescendo' | 'alternate' | 'beat';
@@ -43,16 +43,16 @@ export function shapeVelocities(project: MidiProject, ids: Iterable<string>, opt
   const notes = sortNotes(selectedNoteLists(project, ids).flatMap((l) => l.notes));
   const all = notes.map((n) => n.id);
   if (notes.length === 0) return { command: null, ids: all, notice: null, stats: { notes: 0, groups: 0, skipped: 0 } };
-  const onsets: number[] = [];
-  for (const n of notes) if (onsets.length === 0 || onsets[onsets.length - 1] !== n.tick) onsets.push(n.tick);
-  const first = onsets[0];
-  const last = onsets[onsets.length - 1];
+  const groups = groupByOnset('', undefined, notes, playedChordRule(project));
+  const first = groups[0].tick;
+  const last = groups[groups.length - 1].tick;
   if ((opts.shape === 'crescendo' || opts.shape === 'decrescendo') && first === last) {
     return { command: null, ids: all, notice: t('選択したノートがすべて同じ位置なので、強弱の流れを作れません。'), stats: { notes: notes.length, groups: 1, skipped: notes.length } };
   }
   const signature = opts.shape === 'beat' ? signatureMapOf(project) : null;
-  const gainAt = new Map<number, number>();
-  onsets.forEach((tick, i) => {
+  const gainOf = new Map<string, number>();
+  groups.forEach((group, i) => {
+    const tick = group.tick;
     let g: number;
     switch (opts.shape) {
       case 'crescendo':
@@ -69,12 +69,12 @@ export function shapeVelocities(project: MidiProject, ids: Iterable<string>, opt
         g = beatGain(signature!.tickToBarBeat(tick));
         break;
     }
-    gainAt.set(tick, g);
+    for (const n of group.notes) gainOf.set(n.id, g);
   });
   const updates: { id: string; changes: Partial<NoteEvent> }[] = [];
   for (const n of notes) {
-    const v = clampVelocity(n.velocity * gainAt.get(n.tick)!);
+    const v = clampVelocity(n.velocity * gainOf.get(n.id)!);
     if (v !== n.velocity) updates.push({ id: n.id, changes: { velocity: v } });
   }
-  return { command: updates.length ? updateEvents(project, updates, 'ベロシティ・シェイパー') : null, ids: all, notice: null, stats: { notes: notes.length, groups: onsets.length, skipped: 0 } };
+  return { command: updates.length ? updateEvents(project, updates, 'ベロシティ・シェイパー') : null, ids: all, notice: null, stats: { notes: notes.length, groups: groups.length, skipped: 0 } };
 }
