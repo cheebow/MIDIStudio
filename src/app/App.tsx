@@ -745,7 +745,7 @@ export default function App() {
             prefetchState={prefetchState}
             soundBankName={soundBankName}
             midiState={setup.midi}
-            midiDevices={midi.deviceList.filter((d) => d.state === 'connected').length}
+            midiDevices={midi.deviceList.filter((d) => d.state === 'connected').map((d) => d.name)}
             restore={restore}
             onRetrySoundFont={() => (startPrefetch(), void ensureAudio().catch(() => undefined))}
             onChooseSoundFont={chooseSoundFont}
