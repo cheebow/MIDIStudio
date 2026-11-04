@@ -18,8 +18,8 @@ export function VoicingDialog({ onClose }: { onClose: () => void }) {
         value={voicing}
         onChange={(v) => (last = v, setVoicing(v))}
         options={[
-          { value: 'auto', label: t('自動'), hint: t('押さえやすく、前のコードから遠くない形') },
-          { value: 'open', label: t('オープンコード優先'), hint: t('開放弦を使う形') },
+          { value: 'auto', label: t('自動'), hint: t('弾いた音域のまま、前のコードから遠くない形') },
+          { value: 'open', label: t('オープンコード優先'), hint: t('開放弦を使う低い形（根音が低音）') },
           { value: 'high', label: t('ハイポジション優先'), hint: t('5 フレットより上の形') },
         ]}
       />

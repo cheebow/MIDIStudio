@@ -177,8 +177,8 @@ test('E30: guitar voicing turns C - Am - F - G into playable forms, in English t
   await expect(dialog).toHaveCount(0);
   await menu(page, 'View', '日本語', 'Language'); // the export helper uses the Japanese menu
   const rows = notesOf(await exportedSmf(page));
-  expect(rows.filter((r) => r[0] === 0).map((r) => r[1])).toEqual([48, 52, 55, 60, 64]); // C = x32010
+  expect(rows.filter((r) => r[0] === 0).map((r) => r[1])).toEqual([48, 52, 55, 60, 67]); // C = x32013
   expect(rows.filter((r) => r[0] === 480).map((r) => r[1])).toEqual([45, 52, 57, 60, 64]); // Am = x02210
-  expect(rows.filter((r) => r[0] === 960).map((r) => r[1])).toEqual([53, 57, 60, 65]); // F = xx3211
+  expect(rows.filter((r) => r[0] === 960).map((r) => r[1])).toEqual([41, 45, 53, 57, 60, 65]); // F = 103211
   expect(rows.filter((r) => r[0] === 1440).map((r) => r[1])).toEqual([43, 47, 50, 55, 59, 67]); // G = 320003
 });

@@ -69,9 +69,9 @@ export const EN_PERFORM: Record<string, string> = {
   '弦ごとのわずかなずれと強さの差': 'slight timing and velocity differences between strings',
   // --- VoicingDialog.tsx
   'ボイシング': 'Voicing',
-  '押さえやすく、前のコードから遠くない形': 'easy to hold and close to the previous chord',
+  '弾いた音域のまま、前のコードから遠くない形': 'in the register you played, close to the previous chord',
   'オープンコード優先': 'Prefer open chords',
-  '開放弦を使う形': 'shapes with open strings',
+  '開放弦を使う低い形（根音が低音）': 'low shapes with open strings, root in the bass',
   'ハイポジション優先': 'Prefer high positions',
   '5 フレットより上の形': 'shapes above the 5th fret',
   '標準チューニング（E A D G B E）で押さえられる形に置き換えます。maj / m / 7 / maj7 / m7 / sus2 / sus4 / dim / aug に対応。': 'Replaces each chord with a shape playable in standard tuning (E A D G B E). Supports maj / m / 7 / maj7 / m7 / sus2 / sus4 / dim / aug.',

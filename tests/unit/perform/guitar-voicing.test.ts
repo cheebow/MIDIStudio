@@ -1,30 +1,44 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createCounterIdGenerator, setIdGenerator } from '../../../src/core/model/ids';
 import { recognizeChord, voiceChords } from '../../../src/core/editing/perform';
-import { allForms, formPitches, frettedFrets, QUALITY_INTERVALS, TUNING } from '../../../src/core/editing/perform/chordForms';
+import { allForms, formPitches, formsFor, frettedFrets, QUALITY_INTERVALS, TUNING } from '../../../src/core/editing/perform/chordForms';
 import { note, Session } from './helpers';
 
 beforeEach(() => setIdGenerator(createCounterIdGenerator('e')));
 
-describe('chord form library (PT-01)', () => {
-  it('every form sounds its chord (sevenths may omit the fifth), uses at most 6 strings and spans at most 4 frets', () => {
+describe('chord form library (PT-01, ADR-079)', () => {
+  it('every generated form sounds its chord (sevenths may omit the fifth), on adjacent strings, holdable with four fingers', () => {
     expect(TUNING).toEqual([40, 45, 50, 55, 59, 64]);
     const forms = allForms();
-    expect(forms.length).toBeGreaterThan(200);
+    expect(forms.length).toBeGreaterThan(1000);
     for (const f of forms) {
-      const pcs = new Set(formPitches(f).map((p) => p % 12));
+      const p = formPitches(f);
+      const pcs = new Set(p.map((x) => x % 12));
       const want = QUALITY_INTERVALS[f.quality].map((i) => (f.root + i) % 12);
       const fifth = (f.root + 7) % 12;
       const missing = want.filter((x) => !pcs.has(x));
-      const extra = [...pcs].filter((x) => !want.includes(x));
-      expect(extra, f.name).toEqual([]);
+      expect([...pcs].filter((x) => !want.includes(x)), f.name).toEqual([]);
       expect(missing.length === 0 || (missing.length === 1 && missing[0] === fifth && want.length === 4), f.name).toBe(true);
-      expect(pcs.has(f.root), f.name).toBe(true);
-      expect(f.frets.length).toBe(6);
+      expect(new Set(p).size, `${f.name}: no unison`).toBe(p.length);
+      const played = f.frets.map((x, i) => (x === null ? -1 : i)).filter((i) => i >= 0);
+      expect(played.length, f.name).toBeGreaterThanOrEqual(3);
+      expect(played[played.length - 1] - played[0] + 1, `${f.name}: adjacent strings`).toBe(played.length);
       const fr = frettedFrets(f);
-      expect(Math.max(...fr) - Math.min(...fr), f.name).toBeLessThanOrEqual(4);
-      expect(f.frets.filter((x) => x !== null).length, f.name).toBeGreaterThanOrEqual(3);
+      if (fr.length) {
+        expect(Math.max(...fr) - Math.min(...fr), f.name).toBeLessThanOrEqual(3);
+        expect(Math.max(...fr), f.name).toBeLessThanOrEqual(15);
+        expect(fr.length <= 4 || fr.filter((x) => x > Math.min(...fr)).length <= 3, `${f.name}: four fingers`).toBe(true);
+      }
     }
+  });
+  it('contains the familiar shapes', () => {
+    const has = (root: number, q: Parameters<typeof formsFor>[1], frets: (number | null)[]) => formsFor(root, q).some((f) => f.frets.join() === frets.join());
+    const X = null;
+    expect(has(0, 'maj', [X, 3, 2, 0, 1, 0])).toBe(true); // C x32010
+    expect(has(9, 'min', [X, 0, 2, 2, 1, 0])).toBe(true); // Am x02210
+    expect(has(5, 'maj', [1, 3, 3, 2, 1, 1])).toBe(true); // F barre
+    expect(has(7, 'maj', [3, 2, 0, 0, 0, 3])).toBe(true); // G 320003
+    expect(has(5, 'maj7', [X, X, 3, 2, 1, 0])).toBe(true); // Fmaj7 xx3210
   });
 });
 
@@ -52,47 +66,76 @@ describe('chord recognition', () => {
 });
 
 describe('guitar voicing (PT-01)', () => {
-  it('C major becomes x32010 (48 52 55 60 64): 3 ids kept, 2 new notes in the clip, one undo step', () => {
+  it('auto keeps the register: C4 E4 G4 becomes C4 E4 G4 C5 (4 strings on top); ids kept, the new note joins the clip, one undo step', () => {
     const s = new Session();
     const ids = s.add([note(0, 60), note(0, 64), note(0, 67)]);
     const r = voiceChords(s.project, ids, { voicing: 'auto' });
     s.run(r.command);
-    expect(s.rows()).toEqual([
-      [0, 48, 480, 100],
-      [0, 52, 480, 100],
-      [0, 55, 480, 100],
-      [0, 60, 480, 100],
-      [0, 64, 480, 100],
-    ]);
+    expect(s.rows().map((x) => x[1])).toEqual([60, 64, 67, 72]);
     const all = s.notes().map((n) => n.id);
     expect(ids.every((id) => all.includes(id))).toBe(true);
-    expect(new Set(all).size).toBe(5);
-    expect(r.ids.sort()).toEqual([...all].sort());
+    expect(new Set(all).size).toBe(4);
+    expect([...r.ids].sort()).toEqual([...all].sort());
     expect(s.project.clips.length).toBe(1);
     expect(s.project.clips[0].eventIds).toEqual(expect.arrayContaining(all));
+    expect(s.notes().every((n) => n.tick === 0 && n.durationTicks === 480)).toBe(true);
     expect(s.history.past.length).toBe(2);
     s.undo();
     expect(s.rows().map((x) => x[1])).toEqual([60, 64, 67]);
     s.redo();
-    expect(s.notes().length).toBe(5);
+    expect(s.notes().length).toBe(4);
   });
 
-  it('Am becomes x02210; "open" and "auto" agree, "high" picks a barre form above the 5th fret', () => {
+  it('"open" moves to the open strings with the root in the bass: C = x32013, Am = x02210', () => {
     const s = new Session();
-    const ids = s.add([note(0, 57), note(0, 60), note(0, 64)]);
-    const auto = voiceChords(s.project, ids, { voicing: 'auto' });
-    const open = voiceChords(s.project, ids, { voicing: 'open' });
-    s.run(auto.command);
-    expect(s.rows().map((x) => x[1])).toEqual([45, 52, 57, 60, 64]);
-    s.undo();
-    s.run(open.command);
-    expect(s.rows().map((x) => x[1])).toEqual([45, 52, 57, 60, 64]);
-    s.undo();
-    s.run(voiceChords(s.project, ids, { voicing: 'high' }).command);
-    expect(s.rows().map((x) => x[1])).toEqual([45, 52, 57, 60, 64, 69]); // E-shape barre at the 5th fret: 5 7 7 5 5 5
+    const c = s.add([note(0, 60), note(0, 64), note(0, 67)]);
+    s.run(voiceChords(s.project, c, { voicing: 'open' }).command);
+    expect(s.rows().map((x) => x[1])).toEqual([48, 52, 55, 60, 67]);
+    const t = new Session();
+    const am = t.add([note(0, 57), note(0, 60), note(0, 64)]);
+    t.run(voiceChords(t.project, am, { voicing: 'open' }).command);
+    expect(t.rows().map((x) => x[1])).toEqual([45, 52, 57, 60, 64]);
+    t.undo();
+    t.run(voiceChords(t.project, am, { voicing: 'auto' }).command);
+    expect(t.rows().map((x) => x[1])).toEqual([57, 60, 64, 69]);
   });
 
-  it('C → Am → F → G keeps every chord quality, never exceeds 6 strings, and does not jump far', () => {
+  it('a high close voicing stays high and moves smoothly (Fmaj7 - Em7 - Am7 - Dm7 - G7 around C5)', () => {
+    const s = new Session();
+    const chords = [
+      [65, 69, 72, 76],
+      [64, 67, 71, 74],
+      [64, 67, 69, 72],
+      [62, 65, 69, 72],
+      [62, 65, 67, 71],
+    ];
+    const ids = s.add(chords.flatMap((c, i) => c.map((p) => note(i * 960, p, 200))));
+    s.run(voiceChords(s.project, ids, { voicing: 'auto' }).command);
+    const out = chords.map((_, i) => s.notes().filter((n) => n.tick === i * 960).map((n) => n.pitch));
+    expect(out).toEqual([
+      [65, 69, 72, 76], // F4 A4 C5 E5 is already playable (D-G-B-E strings, frets 15-14-13-12)
+      [64, 67, 74, 76],
+      [57, 60, 67, 72],
+      [62, 65, 72, 74],
+      [62, 67, 71, 77],
+    ]);
+    for (let i = 0; i < 5; i++) {
+      expect(out[i].length).toBe(4); // the string count does not jump
+      expect(recognizeChord(out[i])?.quality).toBe(recognizeChord(chords[i])?.quality); // Em7 may drop its fifth
+    }
+    // and with "open" the same progression is played with the familiar open shapes
+    s.undo();
+    s.run(voiceChords(s.project, ids, { voicing: 'open' }).command);
+    expect(chords.map((_, i) => s.notes().filter((n) => n.tick === i * 960).map((n) => n.pitch))).toEqual([
+      [41, 45, 52, 57, 60, 64], // Fmaj7 102210
+      [40, 47, 50, 55, 59, 64], // Em7 020000
+      [45, 52, 55, 60, 64], // Am7 x02010
+      [50, 57, 60, 65], // Dm7 xx0211
+      [43, 47, 50, 55, 59, 65], // G7 320001
+    ]);
+  });
+
+  it('C → Am → F → G keeps every chord quality and never exceeds 6 strings', () => {
     const s = new Session();
     const chords = [
       [60, 64, 67],
@@ -101,15 +144,25 @@ describe('guitar voicing (PT-01)', () => {
       [55, 59, 62],
     ];
     const ids = s.add(chords.flatMap((c, i) => c.map((p) => note(i * 960, p, 960))));
-    const r = voiceChords(s.project, ids, { voicing: 'auto' });
-    s.run(r.command);
-    expect(r.stats).toEqual({ notes: 12, groups: 4, skipped: 0 });
-    for (let i = 0; i < 4; i++) {
-      const pitches = s.notes().filter((n) => n.tick === i * 960).map((n) => n.pitch);
-      expect(pitches.length).toBeLessThanOrEqual(6);
-      expect(new Set(pitches.map((p) => p % 12))).toEqual(new Set(chords[i].map((p) => p % 12)));
+    for (const preset of ['auto', 'open', 'high'] as const) {
+      const r = voiceChords(s.project, ids, { voicing: preset });
+      expect(r.stats).toEqual({ notes: 12, groups: 4, skipped: 0 });
+      s.run(r.command);
+      for (let i = 0; i < 4; i++) {
+        const pitches = s.notes().filter((n) => n.tick === i * 960).map((n) => n.pitch);
+        expect(pitches.length).toBeLessThanOrEqual(6);
+        expect(new Set(pitches.map((p) => p % 12))).toEqual(new Set(chords[i].map((p) => p % 12)));
+      }
+      s.undo();
     }
-    expect(s.notes().filter((n) => n.tick === 1920).map((n) => n.pitch)).toEqual([53, 57, 60, 65]); // F = xx3211
+  });
+
+  it('"high" never goes below a low input', () => {
+    const s = new Session();
+    const ids = s.add([note(0, 48), note(0, 52), note(0, 55)]);
+    s.run(voiceChords(s.project, ids, { voicing: 'high' }).command);
+    const low = Math.min(...s.notes().map((n) => n.pitch));
+    expect(low).toBeGreaterThanOrEqual(48);
   });
 
   it('a repeated chord keeps the same form; unknown chords stay and are counted', () => {
@@ -129,7 +182,7 @@ describe('guitar voicing (PT-01)', () => {
     const s = new Session();
     const ids = s.add([48, 52, 55, 60, 64, 67, 72].map((p) => note(0, p)));
     s.run(voiceChords(s.project, ids, { voicing: 'open' }).command);
-    expect(s.rows().map((x) => x[1])).toEqual([48, 52, 55, 60, 64]);
+    expect(s.rows().map((x) => x[1])).toEqual([48, 52, 55, 60, 67]);
     s.undo();
     expect(s.notes().length).toBe(7);
   });
