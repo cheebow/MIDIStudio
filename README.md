@@ -46,7 +46,7 @@ DAW のような視覚的な編集と、レコンポーザのような数値入�
 
 ## 技術構成
 
-React / TypeScript（strict）/ Vite。音源は SpessaSynth（spessasynth_lib 4.4.2）+ SoundFont。MIDI データの読み書き・編集・時間計算は UI や音源に依存しない独自のコアで、単体テストで検証しています。内部の時間は楽曲ごとの PPQ をそのまま使う整数 Tick で、読み込んだ SMF の PPQ を勝手に変えません。ノート・CC・SysEx・未知のメタイベントは捨てずに保持します。
+React / TypeScript（strict）/ Vite。音源は SpessaSynth（spessasynth_lib 4.4.3）+ SoundFont。MIDI データの読み書き・編集・時間計算は UI や音源に依存しない独自のコアで、単体テストで検証しています。内部の時間は楽曲ごとの PPQ をそのまま使う整数 Tick で、読み込んだ SMF の PPQ を勝手に変えません。ノート・CC・SysEx・未知のメタイベントは捨てずに保持します。
 
 [MML Studio](https://github.com/cheebow/MMLStudio) の音源まわりの知見を参考にしていますが、MIDI Studio は独立したプロジェクトです。
 

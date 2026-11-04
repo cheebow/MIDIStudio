@@ -3,7 +3,7 @@
 // Based on MML Studio src/audio/SoundFontPlaybackAdapter.ts (same author); implements the
 // seconds-based PlaybackEngine used by the Transport (ADR-018). spessasynth_lib is loaded on demand (first audio start).
 //
-// Verified against node_modules/spessasynth_lib@4.4.2 dist/index.d.ts (see docs/DECISIONS.md ADR-012).
+// Verified against node_modules/spessasynth_lib@4.4.3 dist/index.d.ts (see docs/DECISIONS.md ADR-012, ADR-075).
 import type { Sequencer, WorkletSynthesizer } from 'spessasynth_lib';
 import type { EngineSong, PlaybackEngine } from './PlaybackEngine';
 import { t } from '../i18n';

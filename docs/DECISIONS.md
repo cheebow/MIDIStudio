@@ -73,7 +73,7 @@
 
 - **決定**: `package.json` は全依存を exact 指定（MML Studio と同じ版: react 19.3.1、vite 8.3.5、typescript 6.0.3、vitest 5.0.5、@playwright/test 1.64.1、eslint 10.14.0、typescript-eslint 8.72.1）。`fake-indexeddb` 6.2.6（公開から2週間以上経過した版）を IndexedDB の単体テスト用に追加。
 - `spessasynth_lib@4.4.2` は `spessasynth_core` を `"latest"` で依存し非決定的。`overrides` で **core 4.4.3**（lib 4.4.2 と同時期に公開、MML Studio で動作実績あり）に固定。
-- **選択肢**: core 4.4.4（2026-10-30 21:10Z 公開）。lib 4.4.2 公開後の版で、MIDI Studio 側に必要な変更が確認できないため見送り。必要になったら差分確認のうえ更新する。
+- **選択肢**: core 4.4.4（2026-10-30 21:10Z 公開）。lib 4.4.2 公開後の版で、MIDI Studio 側に必要な変更が確認できないため見送り。必要になったら差分確認のうえ更新する。→ ADR-075（2026-11-04）で lib 4.4.3 / core 4.4.5 に更新。
 - TypeScript 7.x は `typescript-eslint@8.72.1` の peer 範囲外のため 6.0.3。
 - `npm audit`: moderate 11件（eslint 系の minimatch。開発時のみ使用、配布物に含まれない）。ESLint のメジャー更新が必要なため現状維持。
 - **互換性影響**: なし。**検証**: `npm ls` で core 4.4.3 (overridden) を確認。
@@ -807,3 +807,14 @@ UI 側とコア／再生側を分けてコード全体を読み直し、確認�
 - **見送った案**: 情報バーでのチャンネルの変更（チャンネルはトラック単位で、ノートごとには持たない）。ホイールでの増減（欄の上を通るだけで値が変わる事故を避け、↑↓ だけにした）。インスペクター欄に入れる（エディターと離れていて、視線が行き来する）。
 - **互換性影響**: なし（楽曲データ・設定は変わらない）。エディターのグリッドが情報バーの高さ（約 26 px）ぶん下がる。
 - **検証**: unit `note-info.test.ts`（集計、入力の読み取りと範囲外の拒否、全部に設定 / 足す / 丸め、位置・音高が形を保つ・端で全体ごと止まる、変化なしは null）。E2E `note-info-bar.spec.ts`（E25、chromium / firefox / webkit、4 回繰り返して安定）。負荷のかかった並列実行で、Enter 後に全選択し直す処理（次のフレーム）が、すでに別の欄へ移ったフォーカスを引き戻して次の Enter を奪う不具合が出たので、その欄にフォーカスが残っているときだけ全選択する。グリッドが情報バーの分だけ低くなったので、`tutorial.spec.ts` の、行を固定量でスクロールする前提（−200 px）と、範囲外になった「空いているところ」の行（80 → 70）を直した（アプリの動きではなくテストの座標の前提）。
+
+## ADR-075 — SpessaSynth を lib 4.4.3 / core 4.4.5 に更新（2026-11-04）
+
+- **背景**: 2026-11-03 に `spessasynth_lib@4.4.3` と `spessasynth_core@4.4.5` が公開された。lib 4.4.3 は core `^4.4.5` を要求する。SpessaSynth は最新版しかサポートしない方針なので追従する（ADR-011 の「必要になったら差分確認のうえ更新」）。
+- **差分の確認**（GitHub の release と compare、`dist/index.d.ts` の diff）:
+  - lib 4.4.2 → 4.4.3: `destroy()` が `WorkletSynthesizer` から基底 `BasicSynthesizer` に移り、二重呼び出しを無視し、保留中の Promise（音源の読み込みなど）を reject するようになった。`MIDIDeviceHandler` に `close()` と `createMIDIDeviceHandler(requestSysEx?)` が追加（本プロジェクトは自前の `MidiInputAdapter` を使うので無関係）。アダプター（`SpessaAdapter.ts`）と WAV 書き出し（`renderWav.ts`）が使う API に削除・シグネチャ変更はない。
+  - core 4.4.3 → 4.4.5: GS EFX（インサーションエフェクト）の完全実装、デコード済みサンプルのキャッシュと上限、サンプルデータの作り直し、SF3 の PCM オフセット修正、XMF の読み込み修正、`sound_bank_loader.ts` の小さな変更。
+  - ワークレット `spessasynth_processor.min.js` は 594 KB → 753 KB（EFX の DSP ぶん。`scripts/copy-worklet.mjs` が `public/` にコピー）。
+- **決定**: `package.json` の `spessasynth_lib` を 4.4.3、`spessasynth_core` と `overrides` の core を 4.4.5 にする。コードの変更はなし。
+- **互換性影響**: 楽曲データ・設定は変わらない。GS EFX の SysEx を含む曲は、これまで無視されていた EFX が効くので音が変わりうる（本アプリの GS 解釈表（ADR の GS SysEx の節）は EFX を解釈しないままで、16 進表示・編集のみ。音源側で処理されるようになったことは README の対応状況の範囲内）。初回のワークレット読み込みが約 160 KB 増える。
+- **検証**: `npm run typecheck` / `lint` / `build`、`npm run test`（36 ファイル 299 件）通過。E2E 全体（`npx playwright test`、chromium / firefox / webkit）326 件通過・22 件スキップ（更新前と同じスキップ構成。`audio-spike.spec.ts` で新しいワークレットの読み込みと発音を確認）。実際の音（VISION (GS Version) の再生、ループの折り返し、MIDI キーボードの試聴、WAV 書き出し）は**手動確認待ち**。
