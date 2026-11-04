@@ -71,6 +71,7 @@ export class Transport {
   private loaded: MidiProject | null = null;
   /** tempo map of the song the engine has loaded (differs from `tempo` until an edit is reloaded) */
   private engineTempo: TempoMap | null = null;
+  private engineSignature: TimeSignatureMap | null = null;
   private generation = 0;
   private state: TransportState = { status: 'stopped', loading: false, error: null, pendingEdits: false };
   private listeners = new Set<Listener>();
@@ -235,6 +236,7 @@ export class Transport {
   private async reload(atTick: number, resume: boolean): Promise<void> {
     const project = this.project;
     const tempo = this.tempo;
+    const signature = this.signature;
     if (!project || !tempo) return;
     this.deferredStale = false;
     this.staleInLoop = false;
@@ -253,6 +255,7 @@ export class Transport {
       if (gen !== this.generation) return;
       this.loaded = project;
       this.engineTempo = tempo;
+      this.engineSignature = signature;
       // A seek during the load moved parkedTick; a pause / stop during the load cleared the resume.
       const play = this.resumeAfterLoad;
       this.engine.seekSeconds(tempo.tickToSeconds(this.parkedTick));
@@ -331,6 +334,12 @@ export class Transport {
       this.pause();
       return Promise.resolve();
     }
+    // A second press while play() is still loading the song cancels that start (ADR-083); it used
+    // to queue a second load that restarted from the start position.
+    if (this.state.loading && this.resumeAfterLoad) {
+      this.resumeAfterLoad = false;
+      return Promise.resolve();
+    }
     return this.play();
   }
 
@@ -388,6 +397,17 @@ export class Transport {
 
   get timeSignatureMap(): TimeSignatureMap | null {
     return this.signature;
+  }
+
+  /**
+   * The maps of the song the engine is actually playing. A tempo / time-signature edit while
+   * playing is loaded later (ADR-048), so anything clocked by the engine's seconds (the metronome)
+   * must use these, not the edited maps, or it drifts off the music (ADR-083).
+   */
+  get playingMaps(): { tempo: TempoMap; signature: TimeSignatureMap } | null {
+    const tempo = this.engineTempo ?? this.tempo;
+    const signature = this.engineSignature ?? this.signature;
+    return tempo && signature ? { tempo, signature } : null;
   }
 
   // ------------------------------------------------------------ live preview

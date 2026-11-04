@@ -127,7 +127,10 @@ export class LiveTake {
   finish(stopSeconds: number): TakeResult {
     const stopTick = this.toTick(stopSeconds);
     const held = this.open.size;
-    for (const key of [...this.open.keys()]) this.closeNote(key, Math.max(stopTick, this.open.get(key)!.tick + 1), 64);
+    // Stopped after a loop wrap with no input since: the held notes ran to the loop end, not to a
+    // stop position that now lies before them (they would shrink to 1 tick, ADR-083).
+    const wrapped = this.opts.loop !== undefined && this.lastTick >= 0 && stopTick + this.opts.tempo.ppq / 8 < this.lastTick;
+    for (const key of [...this.open.keys()]) this.closeNote(key, wrapped ? this.opts.loop!.endTick : Math.max(stopTick, this.open.get(key)!.tick + 1), 64);
     const range = { startTick: Number.isFinite(this.minTick) ? this.minTick : stopTick, endTick: Math.max(this.maxTick, stopTick) };
     return { takes: this.takes.filter((t) => t.events.length > 0), closedAtStop: held, range };
   }

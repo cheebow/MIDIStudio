@@ -57,34 +57,57 @@ export function useAudioEngine({ adapter, transport, midi, blockers, setError }:
   /** bytes of the bank the engine plays (for the offline WAV renderer, ADR-052) */
   const [soundBankBytes, setSoundBankBytes] = useState<ArrayBuffer | null>(null);
 
+  /**
+   * The most recent bank request wins (ADR-083): a local .sf2 picked while the standard bank is
+   * still downloading must not be replaced when the download finishes. `bankGen` marks the latest
+   * request, `bankQueue` keeps two engine loads from interleaving, `latestLoad` lets a superseded
+   * request wait for the one that replaced it (so "audio ready" callers still get a ready engine).
+   */
+  const bankGen = useRef(0);
+  const bankQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const latestLoad = useRef<Promise<void>>(Promise.resolve());
+
   /** `sizeBytes`: the file's size when known before reading it, so an oversized file is never read */
-  async function loadBank(load: () => Promise<ArrayBuffer>, name: string, sizeBytes?: number) {
+  function loadBank(load: () => Promise<ArrayBuffer>, name: string, sizeBytes?: number): Promise<void> {
     const tooBig = sizeBytes === undefined ? null : soundBankSizeError(sizeBytes);
     if (tooBig) {
       setError(tooBig); // the current bank stays loaded
-      return;
+      return Promise.resolve();
     }
-    setError(null);
-    // a SoundFont (re)load must not leave the transport playing, but keeps the playhead where it is
-    if (transport.getState().status === 'playing') transport.pause();
-    setAudioPhase('loading-soundfont');
-    try {
-      await adapter.initialize();
-      const buffer = await load();
-      const sizeError = soundBankSizeError(buffer.byteLength);
-      if (sizeError) throw new Error(sizeError);
-      // the engine transfers the buffer to its worklet (it is detached afterwards): keep a copy for the renderer
-      const copy = buffer.slice(0);
-      setReport(await adapter.loadSoundBank(buffer));
-      setSoundBankBytes(copy);
-      setSoundBankName(name);
-      setAudioPhase('ready');
-    } catch (e) {
-      setError(errorText(e));
-      setAudioPhase(adapter.isSoundBankLoaded ? 'ready' : 'idle');
-    } finally {
-      setProgress(null);
-    }
+    const gen = ++bankGen.current;
+    const stale = () => gen !== bankGen.current;
+    const run = async () => {
+      setError(null);
+      // a SoundFont (re)load must not leave the transport playing, but keeps the playhead where it is
+      if (transport.getState().status === 'playing') transport.pause();
+      setAudioPhase('loading-soundfont');
+      try {
+        await adapter.initialize();
+        const buffer = await load();
+        if (stale()) return latestLoad.current;
+        const sizeError = soundBankSizeError(buffer.byteLength);
+        if (sizeError) throw new Error(sizeError);
+        // the engine transfers the buffer to its worklet (it is detached afterwards): keep a copy for the renderer
+        const copy = buffer.slice(0);
+        const loading = bankQueue.current.then(() => (stale() ? null : adapter.loadSoundBank(buffer)));
+        bankQueue.current = loading.catch(() => undefined);
+        const loaded = await loading;
+        if (!loaded || stale()) return latestLoad.current;
+        setReport(loaded);
+        setSoundBankBytes(copy);
+        setSoundBankName(name);
+        setAudioPhase('ready');
+      } catch (e) {
+        if (stale()) return latestLoad.current;
+        setError(errorText(e));
+        setAudioPhase(adapter.isSoundBankLoaded ? 'ready' : 'idle');
+      } finally {
+        setProgress(null);
+      }
+    };
+    const p = run();
+    latestLoad.current = p;
+    return p;
   }
 
   const startPrefetch = () => {

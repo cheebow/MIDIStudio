@@ -522,7 +522,8 @@ export function PianoRoll() {
     // ↑ ↓ shift the PC keyboard's octave while performing / step-entering (global shortcut)
     if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && (input.mode === 'piano-performance' || input.mode === 'step-piano')) return;
     // ← → are rest / back (Shift: step length) while step-entering (ADR-076)
-    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && (input.mode === 'step-piano' || input.mode === 'step-drums')) return;
+    // (Backspace too: it undoes the last step and moves the cursor back, ADR-083)
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Backspace') && (input.mode === 'step-piano' || input.mode === 'step-drums')) return;
     const ids = [...selection.eventIds].filter((id) => track.events.some((ev) => ev.id === id));
     const step = Math.max(1, Math.round(gridLen));
     const run = (fn: () => void) => {

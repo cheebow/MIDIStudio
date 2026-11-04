@@ -9,6 +9,16 @@ import { bend, build, cc, off, on, port, program, sysex, GS_RESET } from '../fix
 
 beforeEach(() => setIdGenerator(createCounterIdGenerator('c')));
 
+describe('EventChase across tracks on one channel (ADR-083)', () => {
+  it('the latest value in time wins, not the last track', () => {
+    const r = openMidiFile(build(1, 480, [program(1000, 0, 5), cc(0, 0, 7, 90), on(0, 0, 60), off(10, 0, 60)], [program(0, 0, 10), cc(0, 0, 7, 20)]), { mergeDrums: false, mergeControllers: false, trackOrder: 'file' });
+    if (!r.ok) throw new Error();
+    const s = chaseAt(r.project, 2000).channels.get('0:0')!;
+    expect(s.program).toBe(5);
+    expect(s.controllers.get(7)).toBe(90);
+  });
+});
+
 describe('EventChase (P03)', () => {
   const r = openMidiFile(
     build(

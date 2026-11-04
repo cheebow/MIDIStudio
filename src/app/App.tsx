@@ -86,11 +86,7 @@ export default function App() {
     const store = new EditorStore(createStarterProject({ title: t('新しい曲') }));
     const input = new InputController(transport, () => store.project, store.project.inputPresets);
     const step = new StepController(store, input);
-    const metronome = new Metronome(adapter, () => {
-      const tempo = transport.tempoMap;
-      const signature = transport.timeSignatureMap;
-      return tempo && signature ? { tempo, signature } : null;
-    });
+    const metronome = new Metronome(adapter, () => transport.playingMaps);
     const recorder = new Recorder(store, transport, input, (t, accent) => metronome.clickAt(t, accent), () => adapter.audioContext?.currentTime ?? null);
     const midi = new MidiInputAdapter(
       {

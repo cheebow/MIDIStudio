@@ -356,10 +356,15 @@ export function moveEvents(project: MidiProject, ids: Iterable<string>, deltaTic
 }
 
 /** Copies events (new IDs and origin orders) shifted by deltaTick, into the same track. */
-export function duplicateEvents(project: MidiProject, ids: Iterable<string>, deltaTick: number, label = 'イベントを複製'): { command: Command; ids: string[] } | null {
+/**
+ * Copies events by deltaTick. `ids` are the copies in event order (not in the order of the given
+ * ids); `sourceIds[i]` is the original of `ids[i]` (ADR-083: map copies back through this).
+ */
+export function duplicateEvents(project: MidiProject, ids: Iterable<string>, deltaTick: number, label = 'イベントを複製'): { command: Command; ids: string[]; sourceIds: string[] } | null {
   const sel = new Set(ids);
   let p = project;
   const newIds: string[] = [];
+  const sourceIds: string[] = [];
   const patch: ProjectPatch = {};
   for (const t of project.tracks) {
     const src = t.events.filter((e) => sel.has(e.id)).sort(compareEvents);
@@ -370,9 +375,10 @@ export function duplicateEvents(project: MidiProject, ids: Iterable<string>, del
     p = { ...p, ...r.command.patch };
     Object.assign(patch, r.command.patch);
     newIds.push(...r.ids);
+    sourceIds.push(...src.map((e) => e.id));
   }
   if (newIds.length === 0) return null;
-  return { command: cmd(label, patch), ids: newIds };
+  return { command: cmd(label, patch), ids: newIds, sourceIds };
 }
 
 function stripForCopy(e: MidiEvent, deltaTick: number): NewEvent {
