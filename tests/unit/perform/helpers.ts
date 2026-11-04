@@ -1,4 +1,4 @@
-// Shared helpers of the performance-tool tests (ADR-076): a tiny session with history, and note /
+// Shared helpers of the performance-tool tests (ADR-078): a tiny session with history, and note /
 // conductor builders. Expected ticks and velocities are hard-coded in the tests themselves.
 import { createEmptyProject } from '../../../src/core/model/defaults';
 import type { ConductorEvent, MidiProject, NoteEvent } from '../../../src/core/model/types';

@@ -447,7 +447,7 @@ button.on .mode-key { opacity: 0.85; }
 .note-info-field input[data-field='pitch'] { width: 8em; }
 .note-info-field input[aria-invalid='true'] { border-color: var(--playhead); outline-color: var(--playhead); }
 
-/* performance tools (ADR-076) */
+/* performance tools (ADR-077) */
 .perform-status { margin: 0; font-size: 0.85rem; color: var(--muted); }
 .perform-notice { margin: 0; font-size: 0.85rem; }
 .quantize-form p.error { margin: 0; font-size: 0.85rem; color: var(--error); }

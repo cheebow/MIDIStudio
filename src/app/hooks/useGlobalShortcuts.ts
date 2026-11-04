@@ -119,21 +119,37 @@ export function useGlobalShortcuts(d: ShortcutDeps): void {
         if (!e.repeat) input.setSustain(true);
         return;
       }
-      // Step recording keys (normal keys; numpad +/- are optional extras)
+      // Step recording keys (normal keys; numpad +/- are optional extras).
+      // Step length (ADR-076): ⇧← / ⇧→ halve / double, `.` dotted (⌥. too, because `.` is a pad in the
+      // drum maps and the router takes it first), ⌥T triplet (T is a note in the piano map).
       if (!mod && (input.mode === 'step-piano' || input.mode === 'step-drums')) {
-        const stepKey: Record<string, () => void> = {
-          ArrowRight: () => step.rest(),
-          NumpadAdd: () => step.forward(),
-          ArrowLeft: () => step.back(),
-          NumpadSubtract: () => step.back(),
-          Backspace: () => step.undoLast(),
-          Minus: () => step.tie(),
-        };
-        const fn = stepKey[e.code];
-        if (fn) {
+        if (e.altKey && !e.shiftKey && (e.code === 'Period' || e.code === 'KeyT')) {
           handled();
-          fn();
+          if (!e.repeat) step.changeLength(e.code === 'Period' ? 'dotted' : 'triplet');
           return;
+        }
+        if (!e.altKey && e.shiftKey && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
+          handled();
+          if (!e.repeat) step.changeLength(e.code === 'ArrowLeft' ? 'halve' : 'double');
+          return;
+        }
+        if (!e.altKey && !e.shiftKey) {
+          const stepKey: Record<string, () => void> = {
+            ArrowRight: () => step.rest(),
+            NumpadAdd: () => step.forward(),
+            ArrowLeft: () => step.back(),
+            NumpadSubtract: () => step.back(),
+            Backspace: () => step.undoLast(),
+            Minus: () => step.tie(),
+            Period: () => step.changeLength('dotted'),
+          };
+          const fn = stepKey[e.code];
+          if (fn) {
+            handled();
+            if (e.code === 'Period' && e.repeat) return;
+            fn();
+            return;
+          }
         }
       }
       // In performance modes, single-letter shortcuts are off to avoid accidents (INPUT_RECORDING 7).

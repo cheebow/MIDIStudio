@@ -77,7 +77,9 @@ test.describe('startup dialog (ADR-049)', () => {
     await expect(dialog).toContainText('新しい曲');
     await expect(dialog.getByRole('combobox', { name: 'サンプル曲' })).toContainText('VISION');
     await expect(dialog.getByTestId('startup-sound')).toContainText(/読み込み|準備完了/);
-    await expect(dialog).toContainText('MIDI キーボード');
+    await expect(dialog).toContainText('外部 MIDI キーボード');
+    // the status says what "use" refers to: the device names, or that the browser will ask first
+    await expect(dialog).toContainText(/接続中: |接続している機器はありません|許可を求めます|ブラウザで許可されていません|このブラウザでは使えません/);
     // the song behind the modal is not reachable while it is open
     await expect(page.getByRole('button', { name: 'ファイル', exact: true })).not.toBeInViewport({ timeout: 1 }).catch(() => undefined);
     // it has to be answered: no close button, Esc does nothing

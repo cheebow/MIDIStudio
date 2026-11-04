@@ -177,7 +177,7 @@ export default function App() {
     // Serializing a large song takes tens of ms on the main thread (docs/PERFORMANCE.md), so it
     // runs when the browser is idle; the timeout keeps it from being postponed forever.
     let idle: number | null = null;
-    if (store.getState().previewBase) return; // a transform preview (ADR-076) is not content
+    if (store.getState().previewBase) return; // a transform preview (ADR-077) is not content
     const save = () => {
       idle = null;
       const p = store.committedProject;
@@ -747,7 +747,7 @@ export default function App() {
             prefetchState={prefetchState}
             soundBankName={soundBankName}
             midiState={setup.midi}
-            midiDevices={midi.deviceList.filter((d) => d.state === 'connected').length}
+            midiDevices={midi.deviceList.filter((d) => d.state === 'connected').map((d) => d.name)}
             restore={restore}
             onRetrySoundFont={() => (startPrefetch(), void ensureAudio().catch(() => undefined))}
             onChooseSoundFont={chooseSoundFont}

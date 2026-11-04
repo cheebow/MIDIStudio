@@ -1,4 +1,4 @@
-// Non-destructive preview for the performance tools (ADR-076): every settings change recomputes
+// Non-destructive preview for the performance tools (ADR-077): every settings change recomputes
 // the transform from the committed project and shows it through EditorStore.preview; Apply commits
 // it as one undo step, Cancel / unmount removes it.
 import { useCallback, useEffect, useMemo, useState } from 'react';

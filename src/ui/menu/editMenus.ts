@@ -8,7 +8,7 @@ import type { MenuItem } from './MenuBar';
 
 const sep: MenuItem = { separator: true, label: '' };
 
-/** The performance tools (ADR-076), shared by the edit menu and the note right-click menu. */
+/** The performance tools (ADR-077), shared by the edit menu and the note right-click menu. */
 export function performMenuItems(a: EditActions): MenuItem[] {
   return [
     { label: t('ギターボイシング…'), action: () => a.performDialog('voicing') },

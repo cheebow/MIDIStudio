@@ -1,4 +1,4 @@
-// Velocity shaper (PT-05, ADR-076): a musical gain curve over the selected notes. Only velocities
+// Velocity shaper (PT-05, ADR-077): a musical gain curve over the selected notes. Only velocities
 // change, every note of a chord gets the same factor, so the original balance survives.
 import type { MidiProject, NoteEvent } from '../../model/types';
 import type { BarBeat } from '../../timing/timeSignatureMap';

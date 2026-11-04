@@ -1,4 +1,4 @@
-// Strum (PT-02, ADR-077). The chords keep their rhythm and notes; the strings (low to high pitch)
+// Strum (PT-02, ADR-078). The chords keep their rhythm and notes; the strings (low to high pitch)
 // are spread in time by the stroke direction, which follows the hand's up / down motion over the
 // bar (eighth or sixteenth grid, rests included) rather than alternating per chord. (The cutting
 // style was removed: without mute strokes it only sounded like a shortened strum.)

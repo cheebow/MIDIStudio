@@ -1,4 +1,4 @@
-// Arpeggio (PT-03, ADR-076): each selected chord becomes a broken chord inside its own span
+// Arpeggio (PT-03, ADR-077): each selected chord becomes a broken chord inside its own span
 // (chord end or next chord onset, whichever comes first). Original notes keep their ids; the extra
 // steps of "up and down" are new notes in the same clip.
 import type { MidiProject, NoteEvent } from '../../model/types';

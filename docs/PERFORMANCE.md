@@ -35,7 +35,7 @@ REQ-NFR-03 / TEST_PLAN 8 の負荷曲で計測した結果。**値は計測し�
 - 自動保存の JSON 化はブラウザの空き時間（`requestIdleCallback`）に回す。
 - ドラッグ中は画面内のプレビューのみで、SMF の書き出しは確定時に 1 回だけ行う（ARCHITECTURE J、ADR-019）。
 
-## 追記（2026-11-04、ADR-076〜078 打ち込み支援）
+## 追記（2026-11-04、ADR-077〜078 打ち込み支援）
 
 macOS / Node 22 / Vitest、1 トラック 1,002 ノート（334 和音）に対する変換の計算時間（`tests/integration/performance-tools.test.ts`）。プレビューの描画は既存のエディターの再描画と同じ。
 

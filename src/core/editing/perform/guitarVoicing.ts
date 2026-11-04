@@ -1,4 +1,4 @@
-// Guitar voicing (PT-01, ADR-078): each selected chord (same onset) is recognised by its pitch
+// Guitar voicing (PT-01, ADR-079): each selected chord (same onset) is recognised by its pitch
 // classes and replaced by the notes of a playable form from the library. Unknown chords stay as
 // they are and are counted for the dialog.
 import type { MidiProject, NoteEvent } from '../../model/types';
@@ -44,7 +44,7 @@ export function recognizeChord(pitches: readonly number[]): RecognizedChord | nu
   return found.find((c) => c.root === lowest) ?? found[0];
 }
 
-/** Scoring weights (lower is better); see ADR-078. */
+/** Scoring weights (lower is better); see ADR-079. */
 export const VOICING_SCORE = { barre: 3, openBarre: 8, highBelow: 5, highPenalty: 3, bassDistance: 2, move: 1.5 } as const;
 
 function averageFret(form: ChordForm): number {

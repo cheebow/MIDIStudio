@@ -1,4 +1,4 @@
-// Performance tools (docs/PERFORMANCE_TOOLS_SPEC.md, ADR-076): pure transforms of the selected
+// Performance tools (docs/PERFORMANCE_TOOLS_SPEC.md, ADR-077): pure transforms of the selected
 // notes. Each returns one Command (one undo step) or null, plus what the dialog shows.
 import type { Command } from '../history';
 

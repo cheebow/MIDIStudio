@@ -1,4 +1,4 @@
-// English texts of the performance tools (ADR-076): src/core/editing/perform, src/ui/perform, menus.
+// English texts of the performance tools (ADR-077): src/core/editing/perform, src/ui/perform, menus.
 export const EN_PERFORM: Record<string, string> = {
   // --- menus (editMenus.ts / menus.tsx)
   '打ち込み支援': 'Performance tools',

@@ -36,7 +36,7 @@ DAW のような視覚的な編集と、レコンポーザのような数値入�
 ## 使い方
 
 1. `npm install` のあと `npm run fetch-soundfont` で標準音源（GeneralUser GS）を取得し、`npm run dev` で起動します。
-2. 起動時のダイアログで、曲（新しい曲 / 前回の自動保存）と MIDI キーボードを使うかどうかを選んで「開始」を押します。
+2. 起動時のダイアログで、曲（新しい曲 / 前回の自動保存）と外部 MIDI キーボードを使うかどうかを選んで「開始」を押します。
 3. 新しい曲はピアノ・ベース・ギター・ドラムの 4 トラックから始まります。
 
 外部 MIDI キーボードを使うには Web MIDI API 対応のブラウザ（Chrome / Edge など）と許可が必要です。非対応のブラウザでも、編集・内蔵音源での再生・PC キーボードでの演奏と録音は使えます。
@@ -47,7 +47,7 @@ DAW のような視覚的な編集と、レコンポーザのような数値入�
 
 ## 技術構成
 
-React / TypeScript（strict）/ Vite。音源は SpessaSynth（spessasynth_lib 4.4.2）+ SoundFont。MIDI データの読み書き・編集・時間計算は UI や音源に依存しない独自のコアで、単体テストで検証しています。内部の時間は楽曲ごとの PPQ をそのまま使う整数 Tick で、読み込んだ SMF の PPQ を勝手に変えません。ノート・CC・SysEx・未知のメタイベントは捨てずに保持します。
+React / TypeScript（strict）/ Vite。音源は SpessaSynth（spessasynth_lib 4.4.3）+ SoundFont。MIDI データの読み書き・編集・時間計算は UI や音源に依存しない独自のコアで、単体テストで検証しています。内部の時間は楽曲ごとの PPQ をそのまま使う整数 Tick で、読み込んだ SMF の PPQ を勝手に変えません。ノート・CC・SysEx・未知のメタイベントは捨てずに保持します。
 
 [MML Studio](https://github.com/cheebow/MMLStudio) の音源まわりの知見を参考にしていますが、MIDI Studio は独立したプロジェクトです。
 

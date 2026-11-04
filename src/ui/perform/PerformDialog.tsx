@@ -1,4 +1,4 @@
-// Shared shell of the performance-tool dialogs (ADR-076): target chooser, the tool's own controls,
+// Shared shell of the performance-tool dialogs (ADR-077): target chooser, the tool's own controls,
 // what the preview found, 試聴 / 適用 / キャンセル. The preview is live in every view while open.
 import { useCallback, type ReactNode } from 'react';
 import type { MidiProject } from '../../core/model/types';

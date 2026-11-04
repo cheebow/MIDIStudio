@@ -1,4 +1,4 @@
-// Performance tools (docs/PERFORMANCE_TOOLS_SPEC.md, ADR-076..078): E26–E30.
+// Performance tools (docs/PERFORMANCE_TOOLS_SPEC.md, ADR-077..078): E26–E30.
 import { expect, test, type Page } from '@playwright/test';
 import { build, off, on, program } from '../fixtures/songs';
 import { exportedSmf, importMidi, menu, rollPoint } from './helpers';

@@ -21,7 +21,7 @@ export interface EditorState {
   /** project revision counter: increments on every content change (not on view settings) */
   revision: number;
   /**
-   * While a dialog previews a transform (ADR-076), `project` shows the result and this holds the
+   * While a dialog previews a transform (ADR-077), `project` shows the result and this holds the
    * real (committed) project. null = no preview. Autosave and the dialogs read `committedProject`.
    */
   previewBase: MidiProject | null;
@@ -68,7 +68,7 @@ export class EditorStore {
     return this.state.previewBase ?? this.state.project;
   }
 
-  // ---------------------------------------------------------------- preview (ADR-076)
+  // ---------------------------------------------------------------- preview (ADR-077)
 
   /**
    * Shows `build(base)` applied to the committed project in every view and the transport, without

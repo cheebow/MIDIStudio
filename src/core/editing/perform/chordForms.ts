@@ -1,4 +1,4 @@
-// Guitar chord forms (PT-01, ADR-078): standard tuning, a fixed library of open forms and the
+// Guitar chord forms (PT-01, ADR-079): standard tuning, a fixed library of open forms and the
 // movable E- and A-shapes (barre chords). Every form is a fret per string (null = not played), and
 // tests check that each one really sounds its chord and stays within a hand's reach.
 export const TUNING: readonly number[] = [40, 45, 50, 55, 59, 64]; // E2 A2 D3 G3 B3 E4

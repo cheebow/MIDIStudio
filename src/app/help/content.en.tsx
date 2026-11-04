@@ -28,6 +28,7 @@ export const SHORTCUTS_EN: [string, string][] = [
   [`${ALT}K / ${ALT}R`, 'PC keyboard / drum pad input mode (again to go back to editing)'],
   ['Keyboard mode: ↑ ↓ / Tab', 'Octave / sustain while held'],
   ['Step input: → ← - Backspace', 'Rest / back / tie / undo the last step'],
+  [`Step input: ⇧← ⇧→ / . / ${ALT}T`, `Halve / double the step, dotted, triplet (drums: dotted is ${ALT}.)`],
   ['List: + - / ⌥↑↓ / ⌘Enter / Insert', 'Step a value by 1 / by 10 (octave in the keyboard mode) / repeat the last value / insert menu'],
   [`List: ${MOD}V / ⇧${MOD}V`, 'Paste at the cursor row / push the later events back and paste'],
   [`List: ${ALT}N C P B A Y S M`, 'Insert Note / CC / Program / Pitch Bend / Ch. Pressure / Poly Pressure / SysEx / Meta (in every mode)'],
@@ -247,6 +248,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
         <ul>
           <li>In the “Step (keys / drums)” input mode, the notes you press on the keys or pads are entered at the cursor, which then advances by the step length. Press keys together for a chord.</li>
           <li><K>→</K> rest, <K>←</K> back, <K>-</K> tie, <K>Backspace</K> undo the last step. Step length and gate are in the step panel.</li>
+          <li>The step length has keys too: <K>⇧←</K> halve, <K>⇧→</K> double, <K>.</K> toggle dotted (<K>{ALT}.</K> in the drum mode, where . is a pad), <K>{ALT}T</K> toggle triplet.</li>
         </ul>
       </>
     ),

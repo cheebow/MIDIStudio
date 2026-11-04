@@ -1,4 +1,4 @@
-// Shared pieces of the performance tools (ADR-076): collecting the selected notes per track and
+// Shared pieces of the performance tools (ADR-077): collecting the selected notes per track and
 // clip, grouping simultaneous notes into chords, and ms -> tick conversion through the tempo map.
 import type { MidiProject, NoteEvent, TrackId } from '../../model/types';
 import { TempoMap } from '../../timing/tempoMap';

@@ -1,4 +1,4 @@
-// Legato (PT-04, ADR-076): note ends follow the next selected note / chord of the same track.
+// Legato (PT-04, ADR-077): note ends follow the next selected note / chord of the same track.
 // Onsets, pitches and velocities never change. Only the selection is looked at, so notes outside
 // it are neither moved nor used as the reference.
 import type { MidiProject, NoteEvent } from '../../model/types';

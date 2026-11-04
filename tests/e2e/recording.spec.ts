@@ -34,6 +34,53 @@ test('I08 / I03: step input with letter keys only (no numpad): chord, rest, drum
   expect(drums.map((e) => (e.kind === 'channel' ? [e.tick, e.data[0]] : []))).toEqual([[480, 36], [480, 42], [720, 38]]);
 });
 
+test('ADR-076: step length keys — ⇧← / ⇧→ halve / double, . dotted (⌥. in the drum mode), ⌥T triplet', async ({ page }) => {
+  await page.goto('/');
+  await setInputMode(page, 'step-piano');
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  const length = page.getByLabel('ステップの長さ');
+  await expect(length).toHaveValue('240'); // 1/8 at PPQ 480
+  await page.keyboard.press('Shift+ArrowLeft');
+  await expect(length).toHaveValue('120'); // 1/16
+  await page.keyboard.press('Shift+ArrowRight');
+  await page.keyboard.press('Shift+ArrowRight');
+  await expect(length).toHaveValue('480'); // 1/4
+  await page.keyboard.press('Period'); // dotted: 1/4.
+  await expect(length).toHaveValue('720');
+  await page.keyboard.press('Shift+ArrowLeft'); // keeps the dot: 1/8.
+  await expect(length).toHaveValue('360');
+  await page.keyboard.press('Alt+KeyT'); // triplet replaces the dot: 1/8T
+  await expect(length).toHaveValue('160');
+  await page.keyboard.press('Alt+KeyT'); // back to 1/8
+  await expect(length).toHaveValue('240');
+  // the cursor did not move: ⇧←→ and . are not rest / back / notes
+  await expect(page.getByTestId('step-cursor')).toContainText('001.01.000');
+  // a note then advances by the current step
+  await page.keyboard.press('KeyZ');
+  await expect(page.getByTestId('step-cursor')).toContainText('001.01.240');
+  // 1/1 is the end of the table: refused with a message, the value stays
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowRight');
+  await expect(length).toHaveValue('1920');
+  await page.keyboard.press('Shift+ArrowRight');
+  await expect(length).toHaveValue('1920');
+  await expect(page.getByTestId('step-message')).toContainText('1/1');
+
+  // drum mode: `.` is the hi-hat pad, so dotted is ⌥.
+  await menu(page, 'トラック', 'トラックを追加');
+  await menu(page, 'トラック', 'ドラムトラックにする');
+  await setInputMode(page, 'step-drums');
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Shift+ArrowLeft');
+  await page.keyboard.press('Shift+ArrowLeft');
+  await expect(length).toHaveValue('480');
+  await page.keyboard.press('Alt+Period');
+  await expect(length).toHaveValue('720');
+  await page.keyboard.press('Period'); // a hit, not the dot
+  await expect(length).toHaveValue('720');
+  const drums = (await exportedSmf(page)).tracks.flatMap((t) => t.events).filter((e) => e.kind === 'channel' && e.status === 0x93 && e.data[1] > 0);
+  expect(drums.map((e) => (e.kind === 'channel' ? [e.tick, e.data[0]] : []))).toEqual([[240, 42]]);
+});
+
 test('I13: MIDI input settings work or explain the fallback, and the rest of the app keeps working', async ({ page }) => {
   await page.goto('/');
   await menu(page, 'MIDI', /MIDI 入力の設定/);

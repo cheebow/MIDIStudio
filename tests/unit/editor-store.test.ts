@@ -79,7 +79,7 @@ describe('new project defaults', () => {
   });
 });
 
-describe('EditorStore preview (ADR-076)', () => {
+describe('EditorStore preview (ADR-077)', () => {
   const noteAt = (tick: number): NewEvent => ({ kind: 'note', tick, pitch: 60, velocity: 100, durationTicks: 100, releaseVelocity: 64 });
   const setup = () => {
     const s = new EditorStore(createEmptyProject());

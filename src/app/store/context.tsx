@@ -35,7 +35,7 @@ export interface EditActions {
   /** humanize / velocity dialogs (ADR-050) */
   humanizeDialog: () => void;
   velocityDialog: () => void;
-  /** performance tools (ADR-076): guitar voicing, strum, arpeggio, legato, velocity shaper */
+  /** performance tools (ADR-077): guitar voicing, strum, arpeggio, legato, velocity shaper */
   performDialog: (kind: PerformKind) => void;
   transpose: (semitones: number) => void;
   noteLength: () => void;
