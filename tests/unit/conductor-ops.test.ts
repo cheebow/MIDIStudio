@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createEmptyProject } from '../../src/core/model/defaults';
 import { createCounterIdGenerator, setIdGenerator } from '../../src/core/model/ids';
 import { applyCommand } from '../../src/core/editing/history';
-import { upsertConductorEvent } from '../../src/core/editing/conductorOps';
+import { setTempo, upsertConductorEvent } from '../../src/core/editing/conductorOps';
+import { projectToSmf } from '../../src/core/project-io/exportSmf';
 import { TimeSignatureMap } from '../../src/core/timing/timeSignatureMap';
 import type { MidiProject } from '../../src/core/model/types';
 
@@ -50,6 +51,18 @@ describe('tempo track editing (upsertConductorEvent)', () => {
     expect(() => upsertConductorEvent(p, 0, { kind: 'key-signature', sharpsFlats: 8, minor: false })).toThrow();
     const tempo = p.conductor.find((c) => c.kind === 'tempo')!;
     expect(() => upsertConductorEvent(p, 0, { kind: 'marker', text: 'x' }, tempo.id)).toThrow();
+  });
+
+  it('ADR-084: tempos the SMF cannot hold (under ~3.58 BPM) are refused; an old one is exported as the slowest with a warning', () => {
+    const p = createEmptyProject();
+    expect(() => upsertConductorEvent(p, 0, { kind: 'tempo', bpm: 2 })).toThrow(/4〜999/);
+    expect(() => setTempo(p, 0, 3.5)).toThrow();
+    expect(() => upsertConductorEvent(p, 0, { kind: 'tempo', bpm: 4 })).not.toThrow();
+    const slow: MidiProject = { ...p, conductor: p.conductor.map((c) => (c.kind === 'tempo' ? { ...c, usPerQuarter: 30_000_000 } : c)) };
+    const { smf, warnings } = projectToSmf(slow);
+    const meta = smf.tracks[0].events.find((e) => e.kind === 'meta' && e.metaType === 0x51);
+    expect(meta && meta.kind === 'meta' && [...meta.data]).toEqual([0xff, 0xff, 0xff]);
+    expect(warnings.map((w) => w.code)).toEqual(['W_EXPORT_TEMPO_RANGE']);
   });
 
   it('parses positions typed as bar.beat.tick', () => {

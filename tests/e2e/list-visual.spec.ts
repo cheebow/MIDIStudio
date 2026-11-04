@@ -126,6 +126,20 @@ test('visual mode: switch between the RCM list, the all-tracks piano roll and th
   await page.getByTestId('tm-close').click();
 });
 
+test('ADR-084: in visual mode Esc first leaves the PC-keyboard mode; only a second Esc closes the monitor', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('open-tm').click();
+  const monitor = page.getByRole('region', { name: 'ビジュアルモード' });
+  await expect(monitor).toBeVisible();
+  await page.keyboard.press('Alt+k');
+  await expect(page.getByTestId('input-mode')).toContainText('PC 鍵盤');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('input-mode')).toContainText('入力: 編集');
+  await expect(monitor).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(monitor).toBeHidden();
+});
+
 test('visual mode: going back from 2 rows to 1 pane resizes the staff canvas with the pane', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('open-tm').click();

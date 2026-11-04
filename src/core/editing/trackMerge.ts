@@ -21,11 +21,15 @@ function mergeInto(tracks: MidiTrack[], ids: string[], name?: string): MidiTrack
       // keep each event on its original channel when the tracks' default channels differ
       if ('channelOverride' in e || e.kind === 'note' || e.kind === 'cc' || e.kind === 'program' || e.kind === 'pitch-bend' || e.kind === 'channel-pressure' || e.kind === 'poly-pressure') {
         const ch = (e as { channelOverride?: number }).channelOverride ?? t.channel;
-        events.push((ch === first.channel ? { ...e, channelOverride: undefined } : { ...e, channelOverride: ch }) as MidiEvent);
+        if (ch === first.channel) {
+          // a copy without the property (never delete it from the original: Undo still holds it, ADR-084)
+          const { channelOverride: _c, ...rest } = e as MidiEvent & { channelOverride?: number };
+          void _c;
+          events.push(rest as MidiEvent);
+        } else events.push({ ...e, channelOverride: ch } as MidiEvent);
       } else events.push(e);
     }
   }
-  for (const e of events) if ('channelOverride' in e && e.channelOverride === undefined) delete (e as { channelOverride?: number }).channelOverride;
   const merged: MidiTrack = {
     ...first,
     name: name ?? first.name,

@@ -70,6 +70,19 @@ describe('MidiInputAdapter (pseudo device; real hardware is verified manually)',
     expect(got).toEqual(['in1:note-on:60', 'in1:note-off:60']);
   });
 
+  it('ADR-084: a key held while the channel filter changes is still released (note-offs pass the filter)', async () => {
+    const f = fakeAccess();
+    f.plug('in1', 'Keys');
+    const got: string[] = [];
+    const a = new MidiInputAdapter({ onMessage: (m) => got.push(`${m.type}:${m.channel}`), onDeviceLost: () => {}, onChange: () => {} }, () => Promise.resolve(f.access));
+    await a.enable();
+    f.send('in1', [0x90, 60, 100]); // channel 1 held
+    a.setChannelFilter(1); // now only channel 2 (0-based 1)
+    f.send('in1', [0x80, 60, 0]);
+    f.send('in1', [0x90, 62, 100]); // a new channel-1 note is still filtered
+    expect(got).toEqual(['note-on:0', 'note-off:0']);
+  });
+
   it('I14: unplugging a device reports it so held notes can be released; replugging works', async () => {
     const f = fakeAccess();
     f.plug('in1', 'Keys');

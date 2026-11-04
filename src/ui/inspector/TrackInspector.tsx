@@ -18,6 +18,7 @@ export function TrackInspector() {
   const { store, adapter, audioReady, reportError, transport } = useServices();
   const { project } = useEditorState();
   const [pbRange, setPbRange] = useState(2);
+  const [colorSession, setColorSession] = useState(0);
   const tick = Math.max(0, Math.round(usePlaybackPosition(transport).tick));
   const sig = useSignatureMap(project);
   const track: MidiTrack | undefined = selectedTrack(project);
@@ -48,7 +49,8 @@ export function TrackInspector() {
       </label>
       <label>
         {t('色')}
-        <input type="color" value={track.color.slice(0, 7)} onChange={(e) => set({ color: e.target.value }, 'トラックの色を変更')} />
+        {/* dragging in the picker fires many changes: one undo step per time the picker is used (ADR-084) */}
+        <input type="color" value={track.color.slice(0, 7)} onFocus={() => setColorSession((n) => n + 1)} onChange={(e) => store.run(updateTrack(store.project, track.id, { color: e.target.value }, 'トラックの色を変更'), { mergeKey: `color-${track.id}-${colorSession}` })} />
       </label>
       <div className="inspector-row">
         <label>

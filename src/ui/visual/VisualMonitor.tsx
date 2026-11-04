@@ -55,7 +55,7 @@ export function buildDisplayRows(rows: ListRow[], sig: TimeSignatureMap): { disp
 }
 
 export function VisualMonitor({ onClose }: { onClose: () => void }) {
-  const { store, transport } = useServices();
+  const { store, transport, input } = useServices();
   const { project } = useEditorState();
   const tm = project.settings.tm;
   const rootRef = useRef<HTMLDivElement>(null);
@@ -87,12 +87,19 @@ export function VisualMonitor({ onClose }: { onClose: () => void }) {
   }, [transport, sig]);
 
   useEffect(() => {
+    // Esc closes the monitor only when it is not meant for something else (ADR-084): in a
+    // performance / step mode it first returns to the edit mode, and an open menu or dialog takes
+    // it. Capture phase, so the mode is read before the global shortcut handler changes it.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !document.fullscreenElement) onClose();
+      if (e.key !== 'Escape' || document.fullscreenElement) return;
+      if (input.mode !== 'edit-shortcuts') return;
+      if (document.querySelector('[data-testid="context-menu"], .menu-items, dialog[open]')) return;
+      if ((e.target as HTMLElement | null)?.closest?.('dialog, .menubar')) return;
+      onClose();
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [onClose, input]);
 
   const status = tstate.status === 'playing' ? 'PLAY' : tstate.status === 'paused' ? 'PAUSE' : 'STOP';
   const view = tm.view ?? 'list';

@@ -404,10 +404,13 @@ export class Transport {
    * playing is loaded later (ADR-048), so anything clocked by the engine's seconds (the metronome)
    * must use these, not the edited maps, or it drifts off the music (ADR-083).
    */
-  get playingMaps(): { tempo: TempoMap; signature: TimeSignatureMap } | null {
+  get playingMaps(): { tempo: TempoMap; signature: TimeSignatureMap; loop: { startSeconds: number; endSeconds: number } | null } | null {
     const tempo = this.engineTempo ?? this.tempo;
     const signature = this.engineSignature ?? this.signature;
-    return tempo && signature ? { tempo, signature } : null;
+    if (!tempo || !signature) return null;
+    const l = (this.loaded ?? this.project)?.loop;
+    const loop = l?.enabled && l.endTick > l.startTick ? { startSeconds: tempo.tickToSeconds(l.startTick), endSeconds: tempo.tickToSeconds(l.endTick) } : null;
+    return { tempo, signature, loop };
   }
 
   // ------------------------------------------------------------ live preview
@@ -473,7 +476,7 @@ export class Transport {
   /** Releases every preview note (focus loss, mode change, device unplugged...). */
   releaseAllPreviews(sourceId?: string): void {
     for (const [key, [port, ch, pitch]] of this.previewNotes) {
-      if (sourceId !== undefined && !key.startsWith(`${sourceId}:`)) continue;
+      if (sourceId !== undefined && !key.startsWith(`${sourceId}:`) && !key.startsWith(`${sourceId}#`)) continue; // (MIDI sources are per channel)
       this.engine.send([0x80 | ch, pitch, 0], port);
       this.previewNotes.delete(key);
     }

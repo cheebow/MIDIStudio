@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { build, off, on } from '../fixtures/songs';
-import { importMidi, setInputMode } from './helpers';
+import { importMidi, menu, setInputMode } from './helpers';
 
 test('ADR-044: DAW-style single-key shortcuts work in the edit mode; the mode switch turns the same keys into an instrument', async ({ page }) => {
   await page.goto('/');
@@ -112,6 +112,34 @@ test('the piano roll keyboard lights the keys being played (PC keyboard mode)', 
   await expect.poll(async () => (await keyColour()).g).toBeLessThan(200); // a red tint over the white key (g drops from 255)
   await page.keyboard.up('KeyZ');
   await expect.poll(async () => (await keyColour()).g).toBe(idle.g);
+});
+
+test('ADR-084: after deleting the selected track, ⌥↑ / ⌥↓ move the track the editors show (no "track not found" error)', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  const names = () => page.locator('.track-grip').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
+  await page.getByTestId('track-header').first().click(); // select the first track explicitly
+  const before = await names();
+  await menu(page, 'トラック', 'トラックを削除');
+  await expect.poll(names).toHaveLength(before.length - 1);
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Alt+ArrowDown');
+  await expect(page.getByTestId('error')).toHaveCount(0);
+  const after = await names();
+  expect(after[1]).toBe(before[1]); // the first remaining track moved one down
+  expect(after[0]).toBe(before[2]);
+});
+
+test('ADR-084: letter shortcuts work with a non-Latin layout (Cyrillic key values, Latin key positions)', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  const loop = page.getByRole('checkbox', { name: 'LOOP' });
+  const before = await loop.isChecked();
+  // the L key on a Russian layout types "д"
+  await page.evaluate(() => {
+    for (const type of ['keydown', 'keyup']) document.body.dispatchEvent(new KeyboardEvent(type, { key: 'д', code: 'KeyL', bubbles: true }));
+  });
+  await expect(loop).toBeChecked({ checked: !before });
 });
 
 test('ADR-083: a focused checkbox (LOOP) does not switch off shortcuts or the PC keyboard; Space does not toggle it', async ({ page }) => {

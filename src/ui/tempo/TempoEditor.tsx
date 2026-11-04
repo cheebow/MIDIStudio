@@ -91,7 +91,8 @@ export function TempoEditor() {
         {project.conductor.length === 0 && <p className="note">{t('テンポ・拍子・調号・マーカーはありません（テンポ 120、4/4 として扱います）。')}</p>}
         {project.conductor.length > 0 && rows.length === 0 && <p className="note">{t('表示する種類が選ばれていません（上の「表示」で選んでください）。')}</p>}
         {rows.map((c) => (
-          <TempoRow key={`${c.id}:${c.tick}:${fieldText(c)}`} event={c} format={(t) => sig.format(t)} parse={(t) => sig.parse(t)} onError={setMessage} onSeek={() => transport.seek(c.tick)} onDelete={() => store.run(deleteConductorEvent(store.project, c.id))} onDialog={() => setDialog({ kind: c.kind, tick: c.tick, id: c.id })} />
+          // the key includes the shown position: a time-signature change elsewhere re-labels this row (ADR-084)
+          <TempoRow key={`${c.id}:${c.tick}:${sig.format(c.tick)}:${fieldText(c)}`} event={c} format={(t) => sig.format(t)} parse={(t) => sig.parse(t)} onError={setMessage} onSeek={() => transport.seek(c.tick)} onDelete={() => store.run(deleteConductorEvent(store.project, c.id))} onDialog={() => setDialog({ kind: c.kind, tick: c.tick, id: c.id })} />
         ))}
         {hidden > 0 && rows.length > 0 && <p className="note">{t('ほかに {n} 件（表示していない種類）', { n: hidden })}</p>}
       </div>

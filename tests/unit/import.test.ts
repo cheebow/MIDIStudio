@@ -116,6 +116,15 @@ describe('SMF import', () => {
     ]);
   });
 
+  it('ADR-084: a port prefix after a tick-0 SysEx stays an event (the SysEx belongs to the earlier port) and is warned about', () => {
+    // Making it the track port would move it before the SysEx on export and send the SysEx to the
+    // other port: the file's meaning would change. Kept as is, with the warning.
+    const { project, issues } = open(build(1, 480, [sysex(0, GS_RESET), port(0, 1), on(0, 0, 60), off(480, 0, 60)]));
+    expect(project.tracks[0].port).toBe('A');
+    expect(project.tracks[0].events.some((e) => e.kind === 'meta' && e.metaType === 0x21)).toBe(true);
+    expect(issues.some((i) => i.code === 'W_IMPORT_PORT_CHANGE')).toBe(true);
+  });
+
   it('keeps multi-channel tracks with channelOverride and keeps mid-track port changes as events', () => {
     const { project, issues } = open(build(1, 480, [on(0, 0, 60), off(10, 0, 60), on(0, 0, 61), off(10, 0, 61), on(0, 5, 62), off(10, 5, 62), port(0, 2)]));
     const t = project.tracks[0];
