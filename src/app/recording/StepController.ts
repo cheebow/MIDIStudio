@@ -2,6 +2,8 @@
 // step modes. Piano: keys pressed together form a chord, written when the last key is released.
 // Drums: every hit is written at the cursor (auto-advance off by default, I09).
 import { stepBack, stepForward, stepNotes, stepRest, stepTie, stepUndoLast, type StepSettings, type StepState } from '../../core/recording/stepRecorder';
+import { changeStepLength, type StepLengthChange } from '../../core/recording/stepLength';
+import { t } from '../../i18n';
 import type { InputController, CapturedInput } from '../../input/InputController';
 import type { EditorStore } from '../store/EditorStore';
 
@@ -106,6 +108,22 @@ export class StepController {
     const r = stepUndoLast(this.store.project, this.state);
     this.store.run(r.command);
     this.state = r.state;
+    this.emit();
+  }
+  /** ⇧← / ⇧→ / . / ⌥T (ADR-076): the step length is a project setting, so this is not an undo step. */
+  changeLength(change: StepLengthChange): void {
+    const project = this.store.project;
+    const rec = project.settings.recording;
+    const r = changeStepLength(project.ppq, rec.stepTicks, change);
+    if (r.ok) {
+      this.store.updateSettings({ recording: { ...rec, stepTicks: r.ticks } });
+      this.message = null;
+    } else {
+      this.message =
+        r.reason === 'out-of-range' ? t('音長はこれ以上変えられません（1/1〜1/64）')
+        : r.reason === 'not-grid' ? t('音長がグリッドの値ではないので、付点・三連にできません')
+        : t('この PPQ ではその音長が整数の Tick になりません');
+    }
     this.emit();
   }
 }

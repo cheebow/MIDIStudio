@@ -5,6 +5,7 @@ import { GRID_DIVISIONS, gridLabel, gridTicks } from '../../core/timing/grid';
 import { useSignatureMap } from '../hooks';
 import { useEditorState, useServices } from '../../app/store/context';
 import { t } from '../../i18n';
+import { ALT_LABEL as ALT } from '../platform';
 
 export function StepPanel({ drum }: { drum: boolean }) {
   const { store, step, transport } = useServices();
@@ -20,7 +21,7 @@ export function StepPanel({ drum }: { drum: boolean }) {
       <span className="step-cursor" data-testid="step-cursor">
         {t('位置')} {sig.format(snap.cursor)}
       </span>
-      <label>
+      <label title={t('⇧← 半分 / ⇧→ 倍 / {dot} 付点 / {alt}T 三連', { dot: drum ? `${ALT}.` : '.', alt: ALT })}>
         {t('音長')}{' '}
         <select value={rec.stepTicks} onChange={(e) => set({ stepTicks: Number(e.target.value) })} aria-label={t('ステップの長さ')}>
           {options.map((o) => (
@@ -44,7 +45,7 @@ export function StepPanel({ drum }: { drum: boolean }) {
       <button onClick={() => step.tie()} title={t('直前の音をのばす（-）')}>{t('タイ')}</button>
       <button onClick={() => step.undoLast()} title={t('直前のステップを取り消す（Backspace）')}>{t('取消')}</button>
       <button onClick={() => step.setCursor(Math.round(transport.getPosition().tick))}>{t('再生位置へ')}</button>
-      {snap.message && <span className="warn-text">{snap.message}</span>}
+      {snap.message && <span className="warn-text" data-testid="step-message">{snap.message}</span>}
       <span className="note">{drum ? t('パッドを押すと現在位置に入力（同じ位置に重ねられます）') : t('同時に押した鍵盤は和音として、すべて離したときに入力')}</span>
     </div>
   );
