@@ -85,15 +85,15 @@ export function PianoRoll() {
     return r.tick;
   };
 
-  // Double-click on a clip asks to show its start (ADR-085): page to the bar, as following does.
+  // Double-click on a clip asks to show its start (ADR-085): the bar of the clip start at the left edge.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !reveal || !track) return;
     const tick = store.takeReveal(track.id);
     if (tick === null) return;
-    el.scrollLeft = barPageScrollLeft(sig, tick, pxPerTick);
+    el.scrollLeft = barPageScrollLeft(sig, tick, pxPerTick) + leadPx; // the bar starts at the left edge (past the margin before bar 1)
     follow.hold();
-  }, [reveal, track, store, sig, pxPerTick, follow]);
+  }, [reveal, track, store, sig, pxPerTick, leadPx, follow]);
 
   // When the edited track changes, scroll vertically to its notes (or to the saved pitch).
   const trackId = track?.id;

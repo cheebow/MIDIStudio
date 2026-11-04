@@ -88,15 +88,15 @@ export function DrumEditor() {
   const view = useMemo(() => ({ ...size, ...scroll, x: scroll.x - leadPx }), [size, scroll, leadPx]);
   useZoomAnchor(scrollRef, pxPerTick, leadPx, size.w - NAMES_W);
 
-  // Double-click on a clip asks to show its start (ADR-085): page to the bar, as following does.
+  // Double-click on a clip asks to show its start (ADR-085): the bar of the clip start at the left edge.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !reveal || !track) return;
     const tick = store.takeReveal(track.id);
     if (tick === null) return;
-    el.scrollLeft = barPageScrollLeft(sig, tick, pxPerTick);
+    el.scrollLeft = barPageScrollLeft(sig, tick, pxPerTick) + leadPx; // the bar starts at the left edge (past the margin before bar 1)
     follow.hold();
-  }, [reveal, track, store, sig, pxPerTick, follow]);
+  }, [reveal, track, store, sig, pxPerTick, leadPx, follow]);
   const end = useMemo(() => maxOf(notes, (n) => n.tick + n.durationTicks, ppq * 4 * 32) + ppq * 16, [notes, ppq]);
   const gridW = view.w - NAMES_W;
   const totalH = RULER_H + lanes.length * LANE_H;

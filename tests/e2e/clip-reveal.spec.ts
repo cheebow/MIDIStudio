@@ -19,14 +19,16 @@ test('double-clicking a clip scrolls the piano roll / drum editor to the bar whe
 
   const box = (await page.getByTestId('arrangement-canvas').boundingBox())!;
   const bar = 96; // px per bar in the track view at the default zoom, after the one-bar margin
-  // the first clip of track 1 starts at bar 1: the roll goes back to the start
+  // the editors share the zoom (80 px per beat); scrollLeft 0 shows the one-bar margin before bar 1,
+  // so a bar is at the left edge when scrollLeft = (its start + one bar) in px
+  const leftEdge = (tick: number) => ((tick + BAR) * 80) / 480;
+  // the first clip of track 1 starts at bar 1: the roll goes back to bar 1 at the left edge
   await page.mouse.dblclick(box.x + bar + 10, box.y + 50 + 24);
-  await expect.poll(() => roll.evaluate((el) => el.scrollLeft)).toBe(0);
+  await expect.poll(() => roll.evaluate((el) => el.scrollLeft)).toBe(leftEdge(0));
 
   // the drum clip starts at bar 5: the drum editor opens there
   await page.mouse.dblclick(box.x + bar * 5 + 10, box.y + 50 + 48 + 24);
   const drum = page.locator('.drum-scroll');
   await expect(drum).toBeVisible();
-  // the editors share the zoom (80 px per beat): bar 5 starts 4 bars in (the margin before bar 1 is at scrollLeft 0)
-  await expect.poll(() => drum.evaluate((el) => el.scrollLeft)).toBe((BAR * 4 * 80) / 480);
+  await expect.poll(() => drum.evaluate((el) => el.scrollLeft)).toBe(leftEdge(BAR * 4));
 });
