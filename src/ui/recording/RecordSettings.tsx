@@ -25,12 +25,6 @@ export function RecordSettingsForm({ value, onChange }: { value: RecordingSettin
       </label>
       <label>
         <span>
-          <input type="checkbox" checked={value.armFollowsSelection} onChange={(e) => set({ armFollowsSelection: e.target.checked })} /> {t('トラックを選ぶと、そのトラックを録音待機にする')}
-        </span>
-        <span className="note">{t('選んだトラックだけが録音待機（R）になります。オフのときは R を自分で押します。')}</span>
-      </label>
-      <label>
-        <span>
           <input type="checkbox" checked={value.punch} onChange={(e) => set({ punch: e.target.checked })} /> {t('ループ範囲でパンチイン / アウト')}
         </span>
         <span className="note">{t('範囲外の入力は記録しません。範囲の終わりをこえるノートは終わりで切ります。')}</span>

@@ -110,8 +110,7 @@ export interface MidiTrack {
   drumMapId?: string;
   mute: boolean;
   solo: boolean;
-  recordArm: boolean;
-  events: MidiEvent[];
+  events: MidiEvent[];        // 録音先は選択トラック（ADR-080。録音待機フラグは持たない）
 }
 
 export interface MidiClip {

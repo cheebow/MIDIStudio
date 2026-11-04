@@ -100,8 +100,6 @@ export const EN_UI2: Record<string, string> = {
   カウントイン: 'Count-in',
   '{n} 小節': '{n} bars',
   '最後の 1 拍で弾いた音は開始位置に揃えます。': 'Notes played during the last beat are moved to the start position.',
-  'トラックを選ぶと、そのトラックを録音待機にする': 'Selecting a track arms it for recording',
-  '選んだトラックだけが録音待機（R）になります。オフのときは R を自分で押します。': 'Only the selected track is armed (R). When off, press R yourself.',
   'ループ範囲でパンチイン / アウト': 'Punch in / out at the loop range',
   '範囲外の入力は記録しません。範囲の終わりをこえるノートは終わりで切ります。': 'Input outside the range is not recorded. Notes crossing the end of the range are cut there.',
   'ループ録音（LOOP ON・パンチ OFF のとき）': 'Loop recording (loop on, punch off)',
@@ -139,7 +137,7 @@ export const EN_UI2: Record<string, string> = {
   // RecordControls.tsx
   録音を停止: 'Stop recording',
   録音: 'Record',
-  '録音（録音待機のトラックへ）': 'Record (onto the armed track)',
+  '録音（選んでいるトラックへ）': 'Record (onto the selected track)',
   カウント: 'Count',
   録音の設定: 'Recording settings',
 

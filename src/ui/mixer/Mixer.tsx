@@ -111,9 +111,6 @@ export function Mixer() {
                 <button className={`toggle solo${tk.solo ? ' on' : ''}`} aria-pressed={tk.solo} aria-label={t('{name} をソロ', { name: tk.name })} onClick={() => store.setTrackFlags(tk.id, { solo: !tk.solo })}>
                   S
                 </button>
-                <button className={`toggle arm${tk.recordArm ? ' on' : ''}`} aria-pressed={tk.recordArm} aria-label={t('{name} を録音待機', { name: tk.name })} onClick={() => store.setTrackFlags(tk.id, { recordArm: !tk.recordArm })}>
-                  R
-                </button>
               </div>
               <div className="strip-channel">
                 {tk.port}

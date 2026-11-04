@@ -966,7 +966,7 @@ function TrackHeader({
   onDragEnd: () => void;
   onRename: (name: string | null) => void;
   onStartRename: () => void;
-  onFlag: (f: Partial<Pick<MidiTrack, 'mute' | 'solo' | 'recordArm'>>) => void;
+  onFlag: (f: Partial<Pick<MidiTrack, 'mute' | 'solo'>>) => void;
 }) {
   // press state of a reorder drag (ADR-040): armed on pointer down on the grip, dragging after
   // HEADER_DRAG_PX. Any end of the pointer sequence (up, cancel, lost capture) releases it.
@@ -1039,9 +1039,6 @@ function TrackHeader({
       </button>
       <button className={`toggle${track.solo ? ' on' : ''}`} aria-pressed={track.solo} aria-label={t('{name} をソロ', { name: track.name })} onClick={(e) => (e.stopPropagation(), onFlag({ solo: !track.solo }))}>
         S
-      </button>
-      <button className={`toggle arm${track.recordArm ? ' on' : ''}`} aria-pressed={track.recordArm} aria-label={t('{name} を録音待機', { name: track.name })} title={t('録音待機（R キー / ● で録音するトラック）')} onClick={(e) => (e.stopPropagation(), onFlag({ recordArm: !track.recordArm }))}>
-        R
       </button>
     </div>
   );

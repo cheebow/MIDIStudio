@@ -67,7 +67,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
           <li>With the draw tool (<K>P</K>), drag on empty space to create a clip (region); the right-click “Create a one-bar clip here” does the same. Notes recorded or entered inside a clip’s range join that clip, and notes put where there is no clip get a bar-aligned clip of their own. Notes that belong to no clip are like material outside a region in a DAW: they do not sound and are left out of the MIDI / WAV exports (drawn faint in the piano roll, not shown in the track view). Extend a clip or right-click › “Take in the loose notes inside” to bring them back, or Track › Delete notes outside clips to remove them. Drag a clip’s middle to move it (up or down to another track), <K>{ALT}</K>+drag to duplicate it, drag an edge to change its length (the notes inside stay put; notes that fall outside the range leave the clip).</li>
           <li>With the select tool (<K>V</K>), drag on empty space for a rubber-band selection (it can span several tracks). Shift+click / Shift+drag adds to the selection. Selected clips move and duplicate together and respond to <K>{MOD}C</K> / <K>{MOD}X</K> / <K>{MOD}V</K> / <K>{MOD}D</K> / <K>Delete</K>. Select two or more clips on the same track and press <K>{MOD}J</K> (right-click “Merge”, or Edit › Clip › Merge) to join them into one clip (the gap between them included; no note moves); pasting starts at the right-clicked track (the selected track for <K>{MOD}V</K>) and keeps the lanes the clips were copied from. Right-click on empty space › “Select the clips at this position on all tracks” picks that bar on every track at once.</li>
           <li>Right-click a clip for: open in the piano roll, name and color, take in the loose notes inside, split, duplicate, quantize, humanize, velocity, delete (with its notes). Double-click opens the editor.</li>
-          <li>Drag the ⋮⋮ handle of a track header to reorder tracks (<K>{ALT}↑↓</K> also works). Double-click the name to rename. M / S / R are mute, solo and record-arm.</li>
+          <li>Drag the ⋮⋮ handle of a track header to reorder tracks (<K>{ALT}↑↓</K> also works). Double-click the name to rename. M / S are mute and solo.</li>
           <li>Click the ruler to seek. Drag the ends of the loop range to resize it, or its band at the bottom to move it (snaps to bars; Shift for beats).</li>
           <li>Right-click or double-click the tempo lane to add or change a tempo. Time signatures, key signatures and markers appear next to the bar numbers.</li>
           <li>− / + at the top left zoom in and out. The faint area before bar 1 is a margin.</li>
@@ -222,7 +222,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
         </ul>
         <h4>Real-time recording</h4>
         <ul>
-          <li>Press R (record-arm) on the track you want to record, then ● or <K>R</K> to start. Playback begins after the count-in; ■ or <K>R</K> stops. The take is one undoable step.</li>
+          <li>Select the track you want to record, then press ● or <K>R</K> to start. The take goes to the selected track (drum-pad hits go to the drum track). Playback begins after the count-in; ■ or <K>R</K> stops. The take is one undoable step.</li>
           <li>Notes played during the last beat of the count-in are moved to the start position.</li>
           <li>Recording settings (⚙): overdub / replace, count-in, punch in / out, loop-recording takes, record quantize, latency compensation.</li>
         </ul>

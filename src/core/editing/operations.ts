@@ -550,7 +550,7 @@ export function removeTrack(project: MidiProject, trackId: TrackId, label = 'ト
   return cmd(label, { tracks: project.tracks.filter((t) => t.id !== trackId), clips: project.clips.filter((c) => c.trackId !== trackId) });
 }
 
-export type TrackChanges = Partial<Pick<MidiTrack, 'name' | 'color' | 'port' | 'channel' | 'displayMode' | 'drumMapId' | 'mute' | 'solo' | 'recordArm'>>;
+export type TrackChanges = Partial<Pick<MidiTrack, 'name' | 'color' | 'port' | 'channel' | 'displayMode' | 'drumMapId' | 'mute' | 'solo'>>;
 
 export function updateTrack(project: MidiProject, trackId: TrackId, changes: TrackChanges, label = 'トラックを変更'): Command | null {
   const t = findTrack(project, trackId);
@@ -591,7 +591,7 @@ export function duplicateTrack(project: MidiProject, trackId: TrackId, label = '
     const copy = { ...e, id, originOrder: next++ } as MidiEvent;
     return copy.kind === 'note' && copy.releaseOrder !== undefined ? dropReleaseOrder(copy) : copy;
   });
-  const dup: MidiTrack = { ...src, id: newId('trk'), name: t('{name} (コピー)', { name: src.name }), events: sortEvents(events), solo: false, recordArm: false };
+  const dup: MidiTrack = { ...src, id: newId('trk'), name: t('{name} (コピー)', { name: src.name }), events: sortEvents(events), solo: false };
   const tracks = [...project.tracks];
   tracks.splice(project.tracks.indexOf(src) + 1, 0, dup);
   const clips = [

@@ -70,10 +70,18 @@ export function parseProjectFile(text: string): ProjectParseResult {
   // Settings and key maps gain fields over time; missing ones fall back to defaults.
   const project: MidiProject = adoptLooseNotes({
     ...loaded,
+    tracks: loaded.tracks.map(dropRecordArm), // files saved before ADR-080 carry it; the record target is now the selected track
     settings: sanitizeSettings(loaded.settings as unknown, defaultViewSettings(loaded.ppq), new Set(loaded.tracks.map((t) => t.id))),
     inputPresets: { ...defaultInputPresets(), ...loaded.inputPresets },
   }); // notes outside every clip would be silent (ADR-064): older files get clips around them
   return { ok: true, project, ...(from !== CURRENT_SCHEMA_VERSION ? { migratedFrom: from } : {}) };
+}
+
+function dropRecordArm(track: MidiProject['tracks'][number]): MidiProject['tracks'][number] {
+  if (!('recordArm' in track)) return track;
+  const rest: Record<string, unknown> = { ...track };
+  delete rest.recordArm;
+  return rest as unknown as MidiProject['tracks'][number];
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -120,7 +128,6 @@ function sanitizeSettings(raw: unknown, d: ProjectViewSettings, trackIds: Readon
     loopTakes: oneOf(recRaw.loopTakes, ['merge', 'last'] as const, d.recording.loopTakes),
     punch: bool(recRaw.punch, d.recording.punch),
     countInBars: ([0, 1, 2, 4] as const).includes(recRaw.countInBars as 0 | 1 | 2 | 4) ? (recRaw.countInBars as RecordingSettings['countInBars']) : d.recording.countInBars,
-    armFollowsSelection: bool(recRaw.armFollowsSelection, d.recording.armFollowsSelection),
     quantize: bool(recRaw.quantize, d.recording.quantize),
     latencyMs: num(recRaw.latencyMs, -500, 500, d.recording.latencyMs),
     stepTicks: isInt(recRaw.stepTicks, 1, MAX_TICK) ? recRaw.stepTicks : d.recording.stepTicks,
@@ -237,7 +244,7 @@ export function validateProject(p: unknown): string[] {
       if (!isValidPort(tr.port)) err(t('{w}: port が不正です。', { w }));
       if (!isInt(tr.channel, 0, 15)) err(t('{w}: channel が不正です（0..15）。', { w }));
       if (tr.displayMode !== 'melodic' && tr.displayMode !== 'drum') err(t('{w}: displayMode が不正です。', { w }));
-      for (const k of ['mute', 'solo', 'recordArm'] as const) if (typeof tr[k] !== 'boolean') err(t('{w}: {k} が不正です。', { w, k }));
+      for (const k of ['mute', 'solo'] as const) if (typeof tr[k] !== 'boolean') err(t('{w}: {k} が不正です。', { w, k }));
       if (tr.endOfTrackTick !== undefined && !isInt(tr.endOfTrackTick, 0, MAX_TICK)) err(t('{w}: endOfTrackTick が不正です。', { w }));
       if (!Array.isArray(tr.events)) return err(t('{w}: events が配列ではありません。', { w }));
       tr.events.forEach((e, ei) => {

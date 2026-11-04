@@ -16,7 +16,7 @@ export function RecordControls({ recorder, onSettings, beforeStart, onError, onM
         className={`record${active ? ' on' : ''}`}
         aria-pressed={active}
         aria-label={active ? t('録音を停止') : t('録音')}
-        title={t('録音（録音待機のトラックへ）')}
+        title={t('録音（選んでいるトラックへ）')}
         data-testid="record"
         onClick={() => {
           if (active) recorder.stop();

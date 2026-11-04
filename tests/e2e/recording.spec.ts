@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { exportedSmf, importMidi, menu, setInputMode, startAudio } from './helpers';
-import { off, on, smf, trackBytes } from '../fixtures/songs';
+import { exportedSmf, menu, setInputMode, startAudio } from './helpers';
 
 type Smf = Awaited<ReturnType<typeof exportedSmf>>;
 const noteOns = (smf: Smf) => smf.tracks.flatMap((t) => t.events).filter((e) => e.kind === 'channel' && (e.status & 0xf0) === 0x90 && e.data[1] > 0).map((e) => (e.kind === 'channel' ? [e.tick, e.data[0]] : []));
@@ -94,20 +93,12 @@ test('I13: MIDI input settings work or explain the fallback, and the rest of the
   await expect(page.getByTestId('piano-roll-grid')).toBeVisible();
 });
 
-test('recording without an armed track explains what to do', async ({ page, browserName }) => {
-  test.skip(browserName !== 'chromium', 'needs the audio engine');
-  await page.goto('/');
-  await startAudio(page);
-  await page.getByTestId('record').click();
-  await expect(page.getByTestId('error')).toContainText('録音待機');
-});
-
 test.describe('live recording with the real engine (Chromium)', () => {
   test.skip(({ browserName }) => browserName !== 'chromium', 'audio engine runs on Chromium');
-  test('I01 / I11: PC keyboard live take lands on the armed track, one undo step', async ({ page }) => {
+  test('I01 / I11: PC keyboard live take lands on the selected track, one undo step', async ({ page }) => {
     await page.goto('/');
     await startAudio(page);
-    await page.getByRole('button', { name: /録音待機/ }).first().click();
+    await page.getByTestId('track-header').nth(1).click(); // ADR-080: the selected track is the record target
     await page.getByRole('button', { name: '録音の設定' }).click();
     await page.getByRole('dialog').getByRole('combobox').nth(1).selectOption('0'); // no count-in
     await page.getByRole('button', { name: '閉じる', exact: true }).click();
@@ -122,9 +113,12 @@ test.describe('live recording with the real engine (Chromium)', () => {
     await page.waitForTimeout(150);
     await page.getByTestId('record').click();
     await expect(page.getByTestId('status-info')).toContainText('録音しました');
-    const ons = noteOns(await exportedSmf(page));
+    const smfAfter = await exportedSmf(page);
+    const ons = noteOns(smfAfter);
     expect(ons).toHaveLength(1);
     expect(ons[0][1]).toBe(60);
+    const channels = smfAfter.tracks.flatMap((t) => t.events).filter((e) => e.kind === 'channel' && (e.status & 0xf0) === 0x90 && e.data[1] > 0).map((e) => (e.kind === 'channel' ? e.status & 0x0f : -1));
+    expect(channels).toEqual([1]); // the second starter track (channel 2)
     expect(ons[0][0]).toBeGreaterThan(200); // recorded ~0.4 s after the start (tick ~384 at 120 BPM)
     await page.keyboard.press('Escape');
     await page.locator('body').click({ position: { x: 5, y: 5 } });
@@ -135,7 +129,6 @@ test.describe('live recording with the real engine (Chromium)', () => {
   test('count-in shows the remaining beats before recording starts', async ({ page }) => {
     await page.goto('/');
     await startAudio(page);
-    await page.getByRole('button', { name: /録音待機/ }).first().click();
     await page.getByTestId('record').click();
     await expect(page.getByTestId('count-in')).toBeVisible();
     await expect(page.locator('.rec-label')).toBeVisible({ timeout: 5000 });
@@ -143,23 +136,9 @@ test.describe('live recording with the real engine (Chromium)', () => {
   });
 });
 
-test('ADR-040: "arm follows selection" makes the selected track the only armed track', async ({ page }) => {
+test('ADR-080: there are no record-arm buttons; recording goes to the selected track', async ({ page }) => {
   await page.goto('/');
-  await importMidi(page, smf(1, 480, [trackBytes([on(0, 0, 60), off(480, 0, 60)]), trackBytes([on(0, 1, 62), off(480, 1, 62)])]), 'two.mid');
-  const headers = page.getByTestId('track-header');
-  const armed = () => headers.getByRole('button', { name: /を録音待機/ }).evaluateAll((els) => els.map((el) => el.getAttribute('aria-pressed')));
-  await headers.nth(1).click();
-  expect(await armed()).toEqual(['false', 'false']); // off by default: selecting does not arm
-  await page.getByRole('button', { name: '録音の設定' }).click();
-  await page.getByRole('dialog').getByLabel(/トラックを選ぶと/).check();
-  await page.getByRole('button', { name: '閉じる', exact: true }).click();
-  await headers.nth(0).click();
-  await expect.poll(armed).toEqual(['true', 'false']);
-  await headers.nth(1).getByRole('button', { name: /を録音待機/ }).click(); // arm the second one by hand too
-  await expect.poll(armed).toEqual(['true', 'true']);
-  await headers.nth(1).click(); // selecting it makes it the only armed track
-  await expect.poll(armed).toEqual(['false', 'true']);
-  // the setting is saved with the project
-  await page.getByRole('button', { name: '録音の設定' }).click();
-  await expect(page.getByRole('dialog').getByLabel(/トラックを選ぶと/)).toBeChecked();
+  await expect(page.getByTestId('track-header').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /録音待機/ })).toHaveCount(0);
+  await expect(page.getByTestId('record')).toHaveAttribute('title', /選んでいるトラック/);
 });

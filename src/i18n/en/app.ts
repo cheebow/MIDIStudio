@@ -85,7 +85,6 @@ export const EN_APP: Record<string, string> = {
   表示モードを変更: 'Change display mode',
   ミュート: 'Mute',
   ソロ: 'Solo',
-  録音待機: 'Record arm',
   'ドラムマップ（ドラムエディター）': 'Drum map (drum editor)',
   入力モード: 'Input mode',
   '編集（ショートカット）': 'Edit (shortcuts)',
@@ -224,8 +223,7 @@ export const EN_APP: Record<string, string> = {
   '作曲・制作: cheebow。MIDI Studio で聴く・編集するためのサンプル曲で、曲そのものの再配布・商用利用はできません。': 'Composed and produced by cheebow. Sample songs for listening and editing in MIDI Studio; the songs themselves may not be redistributed or used commercially.',
 
   // recording/Recorder.ts
-  '録音待機（R）のトラックがありません。録音したいトラックの R を押してください。': 'No track is armed (R). Press R on the track you want to record to.',
-  '録音待機のトラックが複数あり、録音先があいまいです。鍵盤用・ドラム用それぞれ 1 トラックだけ R を押してください。': 'Several tracks are armed, so the target is ambiguous. Arm only one keyboard track and one drum track.',
+  '録音するトラックがありません。トラックを追加してください。': 'There is no track to record to. Add a track.',
   '曲が読み込まれていません。': 'No song is loaded.',
   '録音を取り消しました（カウントイン中）。': 'Recording cancelled (during the count-in).',
   '録音（置き換え）': 'Recording (replace)',
@@ -252,7 +250,7 @@ export const EN_APP: Record<string, string> = {
   '最近のプロジェクト（このブラウザ内）': 'Recent projects (in this browser)',
   '保存された曲はありません。': 'No saved songs.',
   録音の設定: 'Recording settings',
-  '録音先は R（録音待機）を押したトラックです。鍵盤用とドラム用にそれぞれ 1 トラックまで。録音は停止時に 1 回の操作として記録され、Undo で戻せます。': 'Recording goes to the tracks armed with R: up to one keyboard track and one drum track. A take is applied as one operation when you stop, so Undo reverts it.',
+  '録音先は選んでいるトラックです。録音は停止時に 1 回の操作として記録され、Undo で戻せます。': 'Recording goes to the selected track. A take is applied as one operation when you stop, so Undo reverts it.',
   'MIDI 入力の設定': 'MIDI input settings',
   'SysEx / イベントインスペクター': 'SysEx / event inspector',
   キー割り当て: 'Key bindings',

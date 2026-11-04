@@ -124,7 +124,6 @@ export interface MidiTrack {
   drumMapId?: string;
   mute: boolean;
   solo: boolean;
-  recordArm: boolean;
   /** Mixer defaults are stored as MIDI events (CC7/CC10) in `events`; these are UI-only fields. */
   events: MidiEvent[];
   /** End of Track tick from the source SMF (keeps the song length on re-export). */
@@ -211,8 +210,6 @@ export interface RecordingSettings {
   /** use the loop range as punch in/out */
   punch: boolean;
   countInBars: 0 | 1 | 2 | 4;
-  /** selecting a track makes it the only record-armed track (ADR-040) */
-  armFollowsSelection: boolean;
   /** quantize recorded note onsets to the current grid */
   quantize: boolean;
   latencyMs: number;
