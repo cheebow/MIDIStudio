@@ -15,6 +15,13 @@ export interface StartupChoice {
   sampleId?: string;
 }
 
+/** "接続中: A、B ほか 2 台" — the names say what "use" refers to; the per-device switches stay in MIDI › MIDI 入力の設定. */
+export function connectedDevices(names: string[], max = 3): string {
+  if (names.length === 0) return t('接続している機器はありません');
+  const shown = names.slice(0, max).join(t('、'));
+  return names.length > max ? t('接続中: {names} ほか {n} 台', { names: shown, n: names.length - max }) : t('接続中: {names}', { names: shown });
+}
+
 export function StartupDialog({
   audioPhase,
   progress,
@@ -32,7 +39,8 @@ export function StartupDialog({
   prefetchState: 'loading' | 'done' | 'failed';
   soundBankName: string | null;
   midiState: MidiSetupState;
-  midiDevices: number;
+  /** names of the connected devices (known only once the browser has granted Web MIDI) */
+  midiDevices: string[];
   restore: { title: string; savedAt: string } | null;
   onRetrySoundFont: () => void;
   onChooseSoundFont: () => void;
@@ -60,10 +68,12 @@ export function StartupDialog({
     midiState === 'unsupported'
       ? t('このブラウザでは使えません')
       : midiState === 'granted'
-        ? t('接続 {n} 台', { n: midiDevices })
+        ? connectedDevices(midiDevices)
         : midiState === 'denied'
           ? t('ブラウザで許可されていません')
-          : null;
+          : midiState === 'prompt'
+            ? t('「使う」を選ぶとブラウザが許可を求めます')
+            : null;
 
   return (
     <Dialog
@@ -128,7 +138,7 @@ export function StartupDialog({
           </div>
         </fieldset>
         <fieldset>
-          <legend>{t('MIDI キーボード')}</legend>
+          <legend>{t('外部 MIDI キーボード')}</legend>
           {midiChoice ? (
             <>
               <label>
