@@ -9,7 +9,7 @@ import { useEditActions, useEditorState, useServices } from '../../app/store/con
 import { t } from '../../i18n';
 import { isSecondaryClick, useContextMenu } from '../menu/ContextMenu';
 import { emptyMenuItems, noteMenuItems } from '../menu/editMenus';
-import { conductorMarks, drawLoopRuler, drawPlayhead, drawRulerConductorMarks, drawStepCursor, fitCanvas, isBlackKey, pitchName, readTheme } from '../canvas';
+import { barPageScrollLeft, conductorMarks, drawLoopRuler, drawPlayhead, drawRulerConductorMarks, drawStepCursor, fitCanvas, isBlackKey, pitchName, readTheme } from '../canvas';
 import { ControllerLane } from './ControllerLane';
 import { NoteInfoBar } from '../editing/NoteInfoBar';
 import { useAnimationLoop, useDragState, useElementSize, usePlayheadFollow, useSignatureMap, useZoomAnchor } from '../hooks';
@@ -38,7 +38,7 @@ export function PianoRoll() {
   const { store, transport, audioReady, step, input, recorder, reportError } = useServices();
   const editActions = useEditActions();
   const ctxMenu = useContextMenu();
-  const { project, selection, tool } = useEditorState();
+  const { project, selection, tool, reveal } = useEditorState();
   const settings = project.settings;
   const track: MidiTrack | undefined = selectedTrack(project);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -84,6 +84,16 @@ export function PianoRoll() {
     const r = snapTick(t, grid, 'floor');
     return r.tick;
   };
+
+  // Double-click on a clip asks to show its start (ADR-085): page to the bar, as following does.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !reveal || !track) return;
+    const tick = store.takeReveal(track.id);
+    if (tick === null) return;
+    el.scrollLeft = barPageScrollLeft(sig, tick, pxPerTick);
+    follow.hold();
+  }, [reveal, track, store, sig, pxPerTick, follow]);
 
   // When the edited track changes, scroll vertically to its notes (or to the saved pitch).
   const trackId = track?.id;
@@ -304,7 +314,7 @@ export function PianoRoll() {
       }
     }
     if (input.mode === 'step-piano' || input.mode === 'step-drums') drawStepCursor(ctx, Math.round(step.cursor * pxPerTick - view.x) + 0.5, view.h);
-    follow(pos, x, w, scrollRef.current, sig, pxPerTick, settings.followPlayback);
+    follow.update(pos, x, w, scrollRef.current, sig, pxPerTick, settings.followPlayback);
   }, [transport, view, pxPerTick, settings.followPlayback, step, input, recorder, track?.id, sig, follow, notes]);
 
   // Ctrl / ⌘ + wheel (and trackpad pinch, which Chrome reports as wheel + ctrlKey) zooms the roll.

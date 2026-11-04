@@ -84,18 +84,40 @@ export function useAnimationLoop(frame: () => void, deps: readonly unknown[]): v
  * Follow-playback for a horizontally scrolling editor: pages the view by whole bars when the
  * playhead leaves it while playing, and after a seek while stopped (a seek arms the follow for a
  * short time, so it still lands when the scroll area was not yet wide enough on the first frame);
- * a manual scroll while stopped is left alone. Call the returned function once per frame.
+ * a manual scroll while stopped is left alone. Call update() once per frame.
+ * `hold()` keeps a view the user asked for (ADR-085): no paging until the playhead is in view
+ * again, playback starts, or the playhead is moved while stopped (loop wraps keep the hold).
  */
-export function usePlayheadFollow(): (pos: TransportPosition, x: number, viewW: number, el: HTMLElement | null, sig: Parameters<typeof barPageScrollLeft>[0], pxPerTick: number, enabled: boolean) => void {
-  const lastTick = useRef(-1);
-  const armedUntil = useRef(0);
-  return (pos, x, viewW, el, sig, pxPerTick, enabled) => {
-    if (Math.abs(pos.tick - lastTick.current) > 0.5) armedUntil.current = performance.now() + 1500;
-    lastTick.current = pos.tick;
+export function usePlayheadFollow(): PlayheadFollow {
+  const [follow] = useState(() => new PlayheadFollow());
+  return follow;
+}
+
+export class PlayheadFollow {
+  private lastTick = -1;
+  private armedUntil = 0;
+  private held = false;
+  private wasPlaying = false;
+
+  update(pos: TransportPosition, x: number, viewW: number, el: HTMLElement | null, sig: Parameters<typeof barPageScrollLeft>[0], pxPerTick: number, enabled: boolean): void {
+    const jumped = Math.abs(pos.tick - this.lastTick) > 0.5;
+    if ((jumped && !pos.playing) || (pos.playing && !this.wasPlaying)) this.held = false;
+    if (jumped && !this.held) this.armedUntil = performance.now() + 1500;
+    this.lastTick = pos.tick;
+    this.wasPlaying = pos.playing;
     const outside = x > viewW - 20 || x < 0;
-    if (!outside) armedUntil.current = 0;
-    const armed = armedUntil.current > performance.now();
+    if (!outside) {
+      this.armedUntil = 0;
+      this.held = false;
+    }
+    if (this.held) return;
+    const armed = this.armedUntil > performance.now();
     if (enabled && el && outside && (pos.playing || armed)) el.scrollLeft = barPageScrollLeft(sig, pos.tick, pxPerTick);
-  };
+  }
+
+  hold(): void {
+    this.held = true;
+    this.armedUntil = 0;
+  }
 }
 
