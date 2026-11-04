@@ -4,6 +4,7 @@ import { writeSmf } from '../../src/core/smf/writer';
 import { compareSmfSemantics } from '../../src/core/smf/semantic';
 import { openMidiFile } from '../../src/core/project-io/midiFile';
 import { exportSmfBytes, projectToSmf } from '../../src/core/project-io/exportSmf';
+import { moveEvents } from '../../src/core/editing/operations';
 import type { SmfFile } from '../../src/core/smf/types';
 import { bend, build, cc, format0Song, format1Song, meta, off, on, port, program, sysex, sysexF7, tempo, text, timeSig, GS_RESET, GS_RHYTHM_PART_11 } from '../fixtures/songs';
 
@@ -100,5 +101,25 @@ describe('SMF semantic round trip (C13, C08, REQ-MIDI-03)', () => {
       [480, 0x90],
       [960, 0x80],
     ]);
+  });
+
+  it('ADR-082: a note moved onto the end of an imported note of the same pitch is not cut by its kept Note Off', () => {
+    const opened = openMidiFile(build(1, 480, [on(0, 0, 60), off(480, 0, 60), on(480, 0, 60), off(480, 0, 60)]));
+    if (!opened.ok) throw new Error();
+    const p = opened.project;
+    const notes = p.tracks[0].events.filter((e) => e.kind === 'note');
+    const moved = moveEvents(p, [notes[0].id], 1440);
+    if (!moved) throw new Error();
+    const next = { ...p, ...moved.patch };
+    const t = projectToSmf(next).smf.tracks[1].events.filter((e) => e.kind === 'channel');
+    expect(t.map((e) => e.kind === 'channel' && [e.tick, e.status])).toEqual([
+      [960, 0x90],
+      [1440, 0x80],
+      [1440, 0x90],
+      [1920, 0x80],
+    ]);
+    const again = openMidiFile(exportSmfBytes(next).bytes);
+    if (!again.ok) throw new Error();
+    expect(again.issues.map((i) => i.code)).not.toContain('W_IMPORT_NOTE_OVERLAP');
   });
 });

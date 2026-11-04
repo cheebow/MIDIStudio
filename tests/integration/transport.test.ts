@@ -404,6 +404,28 @@ describe('audition uses the track sound', () => {
     t.auditionNote(r.project.tracks[0].id, 64, 100);
     expect(engine.sent.map((x) => x.message)).toEqual([[0xb6, 0, 8], [0xc6, 6], [0x96, 64, 100]]);
   });
+
+  it('ADR-082: a held pedal / bend from the player is not overwritten by the song value on the next note', async () => {
+    const r = openMidiFile(build(1, 480, [program(0, 0, 10), cc(0, 0, 64, 0), cc(0, 0, 1, 0), on(0, 0, 60), off(480, 0, 60)]));
+    if (!r.ok) throw new Error();
+    const engine = new FakeEngine();
+    const t = new Transport(engine);
+    await t.setProject(r.project);
+    t.seek(960);
+    const id = r.project.tracks[0].id;
+    t.sendToTrack(id, [0xb0, 64, 127], { performed: true });
+    t.sendToTrack(id, [0xe0, 0, 80], { performed: true });
+    engine.sent = [];
+    t.auditionNote(id, 62, 100);
+    const msgs = engine.sent.map((x) => x.message);
+    expect(msgs).toEqual([[0xc0, 10], [0xb0, 1, 0], [0x90, 62, 100]]); // program and the untouched CC1 still chased
+    // a mixer preview is not a performance: the song's value is chased as before
+    t.sendToTrack(id, [0xb0, 1, 90]);
+    engine.sent = [];
+    t.auditionNote(id, 64, 100);
+    expect(engine.sent.map((x) => x.message)).toContainEqual([0xb0, 1, 0]);
+    expect(engine.sent.map((x) => x.message)).not.toContainEqual([0xb0, 64, 0]);
+  });
 });
 
 describe('separate preview synth', () => {

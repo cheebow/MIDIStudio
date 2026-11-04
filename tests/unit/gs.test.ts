@@ -8,7 +8,8 @@ import { exportSmfBytes } from '../../src/core/project-io/exportSmf';
 import { readSmf } from '../../src/core/smf/reader';
 import { listRows } from '../../src/core/list/listRows';
 import { setBankProgram, setInitialController, setPitchBendRange } from '../../src/core/editing/channelSetup';
-import { addEvents, createClip } from '../../src/core/editing/operations';
+import { addEvents, createClip, moveClip, moveEvents, updateEvents } from '../../src/core/editing/operations';
+import { quantizeNotes } from '../../src/core/editing/quantize';
 import { sortEvents } from '../../src/core/events/order';
 import { deleteConductorEvent, setTempo, setTimeSignature } from '../../src/core/editing/conductorOps';
 import { GM_PROGRAMS, programLabel } from '../../src/core/gm/instruments';
@@ -245,6 +246,54 @@ describe('a sound set after the notes still sounds before them (ADR-081)', () =>
     const orders = p.tracks[0].events.map((e) => e.originOrder);
     expect(new Set(orders).size).toBe(orders.length);
     expect(Math.max(...orders)).toBeLessThan(p.nextOriginOrder);
+  });
+});
+
+describe('moved events keep the sound before the notes at their new tick (ADR-082)', () => {
+  type P = ReturnType<typeof createEmptyProject>;
+  const kindsAt = (p: P, tick: number) =>
+    sortEvents(p.tracks[0].events.filter((e) => e.tick === tick)).map((e) => (e.kind === 'cc' ? `cc${e.controller}` : e.kind === 'program' ? `pc${e.program}` : e.kind === 'note' ? `n${e.pitch}` : e.kind));
+  const note = (tick: number, pitch: number) => ({ kind: 'note' as const, tick, pitch, velocity: 80, durationTicks: 240, releaseVelocity: 64 });
+  const add = (p: P, events: Parameters<typeof addEvents>[2]) => applyCommand(p, addEvents(p, p.tracks[0].id, events)!.command).project;
+  const ids = (p: P, kind: string) => p.tracks[0].events.filter((e) => e.kind === kind).map((e) => e.id);
+
+  it('a Program Change moved onto a note (list tick edit) goes before it', () => {
+    let p = add(createEmptyProject(), [note(0, 60)]);
+    p = add(p, [{ kind: 'program', tick: 480, program: 27 }]);
+    p = applyCommand(p, updateEvents(p, [{ id: ids(p, 'program')[0], changes: { tick: 0 } }])!).project;
+    expect(kindsAt(p, 0)).toEqual(['pc27', 'n60']);
+  });
+
+  it('a note moved onto a mixer value goes after it; quantize too', () => {
+    let p = add(createEmptyProject(), [note(5, 60), note(1910, 62)]);
+    p = add(p, [{ kind: 'cc', tick: 0, controller: 7, value: 90 }, { kind: 'program', tick: 1920, program: 27 }]);
+    const [n60, n62] = ids(p, 'note');
+    p = applyCommand(p, moveEvents(p, [n60], -5)!).project;
+    expect(kindsAt(p, 0)).toEqual(['cc7', 'n60']);
+    p = applyCommand(p, quantizeNotes(p, [n62], { grid: { num: 480, den: 1 }, strength: 1 })!).project;
+    expect(kindsAt(p, 1920)).toEqual(['pc27', 'n62']);
+    const orders = p.tracks[0].events.map((e) => e.originOrder);
+    expect(new Set(orders).size).toBe(orders.length);
+    expect(Math.max(...orders)).toBeLessThan(p.nextOriginOrder);
+  });
+
+  it('a clip moved onto a tick with a Program Change keeps the Program first; Undo restores', () => {
+    let p = createEmptyProject();
+    const made = createClip(p, p.tracks[0].id, 0, 480);
+    p = applyCommand(p, made.command).project;
+    p = applyCommand(p, addEvents(p, p.tracks[0].id, [note(0, 60)], { clipId: made.clipId })!.command).project; // older than the Program
+    p = add(p, [{ kind: 'program', tick: 1920, program: 27 }, note(1920, 64)]);
+    const moved = applyCommand(p, moveClip(p, made.clipId, 1920)!);
+    expect(kindsAt(moved.project, 1920)).toEqual(['pc27', 'n60', 'n64']); // notes keep their own order
+    expect(applyCommand(moved.project, moved.inverse).project).toEqual(p);
+  });
+
+  it('events moved together keep their own order (an imported Note -> Program stays as is)', () => {
+    const r = openMidiFile(build(1, 480, [on(0, 0, 60), program(0, 0, 5), off(480, 0, 60)]));
+    if (!r.ok) throw new Error();
+    let p = r.project;
+    p = applyCommand(p, moveEvents(p, p.tracks[0].events.map((e) => e.id), 960)!).project;
+    expect(kindsAt(p, 960)).toEqual(['n60', 'pc5']);
   });
 });
 

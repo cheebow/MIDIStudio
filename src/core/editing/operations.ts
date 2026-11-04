@@ -198,6 +198,42 @@ export function deleteEvents(project: MidiProject, ids: Iterable<string>, label 
   return cmd(label, { tracks: replaceTracks(project, changed), clips });
 }
 
+/**
+ * After events moved to another tick (or changed kind), keeps the generation policy at their new
+ * ticks (ADR-082, the move counterpart of ADR-081): a moved event goes before the events already
+ * there whose kind comes later (a Program Change moved onto a note's tick sounds before it; a note
+ * moved onto a tick with a Program Change sounds after it). Events of the same kind keep their
+ * existing order, moved events keep their order among themselves and the others keep theirs. Only
+ * ticks whose order changes are renumbered, from `next`.
+ */
+function settleMoved(events: readonly MidiEvent[], moved: ReadonlySet<string>, next: number): { events: MidiEvent[]; next: number } {
+  const sorted = sortEvents(events);
+  const ticks = new Set(sorted.filter((e) => moved.has(e.id)).map((e) => e.tick));
+  if (ticks.size === 0) return { events: sorted, next };
+  const byTick = new Map<number, MidiEvent[]>();
+  for (const e of sorted) if (ticks.has(e.tick)) byTick.set(e.tick, [...(byTick.get(e.tick) ?? []), e]);
+  const renumbered = new Map<string, number>();
+  for (const group of byTick.values()) {
+    const stay = group.filter((e) => !moved.has(e.id));
+    if (stay.length === 0) continue;
+    const before: MidiEvent[][] = stay.map(() => []);
+    const tail: MidiEvent[] = [];
+    let floor = 0;
+    for (const m of group.filter((e) => moved.has(e.id))) {
+      // before the first event of a later kind; among the same kind the existing order stands
+      const first = stay.findIndex((e) => policyRank(e) > policyRank(m) || (policyRank(e) === policyRank(m) && e.originOrder > m.originOrder));
+      const pos = Math.max(floor, first < 0 ? stay.length : first);
+      floor = pos;
+      (pos < stay.length ? before[pos] : tail).push(m);
+    }
+    const merged = [...stay.flatMap((e, i) => [...before[i], e]), ...tail];
+    if (merged.every((e, i) => e === group[i])) continue;
+    for (const e of merged) renumbered.set(e.id, next++);
+  }
+  if (renumbered.size === 0) return { events: sorted, next };
+  return { events: sortEvents(sorted.map((e) => (renumbered.has(e.id) ? ({ ...e, originOrder: renumbered.get(e.id)! } as MidiEvent) : e))), next };
+}
+
 /** Fields an edit may change. Kind and id are fixed. */
 export type EventChanges = Partial<Omit<NoteEvent, 'id' | 'kind' | 'originOrder'>> & Record<string, unknown>;
 
@@ -208,8 +244,10 @@ export type EventChanges = Partial<Omit<NoteEvent, 'id' | 'kind' | 'originOrder'
 export function updateEvents(project: MidiProject, updates: ReadonlyArray<{ id: string; changes: EventChanges }>, label = 'イベントを変更'): Command | null {
   const byId = new Map(updates.map((u) => [u.id, u.changes]));
   const changed = new Map<TrackId, MidiTrack>();
+  let order = project.nextOriginOrder;
   for (const t of project.tracks) {
     let touched = false;
+    const moved = new Set<string>();
     const events = t.events.map((e) => {
       const ch = byId.get(e.id);
       if (!ch) return e;
@@ -223,12 +261,21 @@ export function updateEvents(project: MidiProject, updates: ReadonlyArray<{ id: 
         delete (next as NoteEvent).releaseOrder;
       }
       assertValidEvent(next);
+      if (next.tick !== e.tick) moved.add(e.id);
       return next;
     });
-    if (touched) changed.set(t.id, { ...t, events: sortEvents(events) });
+    if (!touched) continue;
+    const settled = settleMoved(events, moved, order);
+    order = settled.next;
+    changed.set(t.id, { ...t, events: settled.events });
   }
   if (changed.size === 0) return null;
-  return cmd(label, { tracks: replaceTracks(project, changed), clips: refreshClipBounds(project.clips, changed) });
+  return cmd(label, { tracks: replaceTracks(project, changed), clips: refreshClipBounds(project.clips, changed), ...orderPatch(project, order) });
+}
+
+/** nextOriginOrder in the patch only when the edit used new numbers. */
+function orderPatch(project: MidiProject, next: number): ProjectPatch {
+  return next !== project.nextOriginOrder ? { nextOriginOrder: next } : {};
 }
 
 /**
@@ -240,8 +287,10 @@ export function rewriteEvents(project: MidiProject, ids: Iterable<string>, fn: (
   const wanted = new Set(ids);
   if (wanted.size === 0) return null;
   const changed = new Map<TrackId, MidiTrack>();
+  let order = project.nextOriginOrder;
   for (const t of project.tracks) {
     let touched = false;
+    const moved = new Set<string>();
     const events = t.events.map((e) => {
       if (!wanted.has(e.id)) return e;
       const body = fn(e, t);
@@ -249,12 +298,16 @@ export function rewriteEvents(project: MidiProject, ids: Iterable<string>, fn: (
       touched = true;
       const next = { ...body, id: e.id, originOrder: e.originOrder } as MidiEvent;
       assertValidEvent(next);
+      if (next.tick !== e.tick || policyRank(next) !== policyRank(e)) moved.add(e.id);
       return next;
     });
-    if (touched) changed.set(t.id, { ...t, events: sortEvents(events) });
+    if (!touched) continue;
+    const settled = settleMoved(events, moved, order);
+    order = settled.next;
+    changed.set(t.id, { ...t, events: settled.events });
   }
   if (changed.size === 0) return null;
-  return cmd(label, { tracks: replaceTracks(project, changed), clips: refreshClipBounds(project.clips, changed) });
+  return cmd(label, { tracks: replaceTracks(project, changed), clips: refreshClipBounds(project.clips, changed), ...orderPatch(project, order) });
 }
 
 /** Replaces one event with another body (normally of a different kind), keeping its id and originOrder. */
@@ -382,9 +435,10 @@ export function moveClip(project: MidiProject, clipId: string, deltaTick: number
   );
   // releaseOrder only orders against other events at the same tick; after a move the old order is meaningless.
   const cleaned = events.map((e) => (ids.has(e.id) && e.kind === 'note' && e.releaseOrder !== undefined ? dropReleaseOrder(e) : e));
-  const newTrack = { ...track, events: cleaned };
+  const settled = settleMoved(cleaned, ids, project.nextOriginOrder);
+  const newTrack = { ...track, events: settled.events };
   const clips = project.clips.map((c) => (c.id === clipId ? { ...c, startTick: c.startTick + delta, endTick: c.endTick + delta } : c));
-  return cmd(label, { tracks: replaceTracks(project, new Map([[track.id, newTrack]])), clips });
+  return cmd(label, { tracks: replaceTracks(project, new Map([[track.id, newTrack]])), clips, ...orderPatch(project, settled.next) });
 }
 
 /**
@@ -422,15 +476,16 @@ export function moveClipToTrack(project: MidiProject, clipId: string, trackId: T
   const dst = findTrack(project, trackId);
   const ids = new Set(clip.eventIds);
   const moving = src.events.filter((e) => ids.has(e.id)).map((e) => (e.kind === 'note' && e.releaseOrder !== undefined ? dropReleaseOrder(e) : e));
+  const settled = settleMoved([...dst.events, ...moving], ids, project.nextOriginOrder);
   const tracks = replaceTracks(
     project,
     new Map([
       [src.id, { ...src, events: src.events.filter((e) => !ids.has(e.id)) }],
-      [dst.id, { ...dst, events: sortEvents([...dst.events, ...moving]) }],
+      [dst.id, { ...dst, events: settled.events }],
     ]),
   );
   const clips = project.clips.map((c) => (c.id === clipId ? { ...c, trackId } : c));
-  return cmd(label, { tracks, clips });
+  return cmd(label, { tracks, clips, ...orderPatch(project, settled.next) });
 }
 
 /** Deletes several clips as one command. */

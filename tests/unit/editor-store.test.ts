@@ -32,6 +32,20 @@ describe('EditorStore (shared editing state, CLAUDE.md rule 5)', () => {
     expect(s.getState().history.past).toHaveLength(0);
   });
 
+  it('ADR-082: Undo / Redo of an edit keep the current mute / solo / arm', () => {
+    const s = new EditorStore(createEmptyProject());
+    const id = s.project.tracks[0].id;
+    s.run(addEvents(s.project, id, [{ kind: 'note', tick: 0, pitch: 60, velocity: 100, durationTicks: 480, releaseVelocity: 64 }])!.command);
+    s.setTrackFlags(id, { mute: true, solo: true, recordArm: true });
+    s.undo();
+    expect(s.project.tracks[0].events).toHaveLength(0);
+    expect(s.project.tracks[0]).toMatchObject({ mute: true, solo: true, recordArm: true });
+    s.setTrackFlags(id, { solo: false });
+    s.redo();
+    expect(s.project.tracks[0].events).toHaveLength(1);
+    expect(s.project.tracks[0]).toMatchObject({ mute: true, solo: false, recordArm: true });
+  });
+
   it('ADR-040: with "arm follows selection" on, selecting a track makes it the only armed track', () => {
     const s = new EditorStore(createEmptyProject());
     s.run(addTrack(s.project, { name: 'B' }).command);

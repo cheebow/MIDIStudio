@@ -26,7 +26,7 @@ SpessaSynth のドキュメントでは MIDI 1.0/GM1/GM2/GS/XGをサポートと
 
 - Track0にテンポ/拍子/マーカーなどのConductorイベントを配置。非コンダクターの元メタイベントは対応するTrackに置く。
 - Tick絶対時刻 → stable sort → delta VLQ。生成NoteOffは発音終了Tickに展開。ノートのゲート長が0にならないよう設定上限を検証。
-- 生成イベントが同Tickの場合、Bank Select CC0/32 → Program Change → 発音に影響するCC等 → NoteOff → NoteOn を基本。ただしImport元の明示順序がある場合はその順を可能な限り保持。衝突がある場合の優先ルールをコード・テストに明記。あとから同じTickに足したイベント（ノートのあとに設定した音色・ミキサー値など）も、既存イベントとの間でこの順になるよう、後ろの種類の既存イベントを新しいイベントの後ろに振り直す（既存イベントどうしの順序は変えない。ADR-081）。
+- 生成イベントが同Tickの場合、Bank Select CC0/32 → Program Change → 発音に影響するCC等 → NoteOff → NoteOn を基本。ただしImport元の明示順序がある場合はその順を可能な限り保持。衝突がある場合の優先ルールをコード・テストに明記。あとから同じTickに足したイベント（ノートのあとに設定した音色・ミキサー値など）も、既存イベントとの間でこの順になるよう、後ろの種類の既存イベントを新しいイベントの後ろに振り直す（既存イベントどうしの順序は変えない。ADR-081）。移動・クオンタイズ・クリップの移動などで別の tick に動かしたイベントも、着いた tick でこの順に入れる（同じ種類どうしは今の順。ADR-082）。書き出しでは、読み込んだノートの Note Off の元の位置を保つが、同じ tick・チャンネル・音高の Note On より後ろには置かない（ADR-082）。
 - NoteOff velocity、Pitch Bendの14bit signed表現、Channel Pressure/PolyPressure、RPN/NRPNのCC系列、SysEx、Metaのbytesを保証。
 - SMFのMIDIチャンネルは0..15の生値、UIは1..16。Programは0..127、UIは1..128。防ぐべきoff-by-oneをテスト。
 - Port Prefix `FF 21 01 pp` を該当トラックに書き出す。パート途中で変更する場合はイベントとして保持。再生エンジンが扱うポート順との整合性を検証。

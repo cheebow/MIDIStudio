@@ -4,6 +4,7 @@
 //         values in effect and keep the engine running instead of reloading (an audible gap).
 // 'reload': anything else (notes, programs, tempo, loop, mute / solo...).
 import { portIndex } from '../model/ports';
+import { looseNoteIds } from '../model/looseNotes';
 import type { ConductorEvent, MidiEvent, MidiProject, MidiTrack, TrackMetaEvent } from '../model/types';
 
 export interface LiveController {
@@ -46,6 +47,12 @@ function onlyOrderChanged(a: MidiEvent, b: MidiEvent): boolean {
   return true;
 }
 
+function sameIds(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const id of a) if (!b.has(id)) return false;
+  return true;
+}
+
 function trackSettingsEqual(a: MidiTrack, b: MidiTrack): boolean {
   return a.port === b.port && a.channel === b.channel && a.mute === b.mute && a.solo === b.solo && a.endOfTrackTick === b.endOfTrackTick && a.hasPortPrefix === b.hasPortPrefix;
 }
@@ -80,6 +87,9 @@ export function classifyPlaybackChange(prev: MidiProject, next: MidiProject, pla
     const b = next.tracks[i];
     if (a.id !== b.id) return reload('track order');
     if (!trackSettingsEqual(a, b)) return reload('track settings');
+    // Notes outside every clip are silent (ADR-064): a clip-only edit (resize, delete keeping the
+    // notes, take in) changes what sounds without touching the events (ADR-082).
+    if (prev.clips !== next.clips && !sameIds(looseNoteIds(prev, a), looseNoteIds(next, b))) return reload('clips');
     if (a.events === b.events) continue;
     const old = new Map<string, MidiEvent>();
     for (const e of a.events) old.set(e.id, e);

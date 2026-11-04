@@ -1,7 +1,7 @@
 // Turns a finished take into ONE undoable command (Undo restores the state before recording).
 import type { Command } from '../editing/history';
 import { addEvents, type NewEvent } from '../editing/operations';
-import type { MidiProject } from '../model/types';
+import type { MidiEvent, MidiProject } from '../model/types';
 import { snapTick } from '../timing/grid';
 import type { Rational } from '../timing/rational';
 import type { TakeResult } from './liveTake';
@@ -31,8 +31,17 @@ export function takeToCommand(project: MidiProject, trackId: string, take: TakeR
     const r = opts.replaceRange ?? take.range;
     const track = project.tracks.find((t) => t.id === trackId);
     if (track) {
-      // Replace removes notes and controller data whose onset is in the range (SysEx / meta stay).
-      const removable = new Set(track.events.filter((e) => e.tick >= r.startTick && e.tick < r.endTick && e.kind !== 'sysex' && e.kind !== 'meta' && e.kind !== 'raw').map((e) => e.id));
+      // Replace removes the notes whose onset is in the range, plus only the controller data the take
+      // itself recorded (same CC numbers / bend / pressure). Program, bank select, mixer values and
+      // other set-up the player did not play stay (ADR-082); SysEx / meta / raw always stay.
+      const recordedCc = new Set(events.flatMap((e) => (e.kind === 'cc' && e.controller !== 0 && e.controller !== 32 ? [e.controller] : [])));
+      const recordedKinds = new Set(events.map((e) => e.kind));
+      const replaces = (e: MidiEvent): boolean => {
+        if (e.kind === 'note') return true;
+        if (e.kind === 'cc') return recordedCc.has(e.controller);
+        return (e.kind === 'pitch-bend' || e.kind === 'channel-pressure' || e.kind === 'poly-pressure') && recordedKinds.has(e.kind);
+      };
+      const removable = new Set(track.events.filter((e) => e.tick >= r.startTick && e.tick < r.endTick && replaces(e)).map((e) => e.id));
       const tracks = project.tracks.map((t) => (t.id === trackId ? { ...t, events: t.events.filter((e) => !removable.has(e.id)) } : t));
       const clips = project.clips.map((c) => (c.trackId === trackId ? { ...c, eventIds: c.eventIds.filter((id) => !removable.has(id)) } : c));
       base = { ...project, tracks, clips };
