@@ -81,25 +81,8 @@ export class MidiInputAdapter {
     }
   }
 
-  private pending: Promise<void> | null = null;
-
-  /**
-   * Must be called from a user gesture. Requests access at most once: Chrome returns a new
-   * MIDIAccess with new MIDIInput objects on every request, and a handler left on an earlier one
-   * keeps firing, so every note would arrive twice (recorded as a 1-tick twin). Later calls reuse
-   * the access and only rescan the inputs.
-   */
-  enable(): Promise<void> {
-    if (!this.requestAccess) return Promise.resolve();
-    if (this.access) {
-      this.refresh();
-      return Promise.resolve();
-    }
-    if (!this.pending) this.pending = this.request().finally(() => (this.pending = null));
-    return this.pending;
-  }
-
-  private async request(): Promise<void> {
+  /** Must be called from a user gesture. */
+  async enable(): Promise<void> {
     if (!this.requestAccess) return;
     this._state = 'requesting';
     this.handlers.onChange();

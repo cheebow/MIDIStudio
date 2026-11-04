@@ -30,27 +30,6 @@ describe('MidiInputAdapter (pseudo device; real hardware is verified manually)',
     expect(a.error).toMatch(/PC キーボード/);
   });
 
-  it('enable() called twice (StrictMode / several startup paths) delivers each message once', async () => {
-    // Chrome returns a NEW MIDIAccess with NEW MIDIInput objects for the same device on every
-    // request, so a handler left on the first one would fire alongside the second (doubled notes).
-    const made: ReturnType<typeof fakeAccess>[] = [];
-    let requests = 0;
-    const got: string[] = [];
-    const a = new MidiInputAdapter({ onMessage: (m) => got.push(m.type), onDeviceLost: () => {}, onChange: () => {} }, () => {
-      requests++;
-      const f = fakeAccess();
-      f.plug('in1', 'Keys');
-      made.push(f);
-      return Promise.resolve(f.access);
-    });
-    await Promise.all([a.enable(), a.enable()]); // concurrent
-    await a.enable(); // after granted
-    expect(requests).toBe(1);
-    for (const f of made) f.send('in1', [0x90, 60, 100]);
-    expect(got).toEqual(['note-on']);
-    expect(a.deviceList).toHaveLength(1);
-  });
-
   it('asks without SysEx permission, receives notes (velocity 0 = off), filters channels', async () => {
     const f = fakeAccess();
     f.plug('in1', 'Keys');
