@@ -817,4 +817,4 @@ UI 側とコア／再生側を分けてコード全体を読み直し、確認�
   - ワークレット `spessasynth_processor.min.js` は 594 KB → 753 KB（EFX の DSP ぶん。`scripts/copy-worklet.mjs` が `public/` にコピー）。
 - **決定**: `package.json` の `spessasynth_lib` を 4.4.3、`spessasynth_core` と `overrides` の core を 4.4.5 にする。コードの変更はなし。
 - **互換性影響**: 楽曲データ・設定は変わらない。GS EFX の SysEx を含む曲は、これまで無視されていた EFX が効くので音が変わりうる（本アプリの GS 解釈表（ADR の GS SysEx の節）は EFX を解釈しないままで、16 進表示・編集のみ。音源側で処理されるようになったことは README の対応状況の範囲内）。初回のワークレット読み込みが約 160 KB 増える。
-- **検証**: `npm run typecheck` / `lint` / `build`、`npm run test`（36 ファイル 299 件）通過。E2E 全体（`npx playwright test`、chromium / firefox / webkit）326 件通過・22 件スキップ（更新前と同じスキップ構成。`audio-spike.spec.ts` で新しいワークレットの読み込みと発音を確認）。実際の音（VISION (GS Version) の再生、ループの折り返し、MIDI キーボードの試聴、WAV 書き出し）は**手動確認待ち**。
+- **検証**: `npm run typecheck` / `lint` / `build`、`npm run test`（36 ファイル 299 件）通過。E2E 全体（`npx playwright test`、chromium / firefox / webkit）326 件通過・22 件スキップ（スキップは音源を使うテストの firefox / webkit 分で、`browserName !== 'chromium'` によるもの。`audio-spike.spec.ts` で新しいワークレットの読み込みと発音を確認）。実際の音（VISION (GS Version) の再生、ループの折り返し、MIDI キーボードの試聴、WAV 書き出し）は**手動確認待ち**。
