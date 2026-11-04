@@ -48,6 +48,8 @@ export function PianoRoll() {
   const [scroll, setScroll] = useState({ x: 0, y: 0 });
   const size = useElementSize(scrollRef, { w: 800, h: 300 });
   const [drag, dragRef, setDrag] = useDragState<Drag>();
+  /** velocities being dragged in the lane below: note shading follows them live */
+  const [velPreview, setVelPreview] = useState<ReadonlyMap<string, number> | null>(null);
   const [lastLength, setLastLength] = useState<number | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const auditionRef = useRef<number | null>(null);
@@ -207,7 +209,7 @@ export function PianoRoll() {
       const y = yOf(pitch);
       const nw = Math.max(3, len * pxPerTick);
       const isLoose = loose.has(n.id); // outside every clip: drawn faint, not played (ADR-064)
-      const alpha = (0.45 + (n.velocity / 127) * 0.55) * (isLoose ? 0.35 : 1);
+      const alpha = (0.45 + ((velPreview?.get(n.id) ?? n.velocity) / 127) * 0.55) * (isLoose ? 0.35 : 1);
       ctx.globalAlpha = alpha;
       ctx.fillStyle = isSel ? th.noteSelected : track.color;
       ctx.fillRect(x, y + 1, nw, ROW_H - 2);
@@ -233,7 +235,7 @@ export function PianoRoll() {
       ctx.fillRect(x, y, Math.abs(drag.x1 - drag.x0), Math.abs(drag.y1 - drag.y0));
       ctx.strokeRect(x + 0.5, y + 0.5, Math.abs(drag.x1 - drag.x0), Math.abs(drag.y1 - drag.y0));
     }
-  }, [project, track, notes, loose, view, pxPerTick, gridLen, sig, selection.eventIds, drag, settings.showGhostNotes, themeVersion]);
+  }, [project, track, notes, loose, view, pxPerTick, gridLen, sig, selection.eventIds, drag, velPreview, settings.showGhostNotes, themeVersion]);
 
   // Keyboard column: redrawn every frame by the overlay loop, with the keys being played (PC
   // keyboard / MIDI input / click audition) in the playhead colour and the track's sounding notes
@@ -574,7 +576,7 @@ export function PianoRoll() {
           </div>
         </div>
       </div>
-      <ControllerLane track={track} viewX={view.x} width={view.w - KEYS_W} offsetLeft={KEYS_W} pxPerTick={pxPerTick} snap={snap} />
+      <ControllerLane track={track} viewX={view.x} width={view.w - KEYS_W} offsetLeft={KEYS_W} pxPerTick={pxPerTick} snap={snap} onVelocityPreview={setVelPreview} />
       {warning && (
         <p className="note warn-text" role="status">
           {warning}

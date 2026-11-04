@@ -66,6 +66,8 @@ export function DrumEditor() {
   const [renaming, setRenaming] = useState<number | null>(null);
   /** part picked by a click on its name: the velocity lane shows only its notes (ADR-072, Cubase-style) */
   const [focusPart, setFocusPart] = useState<{ trackId: string; pitch: number } | null>(null);
+  /** velocities being dragged in the lane below: the diamonds follow them live */
+  const [velPreview, setVelPreview] = useState<ReadonlyMap<string, number> | null>(null);
 
   const map = findDrumMap(track?.drumMapId, project.drumMaps);
   const notes = useMemo(() => (track ? track.events.filter((e): e is NoteEvent => e.kind === 'note') : []), [track]);
@@ -166,7 +168,7 @@ export function DrumEditor() {
       if (lane === undefined || tick < t0 - gridLen || tick > t1) continue;
       const x = tick * pxPerTick - view.x;
       const y = RULER_H + lane * LANE_H - view.y + LANE_H / 2;
-      const r = 5 + (n.velocity / 127) * 2;
+      const r = 5 + ((velPreview?.get(n.id) ?? n.velocity) / 127) * 2;
       ctx.globalAlpha = loose.has(n.id) ? 0.35 : 1; // loose: drawn faint, not played
       ctx.fillStyle = drumColor(map, n.pitch);
       ctx.beginPath();
@@ -205,7 +207,7 @@ export function DrumEditor() {
       ctx.fillStyle = th.selection;
       ctx.fillRect(Math.min(drag.x0, drag.x1) - view.x, Math.min(drag.y0, drag.y1) - view.y, Math.abs(drag.x1 - drag.x0), Math.abs(drag.y1 - drag.y0));
     }
-  }, [track, notes, loose, lanes, laneOf, view, gridW, totalH, pxPerTick, gridLen, sig, selection.eventIds, drag, map, project.loop, project.conductor, themeVersion]);
+  }, [track, notes, loose, lanes, laneOf, view, gridW, totalH, pxPerTick, gridLen, sig, selection.eventIds, drag, velPreview, map, project.loop, project.conductor, themeVersion]);
 
   useAnimationLoop(() => {
     const canvas = overlayRef.current;
@@ -511,7 +513,7 @@ export function DrumEditor() {
         </div>
         <DrumPads map={map} />
       </div>
-      <ControllerLane track={track} viewX={view.x} width={gridW} offsetLeft={NAMES_W} pxPerTick={pxPerTick} snap={snap} noteColor={(p) => drumColor(map, p)} pitchFilter={focusLane ? { pitch: focusLane.pitch, name: focusLane.name, onClear: () => setFocusPart(null) } : null} />
+      <ControllerLane track={track} viewX={view.x} width={gridW} offsetLeft={NAMES_W} pxPerTick={pxPerTick} snap={snap} noteColor={(p) => drumColor(map, p)} onVelocityPreview={setVelPreview} pitchFilter={focusLane ? { pitch: focusLane.pitch, name: focusLane.name, onClear: () => setFocusPart(null) } : null} />
       {ctxMenu.element}
     </div>
   );

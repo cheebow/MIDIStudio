@@ -82,3 +82,29 @@ test('drum editor: a click on a part name narrows the velocity lane to that part
   v = await velocities(page);
   expect(Math.abs(v['0:36'] - 20)).toBeLessThanOrEqual(2);
 });
+
+test('drum editor: the diamonds follow a velocity drag live, before the release', async ({ page }) => {
+  await page.goto('/');
+  await importMidi(page, build(1, 480, [on(0, 9, 38, 1), off(120, 9, 38)]));
+  await page.getByRole('tab', { name: 'ドラム' }).click();
+  const grid = page.getByTestId('drum-grid');
+  const gb = (await grid.boundingBox())!;
+  const lb = (await page.locator('[data-testid="drum-lane"][data-pitch="38"]').boundingBox())!;
+  // a point 6.3 px right of the diamond's centre: outside it at velocity 1 (half-width 5), inside at 127 (7)
+  const probe = { x: 320 + 6.3, y: lb.y + lb.height / 2 - gb.y };
+  const pixel = () =>
+    grid.evaluate((c: HTMLCanvasElement, p) => {
+      const k = c.width / c.getBoundingClientRect().width;
+      return Array.from(c.getContext('2d')!.getImageData(Math.round(p.x * k), Math.round(p.y * k), 1, 1).data).join(',');
+    }, probe);
+  const before = await pixel();
+  const { xOf, yOf } = await laneGeometry(page);
+  await page.mouse.move(xOf(0), yOf(1));
+  await page.mouse.down();
+  await page.mouse.move(xOf(0), yOf(127), { steps: 4 });
+  await expect.poll(pixel).not.toBe(before); // still held: the diamond has grown already
+  const during = await pixel();
+  await page.mouse.up();
+  expect(await pixel()).toBe(during); // the release changes nothing more on screen
+  expect((await velocities(page))['0:38']).toBe(127);
+});

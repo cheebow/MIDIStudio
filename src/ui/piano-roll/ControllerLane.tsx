@@ -43,6 +43,7 @@ export function ControllerLane({
   snap,
   noteColor,
   pitchFilter,
+  onVelocityPreview,
 }: {
   track: MidiTrack;
   viewX: number;
@@ -53,6 +54,8 @@ export function ControllerLane({
   noteColor?: (pitch: number) => string;
   /** velocity lane shows and edits only this pitch (a drum part, ADR-072); the label names it and offers to clear it */
   pitchFilter?: { pitch: number; name: string; onClear: () => void } | null;
+  /** velocities being dragged (id → value), null when no velocity drag is active: the editor draws its notes with them live */
+  onVelocityPreview?: (values: ReadonlyMap<string, number> | null) => void;
 }) {
   useThemeVersion(); // re-render (and redraw) when the theme changes
   const { store } = useServices();
@@ -79,6 +82,12 @@ export function ControllerLane({
   /** pixels → value units (no clamping), for drag deltas */
   const dyToDelta = (dy: number) => Math.round((-dy / (LANE_H - 8)) * (range.max - range.min));
   const clampValue = (v: number) => Math.max(range.min, Math.min(range.max, v));
+  // tell the editor what the drag would set, so its notes follow the pointer instead of changing on release
+  useEffect(() => {
+    if (!onVelocityPreview) return;
+    onVelocityPreview(drag?.kind === 'paint' ? drag.values : drag?.kind === 'one' ? new Map([[drag.id, drag.value]]) : null);
+  }, [drag, onVelocityPreview]);
+  useEffect(() => () => onVelocityPreview?.(null), [onVelocityPreview]);
   const valueOf = (e: LaneEvent) => (drag?.kind === 'points' && drag.ids.has(e.id) ? clampValue(e.value + drag.delta) : e.value);
 
   useEffect(() => {
