@@ -205,6 +205,10 @@ export const EN_UI2: Record<string, string> = {
   レーンを折り畳む: 'Collapse lane',
   コントローラーレーン: 'Controller lane',
   'コントローラーレーン: {lane}': 'Controller lane: {lane}',
-  ドラッグでベロシティを描く: 'Drag to draw velocities',
+  'ドラッグでベロシティを描く。同じ位置に重なったノートは、棒の先の丸をつかむとその 1 音だけ変わる': 'Drag to draw velocities. Where notes start together, grab the dot on top of a bar to change only that note',
+  'クリックで試聴し、下のベロシティをこのパーツだけにする。ダブルクリックで名前を変更': 'Click to audition and show only this part in the velocity lane below, double-click to rename',
+  すべてのパーツを表示: 'Show all parts',
+  '{name} だけを表示中。すべてのパーツを表示': 'Showing only {name}. Show all parts',
+  '{name} だけ': '{name} only',
   'クリックでポイントを追加、ポイントをクリックで選択（Shift で追加）、空いているところをドラッグで範囲選択、選択したポイントをドラッグで値を変更、Delete / Alt+クリックで削除': 'Click to add a point, click a point to select it (Shift adds), drag on empty space to select a range, drag selected points to change values, Delete or Alt+click to remove',
 };

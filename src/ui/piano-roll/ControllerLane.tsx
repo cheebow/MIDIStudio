@@ -1,5 +1,7 @@
 // Velocity / CC / Pitch Bend lane under the piano roll (REQ-EDT-05).
-// Velocity: drag across bars to paint values. CC / Pitch Bend (ADR-040): a click on empty space
+// Velocity: drag across bars to paint values; where notes start together (a chord, drum parts),
+// grabbing one bar's head changes only that note (ADR-072); the drum editor can narrow the lane to
+// one part (pitchFilter). CC / Pitch Bend (ADR-040): a click on empty space
 // adds a point at the snapped tick; a click on a point selects it (Shift adds / removes); a drag
 // on empty space selects the points inside the box; dragging a selected point moves the values of
 // every selected point; Delete, Alt+click or the right-click menu delete. Points share the editor
@@ -21,13 +23,40 @@ type LaneEvent = Extract<MidiEvent, { kind: 'cc' | 'pitch-bend' }>;
 type Drag =
   /** velocity paint; onlySelected: the drag started on a selected note, so only selected notes change */
   | { kind: 'paint'; values: Map<string, number>; onlySelected: boolean }
+  /** one note of a stack, grabbed by its bar's head (ADR-072) */
+  | { kind: 'one'; id: string; value: number }
   /** value drag of the selected points; delta in value units */
   | { kind: 'points'; ids: Set<string>; startY: number; delta: number; min: number; max: number }
   /** pointer down on empty space: a click adds a point, a move turns it into a box selection */
   | { kind: 'pending'; x: number; y: number; additive: boolean }
   | { kind: 'box'; x0: number; y0: number; x1: number; y1: number; additive: boolean };
 
-export function ControllerLane({ track, viewX, width, offsetLeft, pxPerTick, snap, noteColor }: { track: MidiTrack; viewX: number; width: number; offsetLeft: number; pxPerTick: number; snap: (t: number) => number; noteColor?: (pitch: number) => string }) {
+/** px around a bar's head that grab it */
+const HEAD_HIT_PX = 6;
+
+export function ControllerLane({
+  track,
+  viewX,
+  width,
+  offsetLeft,
+  pxPerTick,
+  snap,
+  noteColor,
+  pitchFilter,
+  onVelocityPreview,
+}: {
+  track: MidiTrack;
+  viewX: number;
+  width: number;
+  offsetLeft: number;
+  pxPerTick: number;
+  snap: (t: number) => number;
+  noteColor?: (pitch: number) => string;
+  /** velocity lane shows and edits only this pitch (a drum part, ADR-072); the label names it and offers to clear it */
+  pitchFilter?: { pitch: number; name: string; onClear: () => void } | null;
+  /** velocities being dragged (id → value), null when no velocity drag is active: the editor draws its notes with them live */
+  onVelocityPreview?: (values: ReadonlyMap<string, number> | null) => void;
+}) {
   useThemeVersion(); // re-render (and redraw) when the theme changes
   const { store } = useServices();
   const { project, selection } = useEditorState();
@@ -44,7 +73,8 @@ export function ControllerLane({ track, viewX, width, offsetLeft, pxPerTick, sna
     () => (lane === 'velocity' ? [] : track.events.filter((e): e is LaneEvent => (isPb ? e.kind === 'pitch-bend' : e.kind === 'cc' && e.controller === lane))),
     [track.events, lane, isPb],
   );
-  const notes = useMemo(() => track.events.filter((e) => e.kind === 'note'), [track.events]);
+  const filterPitch = pitchFilter?.pitch;
+  const notes = useMemo(() => track.events.filter((e): e is Extract<MidiEvent, { kind: 'note' }> => e.kind === 'note' && (filterPitch === undefined || e.pitch === filterPitch)), [track.events, filterPitch]);
   const selectedPoints = useMemo(() => laneEvents.filter((e) => selection.eventIds.has(e.id)), [laneEvents, selection.eventIds]);
 
   const valueToY = (v: number) => LANE_H - 4 - ((v - range.min) / (range.max - range.min)) * (LANE_H - 8);
@@ -52,6 +82,12 @@ export function ControllerLane({ track, viewX, width, offsetLeft, pxPerTick, sna
   /** pixels → value units (no clamping), for drag deltas */
   const dyToDelta = (dy: number) => Math.round((-dy / (LANE_H - 8)) * (range.max - range.min));
   const clampValue = (v: number) => Math.max(range.min, Math.min(range.max, v));
+  // tell the editor what the drag would set, so its notes follow the pointer instead of changing on release
+  useEffect(() => {
+    if (!onVelocityPreview) return;
+    onVelocityPreview(drag?.kind === 'paint' ? drag.values : drag?.kind === 'one' ? new Map([[drag.id, drag.value]]) : null);
+  }, [drag, onVelocityPreview]);
+  useEffect(() => () => onVelocityPreview?.(null), [onVelocityPreview]);
   const valueOf = (e: LaneEvent) => (drag?.kind === 'points' && drag.ids.has(e.id) ? clampValue(e.value + drag.delta) : e.value);
 
   useEffect(() => {
@@ -71,16 +107,21 @@ export function ControllerLane({ track, viewX, width, offsetLeft, pxPerTick, sna
     const t0 = viewX / pxPerTick;
     const t1 = (viewX + width) / pxPerTick;
     if (lane === 'velocity') {
-      const paint = drag?.kind === 'paint' ? drag.values : null;
-      for (const n of notes) {
-        if (n.kind !== 'note' || n.tick < t0 - 1 || n.tick > t1) continue;
-        const v = paint?.get(n.id) ?? n.velocity;
+      const visible = notes.filter((n) => n.tick >= t0 - 1 && n.tick <= t1);
+      // notes sharing a pixel column: their heads are drawn larger, as each one can be grabbed alone
+      const perColumn = new Map<number, number>();
+      for (const n of visible) {
+        const c = Math.round(n.tick * pxPerTick - viewX);
+        perColumn.set(c, (perColumn.get(c) ?? 0) + 1);
+      }
+      for (const n of visible) {
+        const v = velocityOf(n);
         const x = n.tick * pxPerTick - viewX;
-        ctx.fillStyle = selection.eventIds.has(n.id) ? th.noteSelected : noteColor && n.kind === 'note' ? noteColor(n.pitch) : track.color;
+        ctx.fillStyle = selection.eventIds.has(n.id) || (drag?.kind === 'one' && drag.id === n.id) ? th.noteSelected : noteColor ? noteColor(n.pitch) : track.color;
         const y = valueToY(v);
         ctx.fillRect(x, y, 3, LANE_H - 4 - y);
         ctx.beginPath();
-        ctx.arc(x + 1.5, y, 2.5, 0, Math.PI * 2);
+        ctx.arc(x + 1.5, y, (perColumn.get(Math.round(x)) ?? 0) > 1 ? 3.5 : 2.5, 0, Math.PI * 2);
         ctx.fill();
       }
       return;
@@ -124,6 +165,30 @@ export function ControllerLane({ track, viewX, width, offsetLeft, pxPerTick, sna
       ctx.setLineDash([]);
     }
   });
+
+  function velocityOf(n: Extract<MidiEvent, { kind: 'note' }>): number {
+    if (drag?.kind === 'paint') return drag.values.get(n.id) ?? n.velocity;
+    if (drag?.kind === 'one' && drag.id === n.id) return drag.value;
+    return n.velocity;
+  }
+
+  /** where several notes start at x: the one whose bar head is nearest to y (within HEAD_HIT_PX) */
+  function stackHeadAt(x: number, y: number): string | null {
+    const ids = new Set(notesAt(x));
+    if (ids.size < 2) return null; // a lone bar keeps painting, so a stroke can start on it
+    let best: string | null = null;
+    let bestD = HEAD_HIT_PX + 1;
+    for (const n of notes) {
+      if (!ids.has(n.id)) continue;
+      const d = Math.abs(valueToY(n.velocity) - y);
+      // equal heights: prefer a selected note, so the one picked in the editor is the one grabbed
+      if (d < bestD || (d === bestD && selection.eventIds.has(n.id))) {
+        best = n.id;
+        bestD = d;
+      }
+    }
+    return bestD <= HEAD_HIT_PX ? best : null;
+  }
 
   function notesAt(x: number): string[] {
     const t = (x + viewX) / pxPerTick;
@@ -173,6 +238,11 @@ export function ControllerLane({ track, viewX, width, offsetLeft, pxPerTick, sna
     const y = e.clientY - rect.top;
     e.currentTarget.setPointerCapture(e.pointerId);
     if (lane === 'velocity') {
+      const head = stackHeadAt(x, y);
+      if (head) {
+        setDrag({ kind: 'one', id: head, value: Math.max(1, yToValue(y)) });
+        return;
+      }
       const values = new Map<string, number>();
       const targets = notesAt(x);
       const sel = targets.filter((id) => selection.eventIds.has(id));
@@ -209,10 +279,12 @@ export function ControllerLane({ track, viewX, width, offsetLeft, pxPerTick, sna
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     if (!d) {
-      if (lane !== 'velocity') e.currentTarget.style.cursor = pointAt(x, y) ? 'ns-resize' : 'crosshair';
+      e.currentTarget.style.cursor = (lane === 'velocity' ? stackHeadAt(x, y) : pointAt(x, y)) ? 'ns-resize' : 'crosshair';
       return;
     }
-    if (d.kind === 'paint') {
+    if (d.kind === 'one') {
+      setDrag({ ...d, value: Math.max(1, yToValue(y)) });
+    } else if (d.kind === 'paint') {
       const values = new Map(d.values);
       const v = Math.max(1, yToValue(y));
       const under = notesAt(x);
@@ -231,7 +303,10 @@ export function ControllerLane({ track, viewX, width, offsetLeft, pxPerTick, sna
     const d = dragRef.current;
     setDrag(null);
     if (!d) return;
-    if (d.kind === 'paint') {
+    if (d.kind === 'one') {
+      const n = notes.find((x) => x.id === d.id);
+      if (n && n.velocity !== d.value) store.run(updateEvents(store.project, [{ id: d.id, changes: { velocity: d.value } }], 'ベロシティを変更'));
+    } else if (d.kind === 'paint') {
       if (d.values.size > 0) store.run(updateEvents(store.project, [...d.values].map(([id, velocity]) => ({ id, changes: { velocity } })), 'ベロシティを変更'));
     } else if (d.kind === 'points') {
       if (d.delta !== 0) {
@@ -289,12 +364,17 @@ export function ControllerLane({ track, viewX, width, offsetLeft, pxPerTick, sna
           </option>
         ))}
       </select>
+      {lane === 'velocity' && pitchFilter && !collapsed && (
+        <button className="lane-filter" onClick={pitchFilter.onClear} title={t('すべてのパーツを表示')} aria-label={t('{name} だけを表示中。すべてのパーツを表示', { name: pitchFilter.name })}>
+          {t('{name} だけ', { name: pitchFilter.name })} ×
+        </button>
+      )}
       </div>
       {!collapsed && <canvas
         ref={canvasRef}
         className="lane-canvas"
         aria-label={t('コントローラーレーン: {lane}', { lane: lane === 'velocity' ? 'Velocity' : isPb ? 'Pitch Bend' : `CC${lane}` })}
-        title={lane === 'velocity' ? t('ドラッグでベロシティを描く') : t('クリックでポイントを追加、ポイントをクリックで選択（Shift で追加）、空いているところをドラッグで範囲選択、選択したポイントをドラッグで値を変更、Delete / Alt+クリックで削除')}
+        title={lane === 'velocity' ? t('ドラッグでベロシティを描く。同じ位置に重なったノートは、棒の先の丸をつかむとその 1 音だけ変わる') : t('クリックでポイントを追加、ポイントをクリックで選択（Shift で追加）、空いているところをドラッグで範囲選択、選択したポイントをドラッグで値を変更、Delete / Alt+クリックで削除')}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

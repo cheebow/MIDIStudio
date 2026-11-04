@@ -172,7 +172,6 @@ export const EN_UI: Record<string, string> = {
   'Track メニューの「ドラムトラックにする」で切り替えられます': 'Switch with Track › Make it a drum track',
   メロディ表示のトラックです: 'This track is shown as melodic',
   レーン名: 'Lane name',
-  'クリックで試聴、ダブルクリックで名前を変更': 'Click to audition, double-click to rename',
   '{name} を上へ': 'Move {name} up',
   '{name} を下へ': 'Move {name} down',
   '{name} を隠す': 'Hide {name}',
