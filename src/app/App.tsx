@@ -7,11 +7,11 @@ import { Transport } from '../playback/Transport';
 import { Metronome } from '../playback/Metronome';
 import { openMidiFile } from '../core/project-io/midiFile';
 import { exportSmfBytes } from '../core/project-io/exportSmf';
-import { parseProjectFile, serializeProject } from '../core/project-io/projectFile';
+import { MAX_PROJECT_FILE_CHARS, parseProjectFile, serializeProject } from '../core/project-io/projectFile';
 import { looseNoteCount, withoutLooseNotes } from '../core/model/looseNotes';
 import { createStarterProject } from '../core/model/defaults';
 import type { MidiProject } from '../core/model/types';
-import type { ImportIssue } from '../core/smf/types';
+import { SMF_LIMITS, type ImportIssue } from '../core/smf/types';
 import { addEvents, addTrack, channelInsertIndex, deleteClips, deleteEvents, duplicateEvents, duplicateTrack, moveEvents, removeTrack, mergeClips, splitClip, updateEvents } from '../core/editing/operations';
 import { copyClips, copyEvents, duplicateClips, pasteClips, tracksRelativeTo, pasteEvents } from '../core/editing/clipboard';
 import type { Command } from '../core/editing/history';
@@ -257,6 +257,11 @@ export default function App() {
   const readFailed = (name: string, e: unknown) => setError(t('{name} を開けませんでした（現在の曲はそのままです）: {errors}', { name, errors: t(errorText(e)) }));
 
   async function importMidi(file: File) {
+    // checked before reading: a huge file would be read into memory first (ADR-087)
+    if (file.size > SMF_LIMITS.maxBytes) {
+      setError(t('{name} を開けませんでした（現在の曲はそのままです）: {errors}', { name: file.name, errors: t('MIDI ファイルが大きすぎます（{bytes} バイト、上限 {maxMiB} MiB）。', { bytes: file.size, maxMiB: SMF_LIMITS.maxBytes / 1024 / 1024 }) }));
+      return;
+    }
     let bytes: Uint8Array;
     try {
       bytes = new Uint8Array(await file.arrayBuffer());
@@ -294,6 +299,10 @@ export default function App() {
   }
 
   async function openProject(file: File) {
+    if (file.size > MAX_PROJECT_FILE_CHARS) {
+      setError(t('{name} を開けませんでした（現在の曲はそのままです）: {errors}', { name: file.name, errors: t('プロジェクトファイルが大きすぎます。') }));
+      return;
+    }
     let text: string;
     try {
       text = await file.text();
@@ -312,10 +321,14 @@ export default function App() {
 
   async function saveToBrowser() {
     const p = store.project;
+    const rev = store.getState().revision;
     try {
       await db.saveProject({ id: p.id, title: p.title, savedAt: new Date().toISOString(), json: serializeProject(p) });
-      store.markSaved();
-      await db.clearAutosave().catch(() => undefined);
+      // an edit made while saving is not in the saved copy: it stays unsaved, and so does its autosave (ADR-087)
+      if (store.getState().revision === rev) {
+        store.markSaved();
+        await db.clearAutosave().catch(() => undefined);
+      }
       setInfo(t('「{title}」をブラウザ内に保存しました。', { title: p.title }));
     } catch (e) {
       setError(e instanceof StorageError ? e.message : String(e));
@@ -670,7 +683,7 @@ export default function App() {
         {!settings.editorCollapsed && (
           <Splitter
             label={t('下部エディターの高さ')}
-            height={settings.editorHeight ?? Math.round(window.innerHeight * 0.55)}
+            height={Math.min(settings.editorHeight ?? Math.round(window.innerHeight * 0.55), Math.max(200, window.innerHeight - 220))}
             min={160}
             max={Math.max(200, window.innerHeight - 220)}
             onResize={(h) => store.updateSettings({ editorHeight: h })}
@@ -680,7 +693,9 @@ export default function App() {
         <section
           className={`editor-panel${settings.editorCollapsed ? ' collapsed' : ''}`}
           aria-label={t('エディター')}
-          style={settings.editorCollapsed ? undefined : settings.editorHeight ? { flex: 'none', height: settings.editorHeight } : undefined}
+          // the saved height, but it gives way (down to 160px) when the window is shorter than the one it
+          // was set on, so the status bar is never pushed off the page (ADR-087)
+          style={settings.editorCollapsed ? undefined : settings.editorHeight ? { flex: '0 1 auto', height: settings.editorHeight, minHeight: 160 } : undefined}
         >
           <div className="tabs" role="tablist">
             {tabs.map((tab) => (

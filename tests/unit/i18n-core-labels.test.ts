@@ -9,7 +9,7 @@ function files(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
     if (statSync(p).isDirectory()) files(p, out);
-    else if (/\.ts$/.test(name)) out.push(p);
+    else if (/\.tsx?$/.test(name)) out.push(p);
   }
   return out;
 }
@@ -42,5 +42,21 @@ describe('i18n: core labels and messages (ADR-061)', () => {
 
   it('every EditError / Error message has an English text', () => {
     expect([...errors].filter(([k]) => !hasEnglish(k)).map(([k, f]) => `${f}: ${k}`)).toEqual([]);
+  });
+});
+
+// ADR-087: labels passed to the store from the editors (store.run(op(..., 'ドラムノートを入力'))) are
+// shown with t() in the status bar and the undo menu as well.
+describe('i18n: undo labels written in the UI (ADR-087)', () => {
+  const labels = new Map<string, string>();
+  for (const f of [...files('src/ui'), ...files('src/app')]) {
+    if (f.includes('/help/')) continue;
+    const src = readFileSync(f, 'utf8');
+    for (const m of src.matchAll(LABEL)) if (JP.test(m[1])) labels.set(m[1], f);
+    for (const m of src.matchAll(/\beditMap\('((?:[^'\\]|\\.)*)'/g)) labels.set(m[1], f); // drum map edits
+  }
+  it('every label has an English text', () => {
+    expect(labels.size).toBeGreaterThan(5);
+    expect([...labels].filter(([k]) => !hasEnglish(k)).map(([k, f]) => `${f}: ${k}`)).toEqual([]);
   });
 });

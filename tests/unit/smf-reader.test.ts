@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { readSmf } from '../../src/core/smf/reader';
 import { SMF_LIMITS } from '../../src/core/smf/types';
+import { openMidiFile } from '../../src/core/project-io/midiFile';
+import { buildPlaybackSnapshot } from '../../src/core/project-io/playbackSnapshot';
 import { build, chunk, format0Song, format1Song, meta, off, on, smf, sysex, sysexF7, tempo, trackBytes, vlq, GS_RESET } from '../fixtures/songs';
 
 const ok = (bytes: Uint8Array) => {
@@ -104,8 +106,16 @@ describe('SMF reader', () => {
     if (!smpte.ok) expect(smpte.errors[0].code).toBe('E_SMF_SMPTE');
   });
 
-  it('rejects a zero tempo and a non-SMF file', () => {
-    expect(readSmf(build(0, 480, [tempo(0, 0)])).ok).toBe(false);
+  it('passes a zero tempo on (the importer keeps it raw with a warning, ADR-087); rejects a non-SMF file', () => {
+    expect(readSmf(build(0, 480, [tempo(0, 0)])).ok).toBe(true);
+    const o = openMidiFile(build(1, 480, [tempo(0, 500000), tempo(1920, 0)], [on(0, 0, 60), off(480, 0, 60)]));
+    if (!o.ok) throw new Error('should open');
+    expect(o.issues.filter((i) => i.code === 'W_IMPORT_BAD_CONDUCTOR_META')).toHaveLength(1);
+    expect(o.project.conductorMeta.filter((m) => m.kind === 'meta' && m.metaType === 0x51)).toHaveLength(1); // kept, not dropped
+    // ...and never reaches the engine
+    const snap = readSmf(buildPlaybackSnapshot(o.project).smf);
+    if (!snap.ok) throw new Error('snapshot');
+    expect(snap.smf.tracks.flatMap((t) => t.events).filter((e) => e.kind === 'meta' && e.metaType === 0x51)).toHaveLength(1);
     expect(readSmf(new Uint8Array([1, 2, 3])).ok).toBe(false);
   });
 

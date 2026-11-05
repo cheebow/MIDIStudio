@@ -379,6 +379,7 @@ export function ControllerLane({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={() => setDrag(null)}
+        onLostPointerCapture={() => setDrag(null)} // ADR-087
         onContextMenu={onContextMenu}
       />}
       {ctxMenu.element}

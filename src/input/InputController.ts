@@ -30,6 +30,11 @@ export class InputController {
   private listeners = new Set<Listener>();
   /** track that received each held note (so note-off goes to the same place) */
   private routed = new Map<string, string>();
+  /**
+   * Pedals (CC64 / 66 / 67) down and pitch bend away from centre, per MIDI source: released with
+   * the source's notes when the device goes away (ADR-087). key = `${source}:${target}:${controller | -1}`
+   */
+  private heldControls = new Map<string, { sourceId: string; target: 'piano' | 'drum'; controller: number; channel?: number }>();
   /** extra consumers (step / live recorders) */
   private sinks = new Set<(e: CapturedInput, trackId: string | null) => void>();
   /** keep the incoming MIDI channel on recorded events instead of the track channel */
@@ -159,9 +164,11 @@ export class InputController {
         break;
       }
       case 'cc':
+        if (m.controller === 64 || m.controller === 66 || m.controller === 67) this.noteControl(sourceId, target, m.controller, m.value >= 64, ch.channel);
         this.dispatch({ type: 'cc', controller: m.controller, value: m.value, ...base });
         break;
       case 'pitch-bend':
+        this.noteControl(sourceId, target, -1, m.value !== 0, ch.channel);
         this.dispatch({ type: 'pitch-bend', value: m.value, ...base });
         break;
       case 'channel-pressure':
@@ -176,7 +183,21 @@ export class InputController {
   }
 
   /** Releases every note held by one source (device unplugged / disabled). */
+  private noteControl(sourceId: string, target: 'piano' | 'drum', controller: number, engaged: boolean, channel?: number) {
+    const key = `${sourceId}:${target}:${controller}`;
+    if (engaged) this.heldControls.set(key, { sourceId, target, controller, ...(channel !== undefined ? { channel } : {}) });
+    else this.heldControls.delete(key);
+  }
+
   releaseSource(sourceId: string): void {
+    // pedals up and the bend back to centre first, so the released notes do not ring on (ADR-087)
+    for (const [key, c] of [...this.heldControls]) {
+      if (c.sourceId !== sourceId && !c.sourceId.startsWith(`${sourceId}#`)) continue;
+      this.heldControls.delete(key);
+      const base = { sourceId: c.sourceId, atMs: performance.now(), target: c.target, ...(c.channel !== undefined ? { channel: c.channel } : {}) };
+      if (c.controller < 0) this.dispatch({ type: 'pitch-bend', value: 0, ...base });
+      else this.dispatch({ type: 'cc', controller: c.controller, value: 0, ...base });
+    }
     for (const key of [...this.routed.keys()]) {
       // key = `${source}:${target}:${pitch}`, where a MIDI source is `${sourceId}#${channel}`;
       // device ids may themselves contain ':'

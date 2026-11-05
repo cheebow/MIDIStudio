@@ -65,78 +65,110 @@ export class ProjectStore {
   private db(): Promise<IDBDatabase> {
     if (!this.factory) return Promise.reject(new StorageError('unavailable', t('このブラウザでは IndexedDB を使えないため、ブラウザ内保存・自動保存は無効です。ファイルとして保存してください。')));
     if (!this.dbPromise) {
-      this.dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
+      const opened: Promise<IDBDatabase> = new Promise<IDBDatabase>((resolve, reject) => {
         const open = this.factory!.open(DB_NAME, DB_VERSION);
         open.onupgradeneeded = () => {
           const db = open.result;
           if (!db.objectStoreNames.contains(PROJECTS)) db.createObjectStore(PROJECTS, { keyPath: 'id' });
           if (!db.objectStoreNames.contains(AUTOSAVE)) db.createObjectStore(AUTOSAVE);
         };
-        open.onsuccess = () => resolve(open.result);
+        open.onsuccess = () => {
+          const db = open.result;
+          // The browser can close the connection (site data cleared, a newer version opened in another
+          // tab): drop it so the next call opens a new one instead of failing until a reload (ADR-087).
+          const forget = () => {
+            if (this.dbPromise === opened) this.dbPromise = null;
+          };
+          db.onclose = forget;
+          db.onversionchange = () => {
+            db.close();
+            forget();
+          };
+          resolve(db);
+        };
         open.onerror = () => reject(wrap(open.error));
         open.onblocked = () => reject(new StorageError('blocked', t('別のタブがデータベースを使用中です。他の MIDI Studio のタブを閉じてください。')));
       }).catch((e: unknown) => {
         this.dbPromise = null;
         throw e;
       });
+      this.dbPromise = opened;
     }
     return this.dbPromise;
   }
 
+  /**
+   * Runs `fn` with the database; when the connection turned out to be closed (InvalidStateError on
+   * transaction()), opens a new one and tries once more (ADR-087).
+   */
+  private async withDb<T>(fn: (db: IDBDatabase) => Promise<T>): Promise<T> {
+    const db = await this.db();
+    try {
+      return await fn(db);
+    } catch (e) {
+      if (!(e instanceof DOMException && e.name === 'InvalidStateError')) throw e;
+      if (this.dbPromise && (await this.dbPromise.catch(() => null)) === db) this.dbPromise = null;
+      return fn(await this.db());
+    }
+  }
+
   async saveProject(p: StoredProject): Promise<void> {
     try {
-      const db = await this.db();
-      const tx = db.transaction(PROJECTS, 'readwrite');
-      tx.objectStore(PROJECTS).put(p);
-      await done(tx);
+      await this.withDb((db) => {
+        const tx = db.transaction(PROJECTS, 'readwrite');
+        tx.objectStore(PROJECTS).put(p);
+        return done(tx);
+      });
     } catch (e) {
       throw e instanceof StorageError ? e : wrap(e);
     }
   }
 
   async loadProject(id: string): Promise<StoredProject | null> {
-    const db = await this.db();
-    const r = await req(db.transaction(PROJECTS, 'readonly').objectStore(PROJECTS).get(id));
+    const r = await this.withDb((db) => req(db.transaction(PROJECTS, 'readonly').objectStore(PROJECTS).get(id)));
     return (r as StoredProject | undefined) ?? null;
   }
 
   async listProjects(): Promise<ProjectSummary[]> {
-    const db = await this.db();
-    const all = (await req(db.transaction(PROJECTS, 'readonly').objectStore(PROJECTS).getAll())) as StoredProject[];
+    const all = (await this.withDb((db) => req(db.transaction(PROJECTS, 'readonly').objectStore(PROJECTS).getAll()))) as unknown[];
+    // a damaged or foreign record is skipped, not allowed to break the whole list (ADR-087)
     return all
-      .map((p) => ({ id: p.id, title: p.title, savedAt: p.savedAt, sizeChars: p.json.length }))
+      .filter((p): p is StoredProject => typeof p === 'object' && p !== null && typeof (p as StoredProject).id === 'string' && typeof (p as StoredProject).json === 'string')
+      .map((p) => ({ id: p.id, title: typeof p.title === 'string' ? p.title : p.id, savedAt: typeof p.savedAt === 'string' ? p.savedAt : '', sizeChars: p.json.length }))
       .sort((a, b) => (a.savedAt < b.savedAt ? 1 : a.savedAt > b.savedAt ? -1 : 0));
   }
 
   async deleteProject(id: string): Promise<void> {
-    const db = await this.db();
-    const tx = db.transaction(PROJECTS, 'readwrite');
-    tx.objectStore(PROJECTS).delete(id);
-    await done(tx);
+    await this.withDb((db) => {
+      const tx = db.transaction(PROJECTS, 'readwrite');
+      tx.objectStore(PROJECTS).delete(id);
+      return done(tx);
+    });
   }
 
   async saveAutosave(p: StoredProject): Promise<void> {
     try {
-      const db = await this.db();
-      const tx = db.transaction(AUTOSAVE, 'readwrite');
-      tx.objectStore(AUTOSAVE).put(p, AUTOSAVE_KEY);
-      await done(tx);
+      await this.withDb((db) => {
+        const tx = db.transaction(AUTOSAVE, 'readwrite');
+        tx.objectStore(AUTOSAVE).put(p, AUTOSAVE_KEY);
+        return done(tx);
+      });
     } catch (e) {
       throw e instanceof StorageError ? e : wrap(e);
     }
   }
 
   async loadAutosave(): Promise<StoredProject | null> {
-    const db = await this.db();
-    const r = await req(db.transaction(AUTOSAVE, 'readonly').objectStore(AUTOSAVE).get(AUTOSAVE_KEY));
+    const r = await this.withDb((db) => req(db.transaction(AUTOSAVE, 'readonly').objectStore(AUTOSAVE).get(AUTOSAVE_KEY)));
     return (r as StoredProject | undefined) ?? null;
   }
 
   async clearAutosave(): Promise<void> {
-    const db = await this.db();
-    const tx = db.transaction(AUTOSAVE, 'readwrite');
-    tx.objectStore(AUTOSAVE).delete(AUTOSAVE_KEY);
-    await done(tx);
+    await this.withDb((db) => {
+      const tx = db.transaction(AUTOSAVE, 'readwrite');
+      tx.objectStore(AUTOSAVE).delete(AUTOSAVE_KEY);
+      return done(tx);
+    });
   }
 
   close(): void {

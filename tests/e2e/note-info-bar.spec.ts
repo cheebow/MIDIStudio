@@ -52,6 +52,10 @@ test('piano roll: the bar shows one note, a range for a chord, and edits by typi
   await expect(field(page, '音高')).toHaveAttribute('aria-invalid', 'true');
   await field(page, '音高').press('Escape');
   await expect(field(page, '音高')).toHaveValue('D4–A4');
+  // ADR-087: Esc throws away a readable draft too (it was applied by the blur that Esc caused)
+  await field(page, 'ベロシティ').fill('100');
+  await field(page, 'ベロシティ').press('Escape');
+  expect((await notesOut(page)).map((n) => n!.vel)).toEqual([81, 81, 81]);
   // each edit is one undo step (from the grid)
   await page.getByTestId('piano-roll-grid').focus();
   await undo(page);

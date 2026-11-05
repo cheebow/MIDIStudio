@@ -5,6 +5,7 @@ import { useServices } from '../../app/store/context';
 import { t } from '../../i18n';
 import { Dialog } from '../Dialog';
 import { useNoteTarget } from './noteTarget';
+import { NumberInput } from '../NumberInput';
 
 type Kind = VelocityOp['kind'];
 
@@ -28,7 +29,7 @@ export function VelocityDialog({ onClose }: { onClose: () => void }) {
     }
   };
   const num = (label: string, v: number, set: (n: number) => void, min: number, max: number) => (
-    <input type="number" aria-label={label} min={min} max={max} value={v} onChange={(e) => set(Math.max(min, Math.min(max, Number(e.target.value) || 0)))} className="pct" />
+    <NumberInput aria-label={label} min={min} max={max} value={v} onValue={set} className="pct" />
   );
   const option = (k: Kind, label: string, control: React.ReactNode) => (
     <label>

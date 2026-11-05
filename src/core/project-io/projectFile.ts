@@ -3,7 +3,7 @@
 // the caller decides (O04).
 import { base64ToBytes } from '../model/base64';
 import { isValidPort } from '../model/ports';
-import { defaultInputPresets, defaultViewSettings } from '../model/defaults';
+import { defaultInputPresets, defaultViewSettings, TRACK_COLORS } from '../model/defaults';
 import type { HumanizeSettings, ListSettings, MidiProject, ProjectViewSettings, QuantizeSettings, RecordingSettings, TmSettings } from '../model/types';
 import { SMF_LIMITS } from '../smf/types';
 import { t } from '../../i18n';
@@ -71,11 +71,84 @@ export function parseProjectFile(text: string): ProjectParseResult {
   // Settings and key maps gain fields over time; missing ones fall back to defaults.
   const project: MidiProject = adoptLooseNotes({
     ...loaded,
-    tracks: loaded.tracks.map(dropRecordArm), // files saved before ADR-080 carry it; the record target is now the selected track
+    // files saved before ADR-080 carry recordArm; the record target is now the selected track
+    tracks: loaded.tracks.map((tr, i) => sanitizeTrack(dropRecordArm(tr), i)),
+    clips: loaded.clips.map(sanitizeClip),
     settings: sanitizeSettings(loaded.settings as unknown, defaultViewSettings(loaded.ppq), new Set(loaded.tracks.map((t) => t.id))),
-    inputPresets: { ...defaultInputPresets(), ...loaded.inputPresets },
+    inputPresets: sanitizeInputPresets(loaded.inputPresets as unknown),
+    ...sanitizeExtras(loaded),
   }); // notes outside every clip would be silent (ADR-064): older files get clips around them
   return { ok: true, project, ...(from !== CURRENT_SCHEMA_VERSION ? { migratedFrom: from } : {}) };
+}
+
+// --- values from a project file that reach the UI (ADR-087) ---
+// A project file may come from someone else. Values the UI puts into inline CSS (colours) or uses
+// as numbers / arrays are checked here; a bad one falls back to the default instead of reaching
+// the app (a colour like url(https://...) would make the browser fetch it).
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/;
+
+function sanitizeTrack(tr: MidiProject['tracks'][number], index: number): MidiProject['tracks'][number] {
+  const ok = typeof tr.color === 'string' && HEX_COLOR.test(tr.color);
+  const source = validSourceText(tr.sourceName);
+  if (ok && source === tr.sourceName) return tr;
+  const out = { ...tr, color: ok ? tr.color : TRACK_COLORS[index % TRACK_COLORS.length] };
+  if (source === undefined) delete out.sourceName;
+  return out;
+}
+
+function sanitizeClip(c: MidiProject['clips'][number]): MidiProject['clips'][number] {
+  const colorOk = c.color === undefined || (typeof c.color === 'string' && HEX_COLOR.test(c.color));
+  const nameOk = c.name === undefined || typeof c.name === 'string';
+  if (colorOk && nameOk) return c;
+  const out = { ...c };
+  if (!colorOk) delete out.color;
+  if (!nameOk) delete out.name;
+  return out;
+}
+
+/** the original bytes of a text are exported verbatim: only well-formed base64 is kept */
+function validSourceText<T extends { text: string; base64: string } | undefined>(s: T): T | undefined {
+  if (s === undefined) return undefined;
+  return isObject(s) && typeof s.text === 'string' && typeof s.base64 === 'string' && base64ToBytes(s.base64) !== null ? s : undefined;
+}
+
+function sanitizeKeyMap(v: unknown, fallback: Record<string, number>): Record<string, number> {
+  if (!isObject(v)) return fallback;
+  const out: Record<string, number> = {};
+  for (const [code, pitch] of Object.entries(v)) if (/^[A-Za-z0-9]{1,24}$/.test(code) && isInt(pitch, 0, 127)) out[code] = pitch as number;
+  return out;
+}
+
+function sanitizeInputPresets(v: unknown): MidiProject['inputPresets'] {
+  const d = defaultInputPresets();
+  if (!isObject(v)) return d;
+  return {
+    layout: v.layout === 'jis' || v.layout === 'us' ? v.layout : d.layout,
+    pianoKeys: v.pianoKeys === undefined ? d.pianoKeys : sanitizeKeyMap(v.pianoKeys, d.pianoKeys),
+    pianoOctaveShift: isInt(v.pianoOctaveShift, -4, 4) ? (v.pianoOctaveShift as number) : d.pianoOctaveShift,
+    drumPadKeys: v.drumPadKeys === undefined ? d.drumPadKeys : sanitizeKeyMap(v.drumPadKeys, d.drumPadKeys),
+    numpadKeys: v.numpadKeys === undefined ? d.numpadKeys : sanitizeKeyMap(v.numpadKeys, d.numpadKeys),
+    defaultVelocity: isInt(v.defaultVelocity, 1, 127) ? (v.defaultVelocity as number) : d.defaultVelocity,
+    accentVelocity: isInt(v.accentVelocity, 1, 127) ? (v.accentVelocity as number) : d.accentVelocity,
+  };
+}
+
+const DRUM_GROUPS = new Set(['kick', 'snare', 'hihat', 'cymbal', 'tom', 'percussion', 'fx']);
+
+function validDrumMap(m: unknown): boolean {
+  if (!isObject(m) || typeof m.id !== 'string' || typeof m.name !== 'string' || !Array.isArray(m.entries)) return false;
+  if (m.hidden !== undefined && !(Array.isArray(m.hidden) && m.hidden.every((p) => isInt(p, 0, 127)))) return false;
+  return m.entries.every((e) => isObject(e) && isInt(e.pitch, 0, 127) && typeof e.name === 'string' && DRUM_GROUPS.has(e.group as string) && isInt(e.defaultVelocity, 1, 127));
+}
+
+function sanitizeExtras(p: MidiProject): Pick<MidiProject, 'drumMaps' | 'metadata' | 'sourceTitle'> {
+  const out: Pick<MidiProject, 'drumMaps' | 'metadata' | 'sourceTitle'> = {};
+  if (p.drumMaps !== undefined) out.drumMaps = Array.isArray(p.drumMaps) ? p.drumMaps.filter(validDrumMap) : [];
+  if (p.metadata !== undefined) out.metadata = isObject(p.metadata) ? Object.fromEntries(Object.entries(p.metadata).filter(([, v]) => typeof v === 'string')) : {};
+  const title = validSourceText(p.sourceTitle);
+  if (title !== undefined) out.sourceTitle = title;
+  return out;
 }
 
 function dropRecordArm(track: MidiProject['tracks'][number]): MidiProject['tracks'][number] {

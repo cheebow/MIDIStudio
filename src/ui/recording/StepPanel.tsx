@@ -6,6 +6,7 @@ import { useSignatureMap } from '../hooks';
 import { useEditorState, useServices } from '../../app/store/context';
 import { t } from '../../i18n';
 import { ALT_LABEL as ALT } from '../platform';
+import { NumberInput } from '../NumberInput';
 
 export function StepPanel({ drum }: { drum: boolean }) {
   const { store, step, transport } = useServices();
@@ -33,7 +34,7 @@ export function StepPanel({ drum }: { drum: boolean }) {
       </label>
       <label>
         {t('ゲート')}{' '}
-        <input type="number" min={1} max={100} value={rec.gatePercent} onChange={(e) => set({ gatePercent: Math.max(1, Math.min(100, Number(e.target.value) || 90)) })} style={{ width: '4em' }} />%
+        <NumberInput min={1} max={100} value={rec.gatePercent} onValue={(n) => set({ gatePercent: n })} style={{ width: '4em' }} />%
       </label>
       {drum && (
         <label>

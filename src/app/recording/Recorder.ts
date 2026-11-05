@@ -108,6 +108,9 @@ export class Recorder {
     const tempo = this.transport.tempoMap;
     const sig = this.transport.timeSignatureMap;
     if (!tempo || !sig) throw new Error(t('曲が読み込まれていません。'));
+    // Record pressed while the song plays: stop where it is, so the count-in is counted from there
+    // and the song does not run on under the count-in clicks, then jump back (ADR-087).
+    this.transport.pause();
     const startTick = Math.round(this.transport.getPosition().tick);
     this.startSeconds = this.transport.getPosition().seconds;
     this.early = 0;

@@ -439,19 +439,21 @@ export class Transport {
       }
     }
     if (!chase || chase.program === undefined) for (const m of firstSoundMessages(track)) this.engine.send(m, port);
-    const key = `${sourceId}:${port}:${ch}:${pitch}`;
-    if (this.previewNotes.has(key)) this.engine.send([0x80 | ch, pitch, 0], port);
+    // keyed by track, released on the port / channel it was played on: the track may change
+    // channel or be deleted while the key is held (ADR-087)
+    const key = `${sourceId}:${trackId}:${pitch}`;
+    const prev = this.previewNotes.get(key);
+    if (prev) this.engine.send([0x80 | prev[1], prev[2], 0], prev[0]);
     this.previewNotes.set(key, [port, ch, pitch]);
     this.engine.send([0x90 | ch, pitch, Math.max(1, Math.min(127, velocity))], port);
   }
 
   releaseAuditionNote(trackId: string, pitch: number, sourceId = 'default'): void {
-    const track = this.project?.tracks.find((t) => t.id === trackId);
-    if (!track) return;
-    const port = portIndex(track.port);
-    const key = `${sourceId}:${port}:${track.channel}:${pitch}`;
-    if (!this.previewNotes.delete(key)) return;
-    this.engine.send([0x80 | track.channel, pitch, 0], port);
+    const key = `${sourceId}:${trackId}:${pitch}`;
+    const held = this.previewNotes.get(key);
+    if (!held) return;
+    this.previewNotes.delete(key);
+    this.engine.send([0x80 | held[1], held[2], 0], held[0]);
   }
 
   /**
@@ -486,10 +488,22 @@ export class Transport {
     return this.previewNotes.size;
   }
 
-  /** Safety panic: all voices off, previews cleared; transport state is kept. */
+  /**
+   * Safety panic: all voices off, previews cleared; transport state is kept. The pedals go up and
+   * the bend goes to centre on every channel of the song's ports, on both synths: stopping the voices
+   * alone leaves a held CC64 sustaining every later note (ADR-087).
+   */
   panic(): void {
     this.previewNotes.clear();
     this.performed.clear();
     this.engine.panic();
+    if (!this.engine.ready) return;
+    const ports = new Set([0, ...(this.project?.tracks ?? []).map((t) => portIndex(t.port))]);
+    for (const port of ports) {
+      for (let ch = 0; ch < 16; ch++) {
+        for (const c of [64, 66, 67]) this.engine.send([0xb0 | ch, c, 0], port, 'both');
+        this.engine.send([0xe0 | ch, 0, 64], port, 'both');
+      }
+    }
   }
 }

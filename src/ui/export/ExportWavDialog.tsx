@@ -5,6 +5,7 @@ import { downloadBytes, safeFileName } from '../../storage/files';
 import { useEditorState } from '../../app/store/context';
 import { Dialog } from '../Dialog';
 import { t } from '../../i18n';
+import { NumberInput } from '../NumberInput';
 
 type Msg = { type: 'progress'; value: number } | { type: 'done'; wav: ArrayBuffer } | { type: 'error'; message: string };
 
@@ -75,7 +76,7 @@ export function ExportWavDialog({ soundFont, onClose }: { soundFont: ArrayBuffer
         <label>
           {t('曲の終わりの余韻')}
           <span className="row">
-            <input type="number" aria-label={t('余韻（秒）')} min={0} max={30} step={0.5} value={tail} onChange={(e) => setTail(Math.max(0, Math.min(30, Number(e.target.value) || 0)))} className="pct" disabled={progress !== null} /> {t('秒')}
+            <NumberInput aria-label={t('余韻（秒）')} min={0} max={30} step={0.5} integer={false} value={tail} onValue={setTail} className="pct" disabled={progress !== null} /> {t('秒')}
           </span>
         </label>
         {!soundFont && <p className="note warn-text">{t('音源が読み込まれていません。')}</p>}

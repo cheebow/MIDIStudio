@@ -21,6 +21,13 @@ export class StepController {
     private readonly input: InputController,
   ) {
     input.addSink((e, trackId) => this.onInput(e, trackId));
+    // Leaving step input forgets an unfinished chord: a key released outside step input would
+    // otherwise stay "held" and block every later chord (ADR-087).
+    input.subscribe(() => {
+      if (this.active() || (this.held.size === 0 && this.pending.size === 0)) return;
+      this.held.clear();
+      this.pending.clear();
+    });
   }
 
   subscribe = (fn: Listener) => {

@@ -106,7 +106,14 @@ export function NoteInfoBar({ track, pitchLabel }: { track: MidiTrack; /** drum 
                   setInvalid((f) => (f === field ? null : f));
                 }}
                 onBlur={(e) => {
-                  if (!commit(field, e.currentTarget.value)) clear(field); // unreadable text is dropped when leaving the field
+                  const el = e.currentTarget;
+                  // Esc: the draft is thrown away (the DOM still holds it while the state update is pending, ADR-087)
+                  if (el.dataset.cancel) {
+                    delete el.dataset.cancel;
+                    clear(field);
+                    return;
+                  }
+                  if (!commit(field, el.value)) clear(field); // unreadable text is dropped when leaving the field
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -116,7 +123,8 @@ export function NoteInfoBar({ track, pitchLabel }: { track: MidiTrack; /** drum 
                     e.preventDefault();
                     e.stopPropagation();
                     clear(field);
-                    (e.target as HTMLInputElement).blur();
+                    e.currentTarget.dataset.cancel = '1';
+                    e.currentTarget.blur();
                   } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
                     e.preventDefault();
                     const d = step(field, e.shiftKey);
