@@ -117,12 +117,12 @@ export const TUTORIAL_CHAPTERS_EN: HelpSection[] = [
         <p>Besides clicking notes in, you can turn the keyboard into an instrument and play.</p>
         <ol>
           <li>Press <K>{ALT}K</K> to switch the input mode to “Keys”. The bottom row Z–M is C4–B4 and the top row Q–I is one octave higher. <K>↑↓</K> changes the octave.</li>
-          <li>Press R (record-arm) on “Piano”, then <K>R</K> to start recording. After a one-bar count-in, what you play goes straight in. <K>R</K> stops.</li>
+          <li>Select the “Piano” track, then press <K>R</K> to start recording. After a one-bar count-in, what you play goes straight in. <K>R</K> stops.</li>
           <li>If the timing is off, select the notes and press <K>Q</K>. They line up with the edit grid (quantize).</li>
           <li>Press <K>Esc</K> to return to edit mode. While in Keys mode, the single-letter shortcuts play notes instead, so keep that in mind.</li>
         </ol>
         <p>With a MIDI keyboard, choosing “Use” in the startup dialog is all it takes. For drums, use the “Pads” mode (<K>{ALT}R</K>).</p>
-        <Fig src="play-in.en.jpg" alt="Keys mode, record arm and the record button" caption="① Keys mode ② Record arm (R) ③ Record" />
+        <Fig src="play-in.en.jpg" alt="Keys mode, the record target track and the record button" caption="① Keys mode ② Record target (the selected track) ③ Record" />
       </>
     ),
   },

@@ -230,7 +230,6 @@ export function buildMenus(d: MenuDeps): Menu[] {
         { label: t('ドラムトラックにする'), checked: selectedTrack?.displayMode === 'drum', disabled: !selectedTrack, action: () => selectedTrack && store.run(updateTrack(store.project, selectedTrack.id, { displayMode: selectedTrack.displayMode === 'drum' ? 'melodic' : 'drum' }, '表示モードを変更')) },
         { label: t('ミュート'), shortcut: 'M', checked: selectedTrack?.mute, disabled: !selectedTrack, action: () => selectedTrack && store.setTrackFlags(selectedTrack.id, { mute: !selectedTrack.mute }) },
         { label: t('ソロ'), shortcut: 'S', checked: selectedTrack?.solo, disabled: !selectedTrack, action: () => selectedTrack && store.setTrackFlags(selectedTrack.id, { solo: !selectedTrack.solo }) },
-        { label: t('録音待機'), checked: selectedTrack?.recordArm, disabled: !selectedTrack, action: () => selectedTrack && store.setTrackFlags(selectedTrack.id, { recordArm: !selectedTrack.recordArm }) },
         sep,
         { label: t('ドラムマップ（ドラムエディター）'), action: panel('drum') },
       ],

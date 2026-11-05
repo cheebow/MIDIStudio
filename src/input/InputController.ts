@@ -4,7 +4,7 @@ import type { MidiProject, SavedInputPresets } from '../core/model/types';
 import type { Transport } from '../playback/Transport';
 import { KeyboardRouter, type InputMode, type KeyInput, type MusicalInputEvent, type RouteResult } from './KeyboardRouter';
 import type { ParsedMidiInput } from './midiMessages';
-import { selectedTrack } from '../core/model/selectedTrack';
+import { inputTargets } from '../core/model/selectedTrack';
 
 /** Every input after normalisation (INPUT_RECORDING 1): what recorders receive. */
 export type CapturedInput =
@@ -102,13 +102,9 @@ export class InputController {
     for (const key of [...this.routed.keys()]) if (key.startsWith('screen-pad:')) this.padUp(Number(key.split(':')[2]));
   }
 
-  /** Target track for an input: piano -> selected track; drum -> selected drum track, else first drum track, else selected. */
+  /** Target track for an input (see inputTargets). */
   targetTrack(target: 'piano' | 'drum'): string | null {
-    const p = this.getProject();
-    const selected = selectedTrack(p);
-    if (target === 'piano') return selected?.id ?? null;
-    if (selected?.displayMode === 'drum') return selected.id;
-    return (p.tracks.find((t) => t.displayMode === 'drum') ?? selected)?.id ?? null;
+    return inputTargets(this.getProject())[target];
   }
 
   private dispatch(e: MusicalInputEvent | CapturedInput) {

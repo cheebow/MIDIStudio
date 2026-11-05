@@ -7,6 +7,7 @@ import { takeToCommand } from '../../core/recording/applyTake';
 import { gridTicks } from '../../core/timing/grid';
 import { applyCommand, type Command } from '../../core/editing/history';
 import type { MidiProject } from '../../core/model/types';
+import { inputTargets } from '../../core/model/selectedTrack';
 import type { InputController, CapturedInput } from '../../input/InputController';
 import type { Transport } from '../../playback/Transport';
 import type { EditorStore } from '../store/EditorStore';
@@ -28,16 +29,14 @@ export interface RecordTargets {
   drum: string | null;
 }
 
-/** Armed-track routing; ambiguous setups are refused (INPUT_RECORDING 1). */
+/**
+ * Record targets (ADR-080): the selected track, routed like preview and step input (drum-pad hits
+ * go to a drum track when the selected one is not). Fixed at the start of a take.
+ */
 export function recordTargets(p: MidiProject): RecordTargets | { error: string } {
-  const armed = p.tracks.filter((t) => t.recordArm);
-  if (armed.length === 0) return { error: t('録音待機（R）のトラックがありません。録音したいトラックの R を押してください。') };
-  const melodic = armed.filter((t) => t.displayMode !== 'drum');
-  const drums = armed.filter((t) => t.displayMode === 'drum');
-  if (melodic.length > 1 || drums.length > 1) return { error: t('録音待機のトラックが複数あり、録音先があいまいです。鍵盤用・ドラム用それぞれ 1 トラックだけ R を押してください。') };
-  const piano = melodic[0]?.id ?? drums[0]?.id ?? null;
-  const drum = drums[0]?.id ?? melodic[0]?.id ?? null;
-  return { piano, drum };
+  const targets = inputTargets(p);
+  if (!targets.piano) return { error: t('録音するトラックがありません。トラックを追加してください。') };
+  return targets;
 }
 
 export class Recorder {

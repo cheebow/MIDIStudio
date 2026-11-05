@@ -71,7 +71,7 @@ export function AppDialogs({ dialog, setDialog, issues, recent, openRecent, midi
       return (
         <Dialog title={t('録音の設定')} onClose={close}>
           <RecordSettingsForm value={project.settings.recording} onChange={(v) => store.updateSettings({ recording: v })} />
-          <p className="note">{t('録音先は R（録音待機）を押したトラックです。鍵盤用とドラム用にそれぞれ 1 トラックまで。録音は停止時に 1 回の操作として記録され、Undo で戻せます。')}</p>
+          <p className="note">{t('録音先は選んでいるトラックです。録音は停止時に 1 回の操作として記録され、Undo で戻せます。')}</p>
         </Dialog>
       );
     case 'midi':

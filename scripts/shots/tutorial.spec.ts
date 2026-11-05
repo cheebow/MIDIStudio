@@ -176,15 +176,13 @@ for (const lang of ['ja', 'en'] as Lang[]) {
       await shot(page, 'mixer', lang, { locator: page.locator('.mixer') });
       await tab(page, lang, 'ピアノロール', 'Piano roll').click();
 
-      // --- 5. 弾いて入れる: keyboard mode, record arm, record button
+      // --- 5. 弾いて入れる: keyboard mode, the selected track (= record target, ADR-080), record button
       await trackHeader(page, piano).click();
       await page.getByTestId('input-mode-piano-performance').click();
-      await trackHeader(page, piano).getByRole('button', { name: /録音待機|arm/i }).click();
       await callout(page, page.getByTestId('input-mode-piano-performance'), 1);
-      await callout(page, trackHeader(page, piano).getByRole('button', { name: /録音待機|arm/i }), 2);
+      await callout(page, trackHeader(page, piano), 2);
       await callout(page, page.getByTestId('record'), 3);
       await shot(page, 'play-in', lang, { clip: { x: 0, y: 0, width: 1280, height: 420 } });
-      await trackHeader(page, piano).getByRole('button', { name: /録音待機|arm/i }).click();
       await page.keyboard.press('Escape');
 
       // --- 6. 曲の形にする: rubber-band the four clips

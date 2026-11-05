@@ -76,7 +76,7 @@ describe('.midstudio file', () => {
     expect(s.tm.layout).toBe('single');
     expect(s.tm.paneTracks).toEqual([null, p.tracks[0].id, null, null]);
     expect(s.tm.fontSize).toBe(20);
-    expect(s.recording).toMatchObject({ countInBars: 1, latencyMs: 0, mode: 'replace', armFollowsSelection: false });
+    expect(s.recording).toMatchObject({ countInBars: 1, latencyMs: 0, mode: 'replace' });
     expect(s.quantize).toEqual({ grid: { division: 16, kind: 'straight' }, strength: 100, swing: 50, lengths: 'keep' });
     expect(s.humanize).toEqual({ timingTicks: Math.max(1, Math.round(p.ppq / 32)), velocity: 10, lengthPercent: 10 });
   });
@@ -87,6 +87,19 @@ describe('.midstudio file', () => {
     delete json.project.settings.metronome;
     const r = parseProjectFile(JSON.stringify(json));
     expect(r.ok && r.project.settings.metronome).toBe(false);
+  });
+
+  it('ADR-080: files saved with record-arm flags still open; the flags are dropped', () => {
+    const p = createEmptyProject();
+    const json = JSON.parse(serializeProject(p));
+    json.project.tracks[0].recordArm = true;
+    json.project.settings.recording.armFollowsSelection = true;
+    const r = parseProjectFile(JSON.stringify(json));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect('recordArm' in r.project.tracks[0]).toBe(false);
+    expect('armFollowsSelection' in r.project.settings.recording).toBe(false);
+    expect(serializeProject(r.project)).not.toMatch(/recordArm|armFollowsSelection/);
   });
 
   it('O04: invalid JSON / wrong format / broken data are rejected with reasons', () => {

@@ -336,7 +336,6 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
       displayMode: channel === 9 ? 'drum' : 'melodic',
       mute: false,
       solo: false,
-      recordArm: false,
       events: builder.finish(label, trackIndex),
       endOfTrackTick,
       sourceSmfTrack: trackIndex,

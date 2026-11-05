@@ -32,43 +32,28 @@ describe('EditorStore (shared editing state, CLAUDE.md rule 5)', () => {
     expect(s.getState().history.past).toHaveLength(0);
   });
 
-  it('ADR-082: Undo / Redo of an edit keep the current mute / solo / arm', () => {
+  it('ADR-082: Undo / Redo of an edit keep the current mute / solo', () => {
     const s = new EditorStore(createEmptyProject());
     const id = s.project.tracks[0].id;
     s.run(addEvents(s.project, id, [{ kind: 'note', tick: 0, pitch: 60, velocity: 100, durationTicks: 480, releaseVelocity: 64 }])!.command);
-    s.setTrackFlags(id, { mute: true, solo: true, recordArm: true });
+    s.setTrackFlags(id, { mute: true, solo: true });
     s.undo();
     expect(s.project.tracks[0].events).toHaveLength(0);
-    expect(s.project.tracks[0]).toMatchObject({ mute: true, solo: true, recordArm: true });
+    expect(s.project.tracks[0]).toMatchObject({ mute: true, solo: true });
     s.setTrackFlags(id, { solo: false });
     s.redo();
     expect(s.project.tracks[0].events).toHaveLength(1);
-    expect(s.project.tracks[0]).toMatchObject({ mute: true, solo: false, recordArm: true });
+    expect(s.project.tracks[0]).toMatchObject({ mute: true, solo: false });
   });
 
-  it('ADR-040: with "arm follows selection" on, selecting a track makes it the only armed track', () => {
+  it('ADR-080: selecting a track is a view setting only (no arm flags to update)', () => {
     const s = new EditorStore(createEmptyProject());
     s.run(addTrack(s.project, { name: 'B' }).command);
-    s.run(addTrack(s.project, { name: 'C' }).command);
-    const [a, b, c] = s.project.tracks;
-    s.setTrackFlags(a.id, { recordArm: true });
     s.markSaved();
     const rev = s.getState().revision;
-    // off by default: selecting does not touch the arm flags
-    s.updateSettings({ selectedTrackId: b.id });
-    expect(s.project.tracks.map((t) => t.recordArm)).toEqual([true, false, false]);
+    s.updateSettings({ selectedTrackId: s.project.tracks[1].id });
     expect(s.getState().dirty).toBe(false);
-    s.updateSettings({ recording: { ...s.project.settings.recording, armFollowsSelection: true } });
-    s.updateSettings({ selectedTrackId: c.id });
-    expect(s.project.tracks.map((t) => t.recordArm)).toEqual([false, false, true]);
-    expect(s.getState().dirty).toBe(true); // arm flags are saved data
-    expect(s.getState().revision).toBe(rev + 1);
-    expect(s.getState().history.past).toHaveLength(2); // not an undo step
-    // selecting the same track again, or an unknown id, changes nothing
-    s.setTrackFlags(c.id, { recordArm: false });
-    s.updateSettings({ selectedTrackId: c.id });
-    s.updateSettings({ selectedTrackId: 'nope' });
-    expect(s.project.tracks.some((t) => t.recordArm)).toBe(false);
+    expect(s.getState().revision).toBe(rev);
   });
 
   it('notifies subscribers once per change', () => {

@@ -15,7 +15,7 @@ beforeEach(() => setIdGenerator(createCounterIdGenerator('f')));
 function setup() {
   const p = createEmptyProject();
   const drums = createTrack({ name: 'Drums', channel: 9, displayMode: 'drum' }, 1);
-  const project = { ...p, tracks: [{ ...p.tracks[0], recordArm: true }, { ...drums, recordArm: true }], settings: { ...p.settings, recording: { ...p.settings.recording, countInBars: 0 as const } } };
+  const project = { ...p, tracks: [p.tracks[0], drums], settings: { ...p.settings, recording: { ...p.settings.recording, countInBars: 0 as const } } };
   const store = new EditorStore(project);
   const engine = new FakeEngine();
   const transport = new Transport(engine);
@@ -129,12 +129,18 @@ describe('recording through the real input path (fake engine)', () => {
     rec.stop();
   });
 
-  it('refuses ambiguous or missing record targets', () => {
+  it('ADR-080: records to the selected track; drum pads go to a drum track unless one is selected', () => {
     const { store } = setup();
-    const none = { ...store.project, tracks: store.project.tracks.map((t) => ({ ...t, recordArm: false })) };
-    expect(recordTargets(none)).toHaveProperty('error');
-    const two = { ...store.project, tracks: [...store.project.tracks, { ...store.project.tracks[0], id: 'x', recordArm: true }] };
-    expect(recordTargets(two)).toHaveProperty('error');
+    const [piano, drums] = store.project.tracks;
+    const bass = { ...piano, id: 'bass' };
+    const three = { ...store.project, tracks: [piano, drums, bass] };
+    const select = (id: string | undefined) => ({ ...three, settings: { ...three.settings, selectedTrackId: id } });
+    expect(recordTargets(select(undefined))).toEqual({ piano: piano.id, drum: drums.id }); // nothing selected: the first track
+    expect(recordTargets(select('bass'))).toEqual({ piano: 'bass', drum: drums.id });
+    expect(recordTargets(select(drums.id))).toEqual({ piano: drums.id, drum: drums.id });
+    const noDrums = { ...select('bass'), tracks: [piano, bass] };
+    expect(recordTargets(noDrums)).toEqual({ piano: 'bass', drum: 'bass' });
+    expect(recordTargets({ ...three, tracks: [] })).toHaveProperty('error');
   });
 
   it('I14: a device that disappears releases its held notes (closed in the take)', async () => {

@@ -55,8 +55,6 @@ export const EN_UI: Record<string, string> = {
   ダブルクリックで名前を変更: 'Double-click to rename',
   '{name} をミュート': 'Mute {name}',
   '{name} をソロ': 'Solo {name}',
-  '{name} を録音待機': 'Arm {name} for recording',
-  '録音待機（R キー / ● で録音するトラック）': 'Record arm (the track that R / ● records to)',
 
   // VisualMonitor.tsx
   ビジュアルモード: 'Visual mode',

@@ -37,7 +37,6 @@ function mergeInto(tracks: MidiTrack[], ids: string[], name?: string): MidiTrack
     endOfTrackTick: targets.reduce((m, t) => Math.max(m, t.endOfTrackTick ?? 0), 0),
     mute: targets.every((t) => t.mute),
     solo: targets.some((t) => t.solo),
-    recordArm: first.recordArm,
   };
   const drop = new Set(rest.map((t) => t.id));
   return tracks.filter((t) => !drop.has(t.id)).map((t) => (t.id === first.id ? merged : t));

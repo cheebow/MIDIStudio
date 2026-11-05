@@ -129,7 +129,6 @@ a { color: var(--accent); }
 .track-meta { color: var(--muted); font-size: 0.8rem; font-family: ui-monospace, monospace; }
 button.toggle { padding: 1px 6px; font-size: 0.75rem; }
 button.toggle.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-button.toggle.arm.on { background: var(--error); border-color: var(--error); }
 .arrangement-scroll, .roll-scroll { flex: 1; overflow: auto; position: relative; }
 .sticky-canvas { position: sticky; left: 0; top: 0; }
 .sticky-canvas canvas { position: absolute; top: 0; left: 0; }
