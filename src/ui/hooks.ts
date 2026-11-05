@@ -4,10 +4,25 @@ import type { TransportPosition } from '../playback/Transport';
 import { barPageScrollLeft } from './canvas';
 import type { MidiProject } from '../core/model/types';
 import { TimeSignatureMap } from '../core/timing/timeSignatureMap';
+import { analyzeChords, type ChordSegment } from '../core/theory/chords';
 
 /** Bar / beat map of the project, rebuilt only when the PPQ or the conductor track changes. */
 export function useSignatureMap(project: MidiProject): TimeSignatureMap {
   return useMemo(() => new TimeSignatureMap(project.ppq, project.conductor.filter((c) => c.kind === 'time-signature')), [project.ppq, project.conductor]);
+}
+
+const NO_CHORDS: ChordSegment[] = [];
+
+/**
+ * Estimated chord names (ADR-090), recomputed only when the notes, mute / solo, clips or conductor
+ * change (not on zoom or scroll). Empty while the display is off.
+ */
+export function useChordSegments(project: MidiProject, enabled: boolean): ChordSegment[] {
+  return useMemo(
+    () => (enabled ? analyzeChords(project) : NO_CHORDS),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the analysis reads only these fields of the project
+    [enabled, project.tracks, project.clips, project.conductor, project.ppq],
+  );
 }
 
 /**

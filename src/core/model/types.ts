@@ -173,6 +173,8 @@ export interface ProjectViewSettings {
   /** controller lane under the piano roll: 'velocity', a CC number, or 'pitch-bend' */
   controllerLane: 'velocity' | 'pitch-bend' | number;
   showGhostNotes: boolean;
+  /** estimated chord names: strip under the piano-roll ruler and in visual mode (ADR-090) */
+  showChords: boolean;
   /** grid used for snapping and new note length */
   grid: { division: number; kind: 'straight' | 'triplet' | 'dotted' };
   snapEnabled: boolean;

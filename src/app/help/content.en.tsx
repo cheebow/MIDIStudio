@@ -89,6 +89,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
           <li>Edit › Notes: quantize (<K>Q</K> applies the edit grid at once, <K>Shift+Q</K> opens the dialog), humanize, velocity, align note lengths to the grid. The same commands are in a note’s right-click menu.</li>
           <li>Click the keyboard on the left to audition. Keys you play light up red; keys sounding during playback light up blue.</li>
           <li>Notes of the other tracks are shown faintly (ghost notes; toggle in the View menu).</li>
+          <li>Chord names are shown under the ruler. They are estimated beat by beat from the notes that sound (drums left out; an anticipated chord starts where it is struck) and can be wrong. Where no chord sounds (bass only, melody only…) none is shown (View › Chord names (estimated)).</li>
         </ul>
       </>
     ),
@@ -190,6 +191,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
           <li>Open it with <K>T</K> or the “Visual” button in the toolbar; <K>Esc</K> goes back.</li>
           <li>Three views: the event list (Recomposer style; split panes, follow mode, units, staff), the piano roll (all tracks) and keyboards (one per track).</li>
           <li>Color scheme, text size and full screen are on the right of the toolbar.</li>
+          <li>The right end of the top bar shows the (estimated) chord at the playhead. The piano-roll view shows it large at the top right. “Chords” in the toolbar shows / hides them.</li>
         </ul>
       </>
     ),

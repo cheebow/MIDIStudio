@@ -1,4 +1,5 @@
 import type { ConductorEvent } from '../core/model/types';
+import type { ChordSegment } from '../core/theory/chords';
 import { noteName } from '../core/list/noteNames';
 import { bpmFromUs } from '../core/timing/tempoMap';
 import { DEFAULT_TEMPO_US } from '../core/model/defaults';
@@ -375,3 +376,53 @@ export function drawStepCursor(ctx: CanvasRenderingContext2D, x: number, height:
   ctx.setLineDash([]);
 }
 
+
+/**
+ * Chord names along the time axis (ADR-090): a thin line at each change and the name, clipped to
+ * its span. `current` (the chord under the playhead) gets a tinted background.
+ */
+export function drawChordStrip(
+  ctx: CanvasRenderingContext2D,
+  segments: readonly ChordSegment[],
+  x: (tick: number) => number,
+  t0: number,
+  t1: number,
+  y: number,
+  h: number,
+  colors: { text: string; line: string; current: string },
+  current: ChordSegment | null = null,
+  font = '11px system-ui, sans-serif',
+): void {
+  // first segment that ends after t0
+  let lo = 0;
+  let hi = segments.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (segments[mid].endTick <= t0) lo = mid + 1;
+    else hi = mid;
+  }
+  ctx.save();
+  ctx.font = font;
+  ctx.textBaseline = 'middle';
+  for (let i = lo; i < segments.length && segments[i].tick <= t1; i++) {
+    const s = segments[i];
+    const x0 = x(s.tick);
+    const x1 = x(s.endTick);
+    if (s === current) {
+      ctx.fillStyle = colors.current;
+      ctx.globalAlpha = 0.25;
+      ctx.fillRect(x0, y, x1 - x0, h);
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = colors.line;
+    ctx.fillRect(Math.round(x0), y + 2, 1, h - 4);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0 + 1, y, Math.max(0, x1 - x0 - 2), h);
+    ctx.clip();
+    ctx.fillStyle = colors.text;
+    ctx.fillText(s.name, x0 + 4, y + h / 2);
+    ctx.restore();
+  }
+  ctx.restore();
+}

@@ -20,6 +20,7 @@ export function defaultViewSettings(ppq: number): ProjectViewSettings {
     pianoRollScrollPitch: 48,
     controllerLane: 'velocity',
     showGhostNotes: true,
+    showChords: true,
     grid: { division: 16, kind: 'straight' },
     snapEnabled: true,
     tm: { layout: 'single', paneTracks: [null, null, null, null], mode: 'fixed-cursor', theme: 'rcm', fontSize: 20, unit: 'classic48' },

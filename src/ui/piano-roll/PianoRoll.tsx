@@ -9,18 +9,21 @@ import { useEditActions, useEditorState, useServices } from '../../app/store/con
 import { t } from '../../i18n';
 import { isSecondaryClick, useContextMenu } from '../menu/ContextMenu';
 import { emptyMenuItems, noteMenuItems } from '../menu/editMenus';
-import { barPageScrollLeft, conductorMarks, drawLoopRuler, drawPlayhead, drawRulerConductorMarks, drawStepCursor, fitCanvas, isBlackKey, pitchName, readTheme } from '../canvas';
+import { barPageScrollLeft, conductorMarks, drawChordStrip, drawLoopRuler, drawPlayhead, drawRulerConductorMarks, drawStepCursor, fitCanvas, isBlackKey, pitchName, readTheme } from '../canvas';
 import { ControllerLane } from './ControllerLane';
 import { NoteInfoBar } from '../editing/NoteInfoBar';
-import { useAnimationLoop, useDragState, useElementSize, usePlayheadFollow, useSignatureMap, useZoomAnchor } from '../hooks';
+import { useAnimationLoop, useChordSegments, useDragState, useElementSize, usePlayheadFollow, useSignatureMap, useZoomAnchor } from '../hooks';
 import { useThemeVersion } from '../../app/theme';
 import { draggedLoop, hitLoop, loopCursor, loopSnap, type LoopDrag } from '../loopDrag';
 import { selectedTrack } from '../../core/model/selectedTrack';
 import { pointerOf, useDragAutoScroll, type PointerLike } from '../dragAutoScroll';
+import { chordAt } from '../../core/theory/chords';
 
 const ROW_H = 12;
 const KEYS_W = 72;
 const RULER_H = 20;
+/** estimated chord names under the ruler (ADR-090) */
+const CHORD_H = 16;
 const EDGE_PX = 6;
 const ALL_H = 128 * ROW_H;
 
@@ -40,6 +43,9 @@ export function PianoRoll() {
   const ctxMenu = useContextMenu();
   const { project, selection, tool, reveal } = useEditorState();
   const settings = project.settings;
+  const chords = useChordSegments(project, settings.showChords);
+  /** top of the note area: the ruler, and the chord strip when shown */
+  const TOP = RULER_H + (settings.showChords ? CHORD_H : 0);
   const track: MidiTrack | undefined = selectedTrack(project);
   const scrollRef = useRef<HTMLDivElement>(null);
   const follow = usePlayheadFollow();
@@ -56,7 +62,7 @@ export function PianoRoll() {
   const auditionRef = useRef<number | null>(null);
   /** last pointer of the active drag, re-applied when the view scrolls under it */
   const lastPointer = useRef<PointerLike | null>(null);
-  const trackPointer = useDragAutoScroll(scrollRef, gridRef, drag !== null, { top: RULER_H, vertical: drag?.kind !== 'loop' });
+  const trackPointer = useDragAutoScroll(scrollRef, gridRef, drag !== null, { top: TOP, vertical: drag?.kind !== 'loop' });
 
   const ppq = project.ppq;
   const pxPerTick = settings.pianoRollZoom / ppq;
@@ -125,7 +131,7 @@ export function PianoRoll() {
     const t1 = (view.x + w) / pxPerTick;
     const pTop = 127 - Math.floor(view.y / ROW_H);
     const pBottom = Math.max(0, 127 - Math.ceil((view.y + h) / ROW_H));
-    const yOf = (pitch: number) => (127 - pitch) * ROW_H - view.y + RULER_H;
+    const yOf = (pitch: number) => (127 - pitch) * ROW_H - view.y + TOP;
     // rows
     for (let p = pBottom; p <= pTop; p++) {
       const y = yOf(p);
@@ -154,7 +160,7 @@ export function PianoRoll() {
         const x = Math.round(i * gridLen * pxPerTick - view.x) + 0.5;
         ctx.strokeStyle = th.grid;
         ctx.beginPath();
-        ctx.moveTo(x, RULER_H);
+        ctx.moveTo(x, TOP);
         ctx.lineTo(x, h);
         ctx.stroke();
       }
@@ -172,7 +178,7 @@ export function PianoRoll() {
       for (let b = 2; b <= sig.signatureAt(tick).numerator; b++) {
         const bx = Math.round(sig.barBeatToTick(bar, b) * pxPerTick - view.x) + 0.5;
         ctx.beginPath();
-        ctx.moveTo(bx, RULER_H);
+        ctx.moveTo(bx, TOP);
         ctx.lineTo(bx, h);
         ctx.stroke();
       }
@@ -191,7 +197,19 @@ export function PianoRoll() {
     ctx.fillRect(0, RULER_H - 1, w, 1);
     drawLoopRuler(ctx, loopView, pxPerTick, view.x, RULER_H, th);
     drawRulerConductorMarks(ctx, conductorMarks(project.conductor), pxPerTick, view.x, w, RULER_H, th, (t) => barLabelEnd.get(t) ?? -Infinity);
+    if (settings.showChords) {
+      ctx.fillStyle = th.panel;
+      ctx.fillRect(0, RULER_H, w, CHORD_H);
+      drawChordStrip(ctx, chords, (tk) => tk * pxPerTick - view.x, t0, t1, RULER_H, CHORD_H, { text: th.text, line: th.gridStrong, current: th.accent });
+      ctx.fillStyle = th.border;
+      ctx.fillRect(0, TOP - 1, w, 1);
+    }
     ctx.font = '11px system-ui, sans-serif';
+    // notes never cover the ruler / chord strip when scrolled up
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, TOP, w, Math.max(0, h - TOP));
+    ctx.clip();
     // ghost notes of other tracks (reference only)
     if (settings.showGhostNotes) {
       ctx.fillStyle = th.ghost;
@@ -238,6 +256,7 @@ export function PianoRoll() {
         ctx.globalAlpha = 1;
       }
     }
+    ctx.restore();
     if (drag?.kind === 'box') {
       ctx.fillStyle = th.selection;
       ctx.strokeStyle = th.accent;
@@ -246,7 +265,7 @@ export function PianoRoll() {
       ctx.fillRect(x, y, Math.abs(drag.x1 - drag.x0), Math.abs(drag.y1 - drag.y0));
       ctx.strokeRect(x + 0.5, y + 0.5, Math.abs(drag.x1 - drag.x0), Math.abs(drag.y1 - drag.y0));
     }
-  }, [project, track, notes, loose, view, pxPerTick, gridLen, sig, selection.eventIds, drag, velPreview, settings.showGhostNotes, themeVersion]);
+  }, [project, track, notes, loose, view, pxPerTick, gridLen, sig, selection.eventIds, drag, velPreview, settings.showGhostNotes, settings.showChords, chords, TOP, themeVersion]);
 
   // Keyboard column: redrawn every frame by the overlay loop, with the keys being played (PC
   // keyboard / MIDI input / click audition) in the playhead colour and the track's sounding notes
@@ -262,8 +281,8 @@ export function PianoRoll() {
     ctx.font = '10px system-ui, sans-serif';
     ctx.textBaseline = 'middle';
     for (let p = 0; p < 128; p++) {
-      const y = (127 - p) * ROW_H - view.y + RULER_H;
-      if (y < RULER_H - ROW_H || y > view.h) continue;
+      const y = (127 - p) * ROW_H - view.y + TOP;
+      if (y < TOP - ROW_H || y > view.h) continue;
       const black = isBlackKey(p);
       const kw = black ? KEYS_W * 0.6 : KEYS_W;
       ctx.fillStyle = black ? th.text : th.panel;
@@ -283,7 +302,7 @@ export function PianoRoll() {
       }
     }
     ctx.fillStyle = th.panel;
-    ctx.fillRect(0, 0, KEYS_W, RULER_H);
+    ctx.fillRect(0, 0, KEYS_W, TOP);
   };
 
   // Playhead overlay
@@ -296,6 +315,16 @@ export function PianoRoll() {
     ctx.clearRect(0, 0, w, view.h);
     const pos = transport.getPosition();
     const x = Math.round(pos.tick * pxPerTick - view.x) + 0.5;
+    // chord under the playhead while playing: tint its span in the strip
+    if (settings.showChords && pos.playing) {
+      const c = chordAt(chords, pos.tick);
+      if (c) {
+        ctx.fillStyle = readTheme(canvas).accent;
+        ctx.globalAlpha = 0.22;
+        ctx.fillRect(c.tick * pxPerTick - view.x, RULER_H, (c.endTick - c.tick) * pxPerTick, CHORD_H - 1);
+        ctx.globalAlpha = 1;
+      }
+    }
     drawPlayhead(ctx, canvas, x, view.h);
     // keys: held by the player, and (while playing) the track's notes sounding at the playhead
     const held = new Set(input.getSnapshot().pianoHeld);
@@ -308,14 +337,14 @@ export function PianoRoll() {
     if (live) {
       for (const n of live) {
         const nx = n.tick * pxPerTick - view.x;
-        const ny = (127 - n.pitch) * ROW_H - view.y + RULER_H;
+        const ny = (127 - n.pitch) * ROW_H - view.y + TOP;
         ctx.fillStyle = n.held ? 'rgba(229,72,77,0.95)' : 'rgba(229,72,77,0.7)';
         ctx.fillRect(nx, ny + 1, Math.max(3, n.durationTicks * pxPerTick), ROW_H - 2);
       }
     }
     if (input.mode === 'step-piano' || input.mode === 'step-drums') drawStepCursor(ctx, Math.round(step.cursor * pxPerTick - view.x) + 0.5, view.h);
     follow.update(pos, scrollRef.current, w, leadPx, sig, pxPerTick, settings.followPlayback);
-  }, [transport, view, pxPerTick, settings.followPlayback, step, input, recorder, track?.id, sig, follow, notes]);
+  }, [transport, view, pxPerTick, settings.followPlayback, settings.showChords, chords, TOP, step, input, recorder, track?.id, sig, follow, notes]);
 
   // Ctrl / ⌘ + wheel (and trackpad pinch, which Chrome reports as wheel + ctrlKey) zooms the roll.
   // React registers wheel listeners as passive, so preventDefault there would not stop the page
@@ -341,7 +370,7 @@ export function PianoRoll() {
   if (!track) return <p className="note">{t('トラックがありません。トラックメニューから追加してください。')}</p>;
 
   const toTick = (x: number) => Math.max(0, (x + view.x) / pxPerTick);
-  const toPitch = (y: number) => Math.max(0, Math.min(127, 127 - Math.floor((y - RULER_H + view.y) / ROW_H)));
+  const toPitch = (y: number) => Math.max(0, Math.min(127, 127 - Math.floor((y - TOP + view.y) / ROW_H)));
   /** content px (see Drag) from a client point, read from the live scroll position */
   const contentPoint = (clientX: number, clientY: number) => {
     const el = scrollRef.current;
@@ -351,7 +380,7 @@ export function PianoRoll() {
     return { x, y, cx: x + (el?.scrollLeft ?? scroll.x) - leadPx, cy: y + (el?.scrollTop ?? scroll.y) };
   };
   const tickAt = (cx: number) => Math.max(0, cx / pxPerTick);
-  const pitchAt = (cy: number) => Math.max(0, Math.min(127, 127 - Math.floor((cy - RULER_H) / ROW_H)));
+  const pitchAt = (cy: number) => Math.max(0, Math.min(127, 127 - Math.floor((cy - TOP) / ROW_H)));
 
   function hit(x: number, y: number): { note: NoteEvent; edge: boolean } | null {
     const t = (x + view.x) / pxPerTick; // unclamped: the margin before bar 1 is empty space, not tick 0
@@ -379,7 +408,7 @@ export function PianoRoll() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     const tick = snap(toTick(x));
-    if (y < RULER_H) return ctxMenu.open(e, [{ label: t('再生位置をここに移動'), action: () => transport.seek(tick) }]);
+    if (y < TOP) return ctxMenu.open(e, [{ label: t('再生位置をここに移動'), action: () => transport.seek(tick) }]);
     const n = hit(x, y)?.note;
     if (n) {
       // right-click on an unselected note selects just that note
@@ -398,8 +427,9 @@ export function PianoRoll() {
     e.currentTarget.focus();
     lastPointer.current = pointerOf(e);
     trackPointer(e.clientX, e.clientY);
-    if (y < RULER_H) {
-      const lh = hitLoop(x, y, project.loop, pxPerTick, view.x, RULER_H);
+    if (y < TOP) {
+      // ruler (loop handles) or chord strip: both seek
+      const lh = y < RULER_H ? hitLoop(x, y, project.loop, pxPerTick, view.x, RULER_H) : null;
       if (lh) setDrag({ kind: 'loop', hit: lh, startX: cx, origin: project.loop, preview: project.loop });
       else transport.seek(snap(toTick(x)));
       return;
@@ -453,8 +483,8 @@ export function PianoRoll() {
       applyDrag(lastPointer.current);
       return;
     }
-    if (y < RULER_H) {
-      e.currentTarget.style.cursor = loopCursor(hitLoop(x, y, project.loop, pxPerTick, view.x, RULER_H)) || 'default';
+    if (y < TOP) {
+      e.currentTarget.style.cursor = (y < RULER_H && loopCursor(hitLoop(x, y, project.loop, pxPerTick, view.x, RULER_H))) || 'default';
       return;
     }
     const h = hit(x, y);
@@ -569,12 +599,12 @@ export function PianoRoll() {
           setScroll({ x: scrollLeft, y: scrollTop });
           if (dragRef.current && lastPointer.current) applyDrag(lastPointer.current);
         }}>
-          <div style={{ width: totalW + KEYS_W, height: ALL_H + RULER_H }}>
+          <div style={{ width: totalW + KEYS_W, height: ALL_H + TOP }}>
             <div className="sticky-canvas roll-sticky" style={{ width: view.w, height: view.h }}>
               <canvas ref={keysRef} className="roll-keys" aria-label={t('鍵盤（クリックで試聴）')} onPointerDown={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 const y = e.clientY - rect.top;
-                if (y >= RULER_H) audition(toPitch(y));
+                if (y >= TOP) audition(toPitch(y));
               }} onPointerUp={() => audition(null)} onPointerLeave={() => audition(null)} />
               <canvas
                 ref={gridRef}
@@ -583,6 +613,7 @@ export function PianoRoll() {
                 tabIndex={0}
                 aria-label={t('ピアノロール: {name}。{tool}。矢印キーで移動・移調、Delete で削除', { name: track.name, tool: tool === 'draw' ? t('描画ツール') : t('選択ツール') })}
                 data-testid="piano-roll-grid"
+                data-chords={settings.showChords ? chords.map((c) => c.name).join(' ') : undefined}
                 onPointerDown={onPointerDown}
                 onContextMenu={onContextMenu}
                 onPointerMove={onPointerMove}

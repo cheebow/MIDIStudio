@@ -37,6 +37,9 @@ export async function exportedSmf(page: Page): Promise<SmfFile> {
 }
 
 /** Client point of a (tick, pitch) cell in the piano roll grid. */
+/** Ruler (20 px) + chord strip (16 px, shown by default: ADR-090) above the piano-roll notes. */
+export const ROLL_TOP = 20 + 16;
+
 export async function rollPoint(page: Page, tick: number, pitch: number) {
   const grid = page.getByTestId('piano-roll-grid');
   const box = (await grid.boundingBox())!;
@@ -46,7 +49,7 @@ export async function rollPoint(page: Page, tick: number, pitch: number) {
   });
   const lead = 4 * zoom; // one 4/4 bar of margin before bar 1
   const x = box.x + lead + (tick * zoom) / ppq - scrollLeft + 3;
-  const y = box.y + 20 + (127 - pitch) * 12 - scrollTop + 6;
+  const y = box.y + ROLL_TOP + (127 - pitch) * 12 - scrollTop + 6;
   return { x, y };
 }
 

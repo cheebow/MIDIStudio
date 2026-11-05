@@ -13,7 +13,8 @@ import { useTransportState } from '../../app/hooks/usePlayback';
 import { fitCanvas } from '../canvas';
 import { AllTracksRoll } from './AllTracksRoll';
 import { KeyboardMonitor } from './KeyboardMonitor';
-import { useSignatureMap } from '../hooks';
+import { useChordSegments, useSignatureMap } from '../hooks';
+import { chordAt } from '../../core/theory/chords';
 import type { TimeSignatureMap } from '../../core/timing/timeSignatureMap';
 import { selectedTrack } from '../../core/model/selectedTrack';
 
@@ -62,6 +63,9 @@ export function VisualMonitor({ onClose }: { onClose: () => void }) {
   const tstate = useTransportState(transport);
   const sig = useSignatureMap(project);
   const posRef = useRef<HTMLSpanElement>(null);
+  const chordRef = useRef<HTMLSpanElement>(null);
+  const showChords = project.settings.showChords;
+  const chords = useChordSegments(project, showChords);
   const set = (patch: Partial<TmSettings>) => store.updateSettings({ tm: { ...tm, ...patch } });
   const selected = selectedTrack(project);
   const n = PANES[tm.layout];
@@ -80,11 +84,17 @@ export function VisualMonitor({ onClose }: { onClose: () => void }) {
         const bpm = transport.tempoMap ? bpmFromUs(transport.tempoMap.usPerQuarterAt(pos.tick)) : 120;
         posRef.current.textContent = `:M${String(p.bar).padStart(4, '0')}.${String(p.beat).padStart(2, '0')} ♩${bpm.toFixed(0)}`;
       }
+      // estimated chord at the playhead (ADR-090); the DOM is touched only when it changes
+      const el = chordRef.current;
+      if (el) {
+        const name = chordAt(chords, Math.max(0, pos.tick))?.name ?? '—';
+        if (el.textContent !== name) el.textContent = name;
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [transport, sig]);
+  }, [transport, sig, chords]);
 
   useEffect(() => {
     // Esc closes the monitor only when it is not meant for something else (ADR-084): in a
@@ -111,6 +121,7 @@ export function VisualMonitor({ onClose }: { onClose: () => void }) {
         <span className="tm-num">1</span>
         <span className="tm-title">{project.title}</span>
         <span className="tm-pos" ref={posRef} data-testid="tm-clock" />
+        {showChords && <span className="tm-chord" ref={chordRef} data-testid="tm-chord" title={t('コード名（推定）')} />}
       </div>
       <div className="tm-statusbar" role="toolbar" aria-label={t('ビジュアルモードの操作')}>
         {/* 1. transport: state box + the three transport buttons */}
@@ -175,6 +186,16 @@ export function VisualMonitor({ onClose }: { onClose: () => void }) {
         </span>
         {/* 3. appearance, then the window actions, "back" last and apart */}
         <span className="tm-group tm-right">
+          <button
+            className={showChords ? 'on' : ''}
+            aria-pressed={showChords}
+            onClick={() => store.updateSettings({ showChords: !showChords })}
+            data-testid="tm-chords-toggle"
+            title={t('コード名（推定）の表示 / 非表示')}
+          >
+            {t('コード')}
+          </button>
+          <span className="tm-sep" aria-hidden="true" />
           <label>
             {t('配色')}
             <select aria-label={t('配色')} value={tm.theme} onChange={(e) => set({ theme: e.target.value as TmSettings['theme'] })}>
@@ -207,7 +228,7 @@ export function VisualMonitor({ onClose }: { onClose: () => void }) {
           </button>
         </span>
       </div>
-      {view === 'roll' && <AllTracksRoll project={project} />}
+      {view === 'roll' && <AllTracksRoll project={project} chords={chords} />}
       {view === 'keys' && <KeyboardMonitor project={project} />}
       {view === 'list' && (
       <div className={`tm-panes tm-layout-${tm.layout}`}>
