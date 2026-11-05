@@ -154,6 +154,8 @@ npm run shots:og           # Playwright の Chromium で public/images/og.png �
 
 OGP の URL は絶対 URL が必要なので、公開先 `https://cheebow.github.io/MIDIStudio/` を直接書いている。公開先を変えるときは 3 つのページのタグも直す。
 
+告知のときにカードが出ない場合は「版を上げて公開する」の SNS の注意を見る。
+
 ### ブランチ運用
 
 - `develop`: 日々の作業の合流先。GitHub の既定ブランチなので PR は自動的にここへ向く。
@@ -179,4 +181,10 @@ git switch develop
 ```
 
 公開のたびに、タグに対応する GitHub の Release も作る（タグだけでは Releases の一覧に出ない）。題は「MIDI Studio X.Y.Z」、本文は CHANGELOG のその版の節をそのまま使う。
+
+SNS で告知するときは、リンクのカード（OGP の画像と説明）に気をつける。
+
+- Pages の配信（Actions の「Deploy to GitHub Pages」）が終わってから、さらに 10 分ほど待つ。GitHub Pages の CDN は古いページを最大 10 分ほど返すため、直後に貼るとタグのない古いページが読まれることがある。
+- X などは一度読んだ URL のカードを 1 週間ほど使い回し、作り直させる手段がない。URL に `?v=0.8.1` のような版の目印を付けると、別の URL として読み直す（アプリの動作は変わらない）。投稿画面でカードが出るのを確かめてから投稿する。
+- 2026-11-05 の v0.8.1 の告知では、公開の 2 分後に投稿してカードが出ず、`?v=081` を付けて出た。
 
