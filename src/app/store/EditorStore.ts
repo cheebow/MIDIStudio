@@ -67,16 +67,34 @@ export class EditorStore {
     this.set({ project: r.project, history: r.history, selection, dirty: true, lastAction: cmd.label, revision: this.state.revision + 1 });
   }
 
+  /**
+   * Mute / solo / arm are not undo steps (setTrackFlags), but an undo / redo patch restores whole
+   * track objects captured before the flag change. Keep the current flags of the tracks that still
+   * exist so Undo never silently unmutes a track (ADR-082).
+   */
+  private keepTrackFlags(project: MidiProject): MidiProject {
+    if (project.tracks === this.state.project.tracks) return project;
+    const now = new Map(this.state.project.tracks.map((t) => [t.id, t]));
+    let changed = false;
+    const tracks = project.tracks.map((t) => {
+      const c = now.get(t.id);
+      if (!c || (c.mute === t.mute && c.solo === t.solo && c.recordArm === t.recordArm)) return t;
+      changed = true;
+      return { ...t, mute: c.mute, solo: c.solo, recordArm: c.recordArm };
+    });
+    return changed ? { ...project, tracks } : project;
+  }
+
   undo(): void {
     if (!canUndo(this.state.history)) return;
     const r = undo(this.state.project, this.state.history);
-    this.set({ project: r.project, history: r.history, selection: pruneSelection(this.state.selection, r.project), dirty: true, lastAction: r.label ? t('元に戻す: {label}', { label: t(r.label) }) : null, revision: this.state.revision + 1 });
+    this.set({ project: this.keepTrackFlags(r.project), history: r.history, selection: pruneSelection(this.state.selection, r.project), dirty: true, lastAction: r.label ? t('元に戻す: {label}', { label: t(r.label) }) : null, revision: this.state.revision + 1 });
   }
 
   redo(): void {
     if (!canRedo(this.state.history)) return;
     const r = redo(this.state.project, this.state.history);
-    this.set({ project: r.project, history: r.history, selection: pruneSelection(this.state.selection, r.project), dirty: true, lastAction: r.label ? t('やり直し: {label}', { label: t(r.label) }) : null, revision: this.state.revision + 1 });
+    this.set({ project: this.keepTrackFlags(r.project), history: r.history, selection: pruneSelection(this.state.selection, r.project), dirty: true, lastAction: r.label ? t('やり直し: {label}', { label: t(r.label) }) : null, revision: this.state.revision + 1 });
   }
 
   /** Replaces the whole project (new / open / import). Clears history and selection. */

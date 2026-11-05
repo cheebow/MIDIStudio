@@ -8,7 +8,9 @@ import { exportSmfBytes } from '../../src/core/project-io/exportSmf';
 import { readSmf } from '../../src/core/smf/reader';
 import { listRows } from '../../src/core/list/listRows';
 import { setBankProgram, setInitialController, setPitchBendRange } from '../../src/core/editing/channelSetup';
-import { createClip } from '../../src/core/editing/operations';
+import { addEvents, createClip, moveClip, moveEvents, updateEvents } from '../../src/core/editing/operations';
+import { quantizeNotes } from '../../src/core/editing/quantize';
+import { sortEvents } from '../../src/core/events/order';
 import { deleteConductorEvent, setTempo, setTimeSignature } from '../../src/core/editing/conductorOps';
 import { GM_PROGRAMS, programLabel } from '../../src/core/gm/instruments';
 import { createEmptyProject } from '../../src/core/model/defaults';
@@ -198,6 +200,100 @@ describe('setup edits keep clip membership', () => {
     // an event outside every clip stays free: a second clip region does not swallow it
     const q = applyCommand(p, createClip(p, trackId, 4800, 5280).command).project;
     expect(q.clips[1].eventIds).toEqual([]);
+  });
+});
+
+describe('a sound set after the notes still sounds before them (ADR-081)', () => {
+  type P = ReturnType<typeof createEmptyProject>;
+  const kindsAt0 = (p: P) =>
+    sortEvents(p.tracks[0].events.filter((e) => e.tick === 0)).map((e) => (e.kind === 'cc' ? `cc${e.controller}` : e.kind === 'program' ? `pc${e.program}` : e.kind === 'note' ? `n${e.pitch}` : e.kind));
+  const note = (tick: number, pitch: number) => ({ kind: 'note' as const, tick, pitch, velocity: 80, durationTicks: 240, releaseVelocity: 64 });
+  const withNotes = (): P => {
+    const p = createEmptyProject();
+    return applyCommand(p, addEvents(p, p.tracks[0].id, [note(0, 65), note(480, 69)])!.command).project;
+  };
+
+  it('setBankProgram after a tick-0 note puts Bank -> Program before the note, in the model and in the SMF', () => {
+    let p = withNotes();
+    p = applyCommand(p, setBankProgram(p, p.tracks[0].id, { msb: 8, lsb: null, program: 27 })).project;
+    expect(kindsAt0(p)).toEqual(['cc0', 'pc27', 'n65']);
+    const smf = readSmf(exportSmfBytes(p).bytes);
+    if (!smf.ok) throw new Error();
+    const ch = smf.smf.tracks[1].events.filter((e) => e.kind === 'channel').map((e) => (e.kind === 'channel' ? e.status & 0xf0 : 0));
+    expect(ch.slice(0, 3)).toEqual([0xb0, 0xc0, 0x90]);
+  });
+
+  it('changing the sound again (the event is replaced) keeps it before the notes; mixer values too', () => {
+    let p = withNotes();
+    const trackId = p.tracks[0].id;
+    p = applyCommand(p, setBankProgram(p, trackId, { msb: null, lsb: null, program: 0 })).project;
+    p = applyCommand(p, addEvents(p, trackId, [note(0, 72)])!.command).project;
+    expect(kindsAt0(p)).toEqual(['pc0', 'n65', 'n72']);
+    p = applyCommand(p, setProgramAt(p, trackId, { msb: null, lsb: null, program: 27 }, 0)!).project;
+    expect(kindsAt0(p)).toEqual(['pc27', 'n65', 'n72']); // the notes keep their own order
+    p = applyCommand(p, setInitialController(p, trackId, 7, 90)).project;
+    expect(kindsAt0(p)).toEqual(['pc27', 'cc7', 'n65', 'n72']);
+  });
+
+  it('adding notes never renumbers existing events; originOrder stays unique', () => {
+    let p = withNotes();
+    const trackId = p.tracks[0].id;
+    p = applyCommand(p, setBankProgram(p, trackId, { msb: null, lsb: null, program: 27 })).project;
+    const before = new Map(p.tracks[0].events.map((e) => [e.id, e.originOrder]));
+    p = applyCommand(p, addEvents(p, trackId, [note(0, 60)])!.command).project;
+    for (const e of p.tracks[0].events) if (before.has(e.id)) expect(e.originOrder).toBe(before.get(e.id));
+    expect(kindsAt0(p)).toEqual(['pc27', 'n65', 'n60']);
+    const orders = p.tracks[0].events.map((e) => e.originOrder);
+    expect(new Set(orders).size).toBe(orders.length);
+    expect(Math.max(...orders)).toBeLessThan(p.nextOriginOrder);
+  });
+});
+
+describe('moved events keep the sound before the notes at their new tick (ADR-082)', () => {
+  type P = ReturnType<typeof createEmptyProject>;
+  const kindsAt = (p: P, tick: number) =>
+    sortEvents(p.tracks[0].events.filter((e) => e.tick === tick)).map((e) => (e.kind === 'cc' ? `cc${e.controller}` : e.kind === 'program' ? `pc${e.program}` : e.kind === 'note' ? `n${e.pitch}` : e.kind));
+  const note = (tick: number, pitch: number) => ({ kind: 'note' as const, tick, pitch, velocity: 80, durationTicks: 240, releaseVelocity: 64 });
+  const add = (p: P, events: Parameters<typeof addEvents>[2]) => applyCommand(p, addEvents(p, p.tracks[0].id, events)!.command).project;
+  const ids = (p: P, kind: string) => p.tracks[0].events.filter((e) => e.kind === kind).map((e) => e.id);
+
+  it('a Program Change moved onto a note (list tick edit) goes before it', () => {
+    let p = add(createEmptyProject(), [note(0, 60)]);
+    p = add(p, [{ kind: 'program', tick: 480, program: 27 }]);
+    p = applyCommand(p, updateEvents(p, [{ id: ids(p, 'program')[0], changes: { tick: 0 } }])!).project;
+    expect(kindsAt(p, 0)).toEqual(['pc27', 'n60']);
+  });
+
+  it('a note moved onto a mixer value goes after it; quantize too', () => {
+    let p = add(createEmptyProject(), [note(5, 60), note(1910, 62)]);
+    p = add(p, [{ kind: 'cc', tick: 0, controller: 7, value: 90 }, { kind: 'program', tick: 1920, program: 27 }]);
+    const [n60, n62] = ids(p, 'note');
+    p = applyCommand(p, moveEvents(p, [n60], -5)!).project;
+    expect(kindsAt(p, 0)).toEqual(['cc7', 'n60']);
+    p = applyCommand(p, quantizeNotes(p, [n62], { grid: { num: 480, den: 1 }, strength: 1 })!).project;
+    expect(kindsAt(p, 1920)).toEqual(['pc27', 'n62']);
+    const orders = p.tracks[0].events.map((e) => e.originOrder);
+    expect(new Set(orders).size).toBe(orders.length);
+    expect(Math.max(...orders)).toBeLessThan(p.nextOriginOrder);
+  });
+
+  it('a clip moved onto a tick with a Program Change keeps the Program first; Undo restores', () => {
+    let p = createEmptyProject();
+    const made = createClip(p, p.tracks[0].id, 0, 480);
+    p = applyCommand(p, made.command).project;
+    p = applyCommand(p, addEvents(p, p.tracks[0].id, [note(0, 60)], { clipId: made.clipId })!.command).project; // older than the Program
+    p = add(p, [{ kind: 'program', tick: 1920, program: 27 }, note(1920, 64)]);
+    const moved = applyCommand(p, moveClip(p, made.clipId, 1920)!);
+    expect(kindsAt(moved.project, 1920)).toEqual(['pc27', 'n60', 'n64']); // notes keep their own order
+    expect(applyCommand(moved.project, moved.inverse).project).toEqual(p);
+  });
+
+  it('events moved together keep their own order (an imported Note -> Program stays as is)', () => {
+    const r = openMidiFile(build(1, 480, [on(0, 0, 60), program(0, 0, 5), off(480, 0, 60)]));
+    if (!r.ok) throw new Error();
+    let p = r.project;
+    p = applyCommand(p, moveEvents(p, p.tracks[0].events.map((e) => e.id), 960)!).project;
+    expect(kindsAt(p, 960)).toEqual(['n60', 'pc5']);
   });
 });
 

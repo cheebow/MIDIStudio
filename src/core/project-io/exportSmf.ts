@@ -77,6 +77,17 @@ function trackToSmf(track: MidiTrack, warnings: ExportWarning[]): SmfTrack {
   const ch = (e: { channelOverride?: number }) => e.channelOverride ?? track.channel;
   let lastEnd = track.endOfTrackTick ?? 0;
   const events: MidiEvent[] = [...track.events].sort(compareEvents);
+  // Earliest Note On per (tick, channel, pitch): a kept Note Off (releaseOrder) must not land after a
+  // Note On of the same key at its tick, or it would cut that note (a note moved onto the end of an
+  // imported note of the same pitch; ADR-082).
+  const noteKey = (tick: number, c: number, pitch: number) => `${tick}|${c}|${pitch}`;
+  const firstOn = new Map<string, number>();
+  for (const e of events) {
+    if (e.kind !== 'note') continue;
+    const k = noteKey(e.tick, ch(e), e.pitch);
+    const prev = firstOn.get(k);
+    if (prev === undefined || e.originOrder < prev) firstOn.set(k, e.originOrder);
+  }
   for (const e of events) {
     switch (e.kind) {
       case 'note': {
@@ -87,7 +98,10 @@ function trackToSmf(track: MidiTrack, warnings: ExportWarning[]): SmfTrack {
           e.sourceEncoding === 'note-on-zero'
             ? { kind: 'channel', tick: off, status: 0x90 | c, data: [e.pitch, 0] }
             : { kind: 'channel', tick: off, status: 0x80 | c, data: [e.pitch, e.releaseVelocity] };
-        if (e.releaseOrder !== undefined) push(off, 0, e.releaseOrder, offEv);
+        if (e.releaseOrder !== undefined) {
+          const on = firstOn.get(noteKey(off, c, e.pitch));
+          push(off, 0, on !== undefined && on < e.releaseOrder ? on - 0.5 : e.releaseOrder, offEv);
+        }
         else push(off, -1, e.originOrder, offEv);
         lastEnd = Math.max(lastEnd, off);
         break;

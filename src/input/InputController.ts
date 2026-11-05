@@ -114,7 +114,7 @@ export class InputController {
       if (trackId) {
         const bytes =
           e.type === 'cc' ? [0xb0, e.controller, e.value] : e.type === 'pitch-bend' ? [0xe0, (e.value + 8192) & 0x7f, ((e.value + 8192) >> 7) & 0x7f] : e.type === 'channel-pressure' ? [0xd0, e.value] : [0xa0, e.pitch, e.value];
-        this.transport.sendToTrack(trackId, bytes);
+        this.transport.sendToTrack(trackId, bytes, { performed: true });
       }
       for (const s of this.sinks) s(e, trackId);
       return;

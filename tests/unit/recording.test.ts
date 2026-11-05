@@ -115,6 +115,25 @@ describe('live recording', () => {
     expect(applyCommand(rep.project, rep.inverse).project).toEqual(p);
   });
 
+  it('ADR-082: replace keeps the program / bank / mixer set-up and controllers the take did not record', () => {
+    let p = createEmptyProject();
+    p = applyCommand(p, addEvents(p, p.tracks[0].id, [
+      { kind: 'cc', tick: 0, controller: 0, value: 0 },
+      { kind: 'program', tick: 0, program: 27 },
+      { kind: 'cc', tick: 0, controller: 7, value: 90 },
+      { kind: 'cc', tick: 0, controller: 64, value: 127 },
+      { kind: 'pitch-bend', tick: 10, value: 100 },
+      { kind: 'note', tick: 0, pitch: 40, velocity: 100, durationTicks: 100, releaseVelocity: 64 },
+    ])!.command).project;
+    const take = new LiveTake({ tempo: new TempoMap(480, []) });
+    take.add({ type: 'note-on', pitch: 60, velocity: 100, songSeconds: 0 });
+    take.add({ type: 'cc', controller: 64, value: 0, songSeconds: 0.1 });
+    take.add({ type: 'note-off', pitch: 60, releaseVelocity: 64, songSeconds: 0.5 });
+    const rep = applyCommand(p, takeToCommand(p, p.tracks[0].id, take.finish(1), { mode: 'replace', replaceRange: { startTick: 0, endTick: 1920 } })!.command).project;
+    const kinds = rep.tracks[0].events.map((e) => (e.kind === 'cc' ? `cc${e.controller}=${e.value}` : e.kind === 'note' ? `note${e.pitch}` : e.kind));
+    expect(kinds).toEqual(['cc0=0', 'program', 'cc7=90', 'note60', 'pitch-bend', 'cc64=0']);
+  });
+
   it('record quantize moves only the new notes', () => {
     const take = new LiveTake({ tempo: new TempoMap(480, []) });
     take.add({ type: 'note-on', pitch: 60, velocity: 100, songSeconds: 0.27 }); // tick 259
