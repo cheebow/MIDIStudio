@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "shots:tutorial": "playwright test -c playwright.shots.config.ts",
+    "shots:og": "node scripts/make-og.mjs",
     "lint": "eslint .",
     "typecheck": "tsc -b"
   },
