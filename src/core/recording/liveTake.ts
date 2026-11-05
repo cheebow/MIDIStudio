@@ -74,13 +74,13 @@ export class LiveTake {
     this.maxTick = Math.max(this.maxTick, e.kind === 'note' ? e.tick + e.durationTicks : e.tick + 1);
   }
 
-  private closeNote(key: string, offTick: number, releaseVelocity: number) {
+  private closeNote(key: string, offTick: number, releaseVelocity: number, offPass = this.pass) {
     const on = this.open.get(key);
     if (!on) return;
     this.open.delete(key);
     let end = offTick;
     if (this.opts.punch) end = Math.min(end, this.opts.punch.outTick);
-    if (this.opts.loop && on.pass !== this.pass) end = this.opts.loop.endTick;
+    if (this.opts.loop && on.pass !== offPass) end = this.opts.loop.endTick;
     const pitch = Number(key.split(':')[1]);
     this.push({ kind: 'note', tick: on.tick, pitch, velocity: on.velocity, durationTicks: Math.max(1, end - on.tick), releaseVelocity, ...(on.channel !== undefined ? { channelOverride: on.channel } : {}) }, on.pass);
   }
@@ -112,6 +112,9 @@ export class LiveTake {
       }
     }
     this.lastTick = tick;
+    // An input the caller places in an earlier pass (the end of the loop, arriving just after a
+    // pickup started the next pass, ADR-088) stays in that pass.
+    const at = input.pass !== undefined ? Math.min(input.pass, this.pass) : this.pass;
     const ch = input.channel !== undefined ? { channelOverride: input.channel } : {};
     switch (input.type) {
       case 'note-on':
@@ -121,19 +124,19 @@ export class LiveTake {
         this.open.set(`${input.channel ?? -1}:${input.pitch}`, { tick, velocity: Math.max(1, Math.min(127, input.velocity)), channel: input.channel, pass: this.pass });
         return;
       case 'note-off':
-        this.closeNote(`${input.channel ?? -1}:${input.pitch}`, tick, input.releaseVelocity);
+        this.closeNote(`${input.channel ?? -1}:${input.pitch}`, tick, input.releaseVelocity, at);
         return;
       case 'cc':
-        if (this.inPunch(tick)) this.push({ kind: 'cc', tick, controller: input.controller, value: input.value, ...ch });
+        if (this.inPunch(tick)) this.push({ kind: 'cc', tick, controller: input.controller, value: input.value, ...ch }, at);
         return;
       case 'pitch-bend':
-        if (this.inPunch(tick)) this.push({ kind: 'pitch-bend', tick, value: input.value, ...ch });
+        if (this.inPunch(tick)) this.push({ kind: 'pitch-bend', tick, value: input.value, ...ch }, at);
         return;
       case 'channel-pressure':
-        if (this.inPunch(tick)) this.push({ kind: 'channel-pressure', tick, pressure: input.value, ...ch });
+        if (this.inPunch(tick)) this.push({ kind: 'channel-pressure', tick, pressure: input.value, ...ch }, at);
         return;
       case 'poly-pressure':
-        if (this.inPunch(tick)) this.push({ kind: 'poly-pressure', tick, pitch: input.pitch, pressure: input.value, ...ch });
+        if (this.inPunch(tick)) this.push({ kind: 'poly-pressure', tick, pitch: input.pitch, pressure: input.value, ...ch }, at);
         return;
     }
   }

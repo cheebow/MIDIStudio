@@ -94,3 +94,53 @@ describe('recording regressions found in the second review (ADR-086)', () => {
     expect(n.map((x) => x[1])).toEqual([60, 62]);
   });
 });
+
+describe('loop recording at the loop wrap (ADR-088)', () => {
+  /** loop 0..1920 (2 s at 120 BPM); the engine runs `drift` seconds ahead of the input clock */
+  async function loopSetup(drift: number) {
+    let now = 1000;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const { store, engine, transport, input } = setup();
+    store.updateSettings({ recording: { ...store.project.settings.recording, loopTakes: 'merge' } });
+    store.load({ ...store.project, loop: { enabled: true, startTick: 0, endTick: 1920 } } as never);
+    await transport.setProject(store.project);
+    const rec = new Recorder(store, transport, input, () => {}, () => null);
+    input.setMode('piano-performance');
+    await rec.start();
+    const at = (clock: number) => {
+      now = 1000 + clock * 1000;
+      engine.seconds = (clock + drift) % 2;
+    };
+    const play = (pitch: number, on: number, off: number) => {
+      at(on);
+      input.midiMessage({ type: 'note-on', channel: 0, pitch, velocity: 90 }, 'kb', now);
+      at(off);
+      input.midiMessage({ type: 'note-off', channel: 0, pitch, releaseVelocity: 0 }, 'kb', now);
+    };
+    return { store, rec, at, play };
+  }
+
+  it('a note played just after the wrap is not stretched to the loop end when the clock lags the engine', async () => {
+    const { store, rec, at, play } = await loopSetup(0.08); // engine already wrapped, clock still in pass 0
+    play(60, 1.97, 2.27); // engine: 0.05 s .. 0.35 s of pass 1
+    at(3.5);
+    rec.stop();
+    const n = notesOf(store, 0);
+    expect(n).toHaveLength(1);
+    expect(n[0][1]).toBe(60);
+    expect(Math.abs(n[0][0] - 48)).toBeLessThanOrEqual(2); // 0.05 s
+    expect(Math.abs(n[0][2] - 288)).toBeLessThanOrEqual(2); // 0.3 s, not to the loop end
+  });
+
+  it('a note played a little before the loop start goes to the downbeat of the next pass, not the end of the loop', async () => {
+    const { store, rec, at, play } = await loopSetup(0);
+    play(64, 1.98, 2.2); // 20 ms early for the downbeat (the window is a 32nd note: 62.5 ms)
+    at(3.5);
+    rec.stop();
+    const n = notesOf(store, 0).sort((a, b) => a[0] - b[0]);
+    const e4 = n.find((x) => x[1] === 64)!;
+    expect(e4[0]).toBe(0);
+    expect(Math.abs(e4[2] - 192)).toBeLessThanOrEqual(2); // 0.2 s from the downbeat
+    expect(n.some((x) => x[1] === 64 && x[0] > 1800)).toBe(false); // no short note at the end of the loop
+  });
+});

@@ -57,6 +57,9 @@ export class Recorder {
   /** input clock (performance.now) when playback started, and the loop in song seconds */
   private playStartMs: number | null = null;
   private loopSeconds: { start: number; end: number } | null = null;
+  /** loop recording: a note-on this close to the loop end goes to the next pass's downbeat (a 32nd note) */
+  private earlyWindow = 0;
+  private latencySeconds = 0;
 
   constructor(
     private readonly store: EditorStore,
@@ -153,6 +156,8 @@ export class Recorder {
       // loop recording: passes are counted on the input clock from here (ADR-084)
       this.playStartMs = performance.now();
       this.loopSeconds = loop ? { start: tempo.tickToSeconds(loop.startTick), end: tempo.tickToSeconds(loop.endTick) } : null;
+      this.earlyWindow = loop ? tempo.tickToSeconds(loop.endTick) - tempo.tickToSeconds(Math.max(loop.startTick, loop.endTick - project.ppq / 8)) : 0;
+      this.latencySeconds = rec.latencyMs / 1000;
     } catch (e) {
       // e.g. the audio engine could not start: do not stay in "recording" with the input attached
       this.stop();
@@ -161,16 +166,34 @@ export class Recorder {
   }
 
   /**
-   * Loop recording: the 0-based pass at input time `atMs`, counted from the start of playback
-   * (ADR-084). Started at or after the loop end, the engine jumps straight to the loop start, so
-   * the passes are counted from there (ADR-086). null when not loop recording.
+   * Loop recording: where an input lands — song seconds (as LiveTake expects them, latency not yet
+   * taken off) and the 0-based pass. null when not loop recording.
+   *
+   * The position comes from the engine (the loop wraps there); the input clock since playback
+   * started only says roughly how many loops have gone by, and the pass is the one that puts the
+   * engine position closest to it. Counting passes on the clock alone (ADR-084) drifted from the
+   * engine at the wrap: a note-on still counted in the old pass at the loop start got its note-off
+   * in the next pass and ran to the loop end (ADR-088).
+   * A note-on just before the loop end (within a 32nd note) was meant for the downbeat of the next
+   * pass, like a pickup in the count-in: it goes to the loop start of the next pass.
    */
-  private passAt(atMs: number): number | null {
+  private loopPlace(atMs: number, noteOn: boolean): { songSeconds: number; pass: number } | null {
     const ls = this.loopSeconds;
     if (!ls || this.playStartMs === null || ls.end <= ls.start) return null;
+    const len = ls.end - ls.start;
+    const latency = this.latencySeconds;
+    // started at or after the loop end, the engine jumps straight to the loop start
     const origin = this.startSeconds >= ls.end ? ls.start : this.startSeconds;
-    const at = origin + (atMs - this.playStartMs) / 1000;
-    return at < ls.end ? 0 : 1 + Math.floor((at - ls.end) / (ls.end - ls.start));
+    const unwrapped = origin + (atMs - this.playStartMs) / 1000 - latency;
+    let x = this.songSeconds(atMs) - latency;
+    // input from just before the engine wrapped back to the loop start belongs to the end of the loop
+    if (unwrapped >= ls.start && x < ls.start) x += len;
+    let pass = x >= ls.start ? Math.max(0, Math.round((unwrapped - x) / len)) : 0;
+    if (noteOn && x >= ls.end - this.earlyWindow) {
+      x = ls.start;
+      pass++;
+    }
+    return { songSeconds: x + latency, pass };
   }
 
   private capture(e: CapturedInput) {
@@ -201,8 +224,11 @@ export class Recorder {
     const ch: { channel?: number; pass?: number } = e.channel !== undefined ? { channel: e.channel } : {};
     // Loop recording: which pass this input is in, from the time since playback started. A pass
     // with no input (or played later in the bar) is then not merged into the next one (ADR-084).
-    const pass = phase === 'recording' ? this.passAt(e.atMs) : null;
-    if (pass !== null) ch.pass = pass;
+    const placed = phase === 'recording' ? this.loopPlace(e.atMs, e.type === 'note-on') : null;
+    if (placed) {
+      ch.pass = placed.pass;
+      songSeconds = placed.songSeconds;
+    }
     let input: RecordInput;
     switch (e.type) {
       case 'note-on':
@@ -251,7 +277,7 @@ export class Recorder {
     let lost = 0;
     try {
       for (const [trackId, take] of this.takes) {
-        const res = take.finish(stopSeconds, this.passAt(performance.now()) ?? undefined);
+        const res = take.finish(stopSeconds, this.loopPlace(performance.now(), false)?.pass);
         const events = res.takes.reduce((n, t) => n + t.events.length, 0);
         // the target track was deleted (or its creation undone) while recording: nothing to add to (ADR-084)
         if (!p.tracks.some((tr) => tr.id === trackId)) {
