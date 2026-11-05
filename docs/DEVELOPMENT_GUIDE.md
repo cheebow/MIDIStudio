@@ -144,6 +144,16 @@ npm run shots:tutorial     # Chromium で日本語・英語の 20 枚を public/
 
 章ごとの状況と番号の枠は `scripts/shots/tutorial.spec.ts` で作る。撮ったあとは `npm run build` で静的ページに反映される。
 
+### リンクを共有したときの画像（OGP）を作り直す
+
+アプリ（`index.html`）と紹介ページ（`public/about.html` / `about.en.html`）には OGP / Twitter Card のタグがあり、SNS でリンクを共有すると `public/images/og.png`（英語ページは `og.en.png`、1200×630）が出る（ADR-089）。画像は `public/images/daw.jpg` とロゴから作る。画面写真や文言を変えたら作り直す。
+
+```bash
+npm run shots:og           # Playwright の Chromium で public/images/og.png と og.en.png を書く
+```
+
+OGP の URL は絶対 URL が必要なので、公開先 `https://cheebow.github.io/MIDIStudio/` を直接書いている。公開先を変えるときは 3 つのページのタグも直す。
+
 ### ブランチ運用
 
 - `develop`: 日々の作業の合流先。GitHub の既定ブランチなので PR は自動的にここへ向く。
