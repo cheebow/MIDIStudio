@@ -1,4 +1,4 @@
-// Record button + status (REQ-IN-04). Recording needs an armed track (R).
+// Record button + status (REQ-IN-04). Records to the selected track (ADR-080).
 import { useEffect, useSyncExternalStore } from 'react';
 import type { Recorder } from '../../app/recording/Recorder';
 import { t } from '../../i18n';

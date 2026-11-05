@@ -228,7 +228,8 @@ export function validateProject(p: unknown): string[] {
       tickOk(c, w);
       switch (c.kind) {
         case 'tempo':
-          if (!isInt(c.usPerQuarter, 1, 0xffffff)) err(t('{w}: テンポ値が不正です。', { w }));
+          // up to 1 BPM: versions up to 0.7.0 let 1–3 BPM be entered (SMF export clamps them with a warning, ADR-084 / 086)
+          if (!isInt(c.usPerQuarter, 1, 60_000_000)) err(t('{w}: テンポ値が不正です。', { w }));
           break;
         case 'time-signature':
           if (!isInt(c.numerator, 1, 255) || !isInt(c.denominator, 1, 128) || (c.denominator & (c.denominator - 1)) !== 0) err(t('{w}: 拍子が不正です。', { w }));

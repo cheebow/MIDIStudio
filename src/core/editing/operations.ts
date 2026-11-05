@@ -88,6 +88,7 @@ export function addEvents(project: MidiProject, trackId: TrackId, events: readon
   // new Program Change) are renumbered after the new ones. Old events never move ahead of each other,
   // and adding notes never renumbers anything (notes have the last rank).
   const renumbered = new Map<string, number>();
+  const releases = new Map<string, number>();
   const newAt = new Map<number, MidiEvent[]>();
   for (const { i } of ordered) newAt.set(created[i].tick, [...(newAt.get(created[i].tick) ?? []), created[i]]);
   for (const [tick, fresh] of newAt) {
@@ -101,12 +102,14 @@ export function addEvents(project: MidiProject, trackId: TrackId, events: readon
       merged.push(old);
     }
     merged.push(...pending);
+    const orders = new Map<string, number>();
+    next = numberTick(track.events, tick, merged, new Set(later.map((x) => x.id)), next, orders, releases);
     for (const x of merged) {
-      if (x.originOrder >= project.nextOriginOrder) x.originOrder = next++; // created here: safe to mutate
-      else renumbered.set(x.id, next++);
+      if (x.originOrder >= project.nextOriginOrder) x.originOrder = orders.get(x.id)!; // created here: safe to mutate
+      else renumbered.set(x.id, orders.get(x.id)!);
     }
   }
-  const kept = renumbered.size ? track.events.map((x) => (renumbered.has(x.id) ? { ...x, originOrder: renumbered.get(x.id)! } : x)) : track.events;
+  const kept = renumbered.size || releases.size ? renumber(track.events, renumbered, releases) : track.events;
   const newTrack: MidiTrack = { ...track, events: sortEvents([...kept, ...created]) };
   const ids = created.map((e) => e.id);
   const patch: ProjectPatch = { tracks: replaceTracks(project, new Map([[trackId, newTrack]])), nextOriginOrder: next };
@@ -206,14 +209,47 @@ export function deleteEvents(project: MidiProject, ids: Iterable<string>, label 
  * existing order, moved events keep their order among themselves and the others keep theirs. Only
  * ticks whose order changes are renumbered, from `next`.
  */
+/**
+ * Numbers the events of one tick in `merged` order, starting at `next`. Imported Note Offs that end
+ * at this tick (notes with a releaseOrder) keep their place among the events that were already
+ * there (`anchors`, old numbers): a kept Note Off that followed a pedal-down still follows it after
+ * the renumbering, and one that came before every anchor keeps its number (ADR-086).
+ */
+function numberTick(all: readonly MidiEvent[], tick: number, merged: readonly MidiEvent[], anchors: ReadonlySet<string>, next: number, orders: Map<string, number>, releases: Map<string, number>): number {
+  const old = merged.filter((e) => anchors.has(e.id)).sort((a, b) => a.originOrder - b.originOrder);
+  const after = new Map<string, NoteEvent[]>();
+  for (const n of all) {
+    if (n.kind !== 'note' || n.releaseOrder === undefined || n.tick + n.durationTicks !== tick) continue;
+    let anchor: MidiEvent | undefined;
+    for (const e of old) if (e.originOrder < n.releaseOrder) anchor = e;
+    if (anchor) after.set(anchor.id, [...(after.get(anchor.id) ?? []), n]);
+  }
+  for (const e of merged) {
+    orders.set(e.id, next++);
+    for (const n of (after.get(e.id) ?? []).sort((a, b) => a.releaseOrder! - b.releaseOrder!)) releases.set(n.id, next++);
+  }
+  return next;
+}
+
+/** applies numberTick results */
+function renumber(events: readonly MidiEvent[], orders: ReadonlyMap<string, number>, releases: ReadonlyMap<string, number>): MidiEvent[] {
+  return events.map((e) => {
+    const o = orders.get(e.id);
+    const r = releases.get(e.id);
+    if (o === undefined && r === undefined) return e;
+    return { ...e, ...(o !== undefined ? { originOrder: o } : {}), ...(r !== undefined ? { releaseOrder: r } : {}) } as MidiEvent;
+  });
+}
+
 function settleMoved(events: readonly MidiEvent[], moved: ReadonlySet<string>, next: number): { events: MidiEvent[]; next: number } {
   const sorted = sortEvents(events);
   const ticks = new Set(sorted.filter((e) => moved.has(e.id)).map((e) => e.tick));
   if (ticks.size === 0) return { events: sorted, next };
   const byTick = new Map<number, MidiEvent[]>();
   for (const e of sorted) if (ticks.has(e.tick)) byTick.set(e.tick, [...(byTick.get(e.tick) ?? []), e]);
-  const renumbered = new Map<string, number>();
-  for (const group of byTick.values()) {
+  const orders = new Map<string, number>();
+  const releases = new Map<string, number>();
+  for (const [tick, group] of byTick) {
     const stay = group.filter((e) => !moved.has(e.id));
     if (stay.length === 0) continue;
     const before: MidiEvent[][] = stay.map(() => []);
@@ -228,10 +264,10 @@ function settleMoved(events: readonly MidiEvent[], moved: ReadonlySet<string>, n
     }
     const merged = [...stay.flatMap((e, i) => [...before[i], e]), ...tail];
     if (merged.every((e, i) => e === group[i])) continue;
-    for (const e of merged) renumbered.set(e.id, next++);
+    next = numberTick(sorted, tick, merged, new Set(stay.map((e) => e.id)), next, orders, releases);
   }
-  if (renumbered.size === 0) return { events: sorted, next };
-  return { events: sortEvents(sorted.map((e) => (renumbered.has(e.id) ? ({ ...e, originOrder: renumbered.get(e.id)! } as MidiEvent) : e))), next };
+  if (orders.size === 0) return { events: sorted, next };
+  return { events: sortEvents(renumber(sorted, orders, releases)), next };
 }
 
 /** Fields an edit may change. Kind and id are fixed. */
@@ -261,7 +297,8 @@ export function updateEvents(project: MidiProject, updates: ReadonlyArray<{ id: 
         delete (next as NoteEvent).releaseOrder;
       }
       assertValidEvent(next);
-      if (next.tick !== e.tick) moved.add(e.id);
+      // a new tick, or a new kind of position at the same tick (CC 7 → CC 0 Bank Select): re-placed by the policy (ADR-086)
+      if (next.tick !== e.tick || policyRank(next) !== policyRank(e)) moved.add(e.id);
       return next;
     });
     if (!touched) continue;

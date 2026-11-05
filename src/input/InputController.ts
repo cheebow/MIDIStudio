@@ -123,13 +123,11 @@ export class InputController {
     let trackId: string | null;
     if (e.type === 'note-on') {
       trackId = this.targetTrack(e.target);
-      if (trackId) {
-        this.routed.set(key, trackId);
-        this.transport.auditionNote(trackId, e.pitch, e.velocity, e.sourceId);
-      }
+      this.routed.set(key, trackId ?? ''); // also without a track: its note-off still clears the held key
+      if (trackId) this.transport.auditionNote(trackId, e.pitch, e.velocity, e.sourceId);
       held.add(e.pitch);
     } else {
-      trackId = this.routed.get(key) ?? null;
+      trackId = this.routed.get(key) || null;
       this.routed.delete(key);
       if (trackId) this.transport.releaseAuditionNote(trackId, e.pitch, e.sourceId);
       held.delete(e.pitch);
@@ -154,7 +152,9 @@ export class InputController {
         // A key pressed before an input-mode switch (⌥R / ⌥K) is released to where it was played,
         // or its preview would never stop and the recorder would lose its end (ADR-083).
         const other = target === 'piano' ? 'drum' : 'piano';
-        const playedTo = !this.routed.has(`${sourceId}:${target}:${m.pitch}`) && this.routed.has(`${sourceId}:${other}:${m.pitch}`) ? other : target;
+        const here = this.routed.has(`${sourceId}:${target}:${m.pitch}`);
+        if (!here && !this.routed.has(`${sourceId}:${other}:${m.pitch}`)) return; // no matching note-on (e.g. a channel the filter drops): not ours to end (ADR-086)
+        const playedTo = here ? target : other;
         this.dispatch({ type: 'note-off', pitch: m.pitch, releaseVelocity: m.releaseVelocity, ...base, target: playedTo });
         break;
       }

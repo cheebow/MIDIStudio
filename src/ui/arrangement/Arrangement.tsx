@@ -363,7 +363,7 @@ export function Arrangement() {
         for (const n of notes) ctx.fillRect(n.tick * pxPerTick - scrollX, y0 + 6 + ((127 - n.pitch) / 127) * (TRACK_H - 12), Math.max(2, n.durationTicks * pxPerTick), 2);
       });
     }
-    follow.update(pos, x, viewW, scrollRef.current, sig, pxPerTick, settings.followPlayback);
+    follow.update(pos, scrollRef.current, viewW, leadPx, sig, pxPerTick, settings.followPlayback);
   }, [transport, viewW, viewH, height, pxPerTick, scrollX, scrollY, settings.followPlayback, recorder, project.tracks, sig, HEAD_H, follow]);
 
   function hitClip(x: number, y: number): MidiClip | null {

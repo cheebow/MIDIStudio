@@ -314,7 +314,7 @@ export function PianoRoll() {
       }
     }
     if (input.mode === 'step-piano' || input.mode === 'step-drums') drawStepCursor(ctx, Math.round(step.cursor * pxPerTick - view.x) + 0.5, view.h);
-    follow.update(pos, x, w, scrollRef.current, sig, pxPerTick, settings.followPlayback);
+    follow.update(pos, scrollRef.current, w, leadPx, sig, pxPerTick, settings.followPlayback);
   }, [transport, view, pxPerTick, settings.followPlayback, step, input, recorder, track?.id, sig, follow, notes]);
 
   // Ctrl / ⌘ + wheel (and trackpad pinch, which Chrome reports as wheel + ctrlKey) zooms the roll.

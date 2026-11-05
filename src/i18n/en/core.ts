@@ -13,6 +13,8 @@ export const EN_CORE: Record<string, string> = {
   '範囲内のノートをクリップに取り込む': 'Adopt notes inside the clip range',
   'クリップを移動': 'Move clip',
   'クリップを削除': 'Delete clip',
+  'トラックの色を変更': 'Change track color',
+  'トラック名を変更': 'Rename track',
   'クリップを複製': 'Duplicate clip',
   'クリップを分割': 'Split clip',
   'クリップの長さを変更': 'Resize clip',

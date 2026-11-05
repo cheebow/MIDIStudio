@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EditorStore } from '../../src/app/store/EditorStore';
 import { createEmptyProject } from '../../src/core/model/defaults';
 import { addEvents, addTrack } from '../../src/core/editing/operations';
+import { mergeTracks } from '../../src/core/editing/trackMerge';
 
 describe('EditorStore (shared editing state, CLAUDE.md rule 5)', () => {
   it('edits are undoable and mark the song unsaved; view settings are neither', () => {
@@ -74,5 +75,27 @@ describe('new project defaults', () => {
     expect(p.tracks[0].events).toMatchObject([{ kind: 'program', tick: 0, program: 0 }]);
     expect(p.nextOriginOrder).toBeGreaterThan(p.tracks[0].events[0].originOrder);
     expect(createEmptyProject().tracks[0].events).toEqual([]);
+  });
+
+  it('ADR-086: Undo of a track merge restores the flags the merge changed; flags set later are kept', () => {
+    const s = new EditorStore(createEmptyProject());
+    s.run(addTrack(s.project, { name: 'B' }).command);
+    const [a, b] = s.project.tracks;
+    s.setTrackFlags(a.id, { mute: true });
+    s.setTrackFlags(b.id, { solo: true });
+    s.run(mergeTracks(s.project, [a.id, b.id]));
+    s.undo();
+    expect(s.project.tracks.map((t) => [t.mute, t.solo])).toEqual([
+      [true, false],
+      [false, true],
+    ]);
+    // a flag set after the merge is still kept by its undo
+    s.redo();
+    s.setTrackFlags(a.id, { solo: false });
+    s.undo();
+    expect(s.project.tracks.map((t) => [t.mute, t.solo])).toEqual([
+      [true, false],
+      [false, true],
+    ]);
   });
 });

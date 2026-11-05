@@ -156,9 +156,10 @@ export function useGlobalShortcuts(d: ShortcutDeps): void {
       // In performance modes, single-letter shortcuts are off to avoid accidents (INPUT_RECORDING 7).
       const letter = input.mode === 'edit-shortcuts' && !mod && !e.altKey;
       // The letter as typed (AZERTY / Dvorak keep their own letters). With a non-Latin layout
-      // (Cyrillic, Greek...) e.key is not a Latin letter: use the key's position instead (ADR-084).
+      // (Cyrillic, Greek...) e.key is a letter but not a Latin one: use the key's position instead
+      // (ADR-084). Punctuation on a letter position (AZERTY ',' on M, Dvorak ''' on Q) stays itself (ADR-086).
       const typed = e.key.toLowerCase();
-      const k = /^[a-z]$/.test(typed) || !/^Key[A-Z]$/.test(e.code) ? typed : e.code.slice(3).toLowerCase();
+      const k = /^\p{L}$/u.test(typed) && !/^[a-z]$/.test(typed) && /^Key[A-Z]$/.test(e.code) ? e.code.slice(3).toLowerCase() : typed;
       const project = store.project;
       const settings = project.settings;
       const track = selectedTrack(project);

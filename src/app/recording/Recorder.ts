@@ -157,6 +157,19 @@ export class Recorder {
     }
   }
 
+  /**
+   * Loop recording: the 0-based pass at input time `atMs`, counted from the start of playback
+   * (ADR-084). Started at or after the loop end, the engine jumps straight to the loop start, so
+   * the passes are counted from there (ADR-086). null when not loop recording.
+   */
+  private passAt(atMs: number): number | null {
+    const ls = this.loopSeconds;
+    if (!ls || this.playStartMs === null || ls.end <= ls.start) return null;
+    const origin = this.startSeconds >= ls.end ? ls.start : this.startSeconds;
+    const at = origin + (atMs - this.playStartMs) / 1000;
+    return at < ls.end ? 0 : 1 + Math.floor((at - ls.end) / (ls.end - ls.start));
+  }
+
   private capture(e: CapturedInput) {
     const phase = this.state.phase;
     if (phase === 'idle' || !this.targets) return;
@@ -185,11 +198,8 @@ export class Recorder {
     const ch: { channel?: number; pass?: number } = e.channel !== undefined ? { channel: e.channel } : {};
     // Loop recording: which pass this input is in, from the time since playback started. A pass
     // with no input (or played later in the bar) is then not merged into the next one (ADR-084).
-    const ls = this.loopSeconds;
-    if (phase === 'recording' && ls && this.playStartMs !== null && ls.end > ls.start) {
-      const at = this.startSeconds + (e.atMs - this.playStartMs) / 1000;
-      ch.pass = at < ls.end ? 0 : 1 + Math.floor((at - ls.end) / (ls.end - ls.start));
-    }
+    const pass = phase === 'recording' ? this.passAt(e.atMs) : null;
+    if (pass !== null) ch.pass = pass;
     let input: RecordInput;
     switch (e.type) {
       case 'note-on':
@@ -238,7 +248,7 @@ export class Recorder {
     let lost = 0;
     try {
       for (const [trackId, take] of this.takes) {
-        const res = take.finish(stopSeconds);
+        const res = take.finish(stopSeconds, this.passAt(performance.now()) ?? undefined);
         const events = res.takes.reduce((n, t) => n + t.events.length, 0);
         // the target track was deleted (or its creation undone) while recording: nothing to add to (ADR-084)
         if (!p.tracks.some((tr) => tr.id === trackId)) {
