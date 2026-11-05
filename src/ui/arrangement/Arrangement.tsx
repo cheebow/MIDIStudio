@@ -776,7 +776,9 @@ export function Arrangement() {
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onPointerCancel={() => setDrag(null)}
-              onLostPointerCapture={() => setDrag(null)} // capture lost mid-drag (app switch): end it like a cancel (ADR-087)
+              // capture lost while the button is still down (app switch): cancel the drag. Chrome also
+              // sends it when the button is released, before pointerup: then pointerup finishes it (ADR-087)
+              onLostPointerCapture={(e) => e.buttons !== 0 && setDrag(null)}
               onContextMenu={onContextMenu}
               onDoubleClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();

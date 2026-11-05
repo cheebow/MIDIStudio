@@ -526,7 +526,7 @@ export function DrumEditor() {
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
                 onPointerCancel={() => setDrag(null)}
-                onLostPointerCapture={() => setDrag(null)} // ADR-087
+                onLostPointerCapture={(e) => e.buttons !== 0 && setDrag(null)} // only while the button is down (ADR-087)
                 onKeyDown={(e) => {
                   // in step input Backspace undoes the last step (global shortcut), not "delete selection" (ADR-083)
                   if (e.key === 'Backspace' && (input.mode === 'step-piano' || input.mode === 'step-drums')) return;

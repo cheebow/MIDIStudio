@@ -591,9 +591,11 @@ export function PianoRoll() {
                   setDrag(null);
                   audition(null);
                 }}
-                onLostPointerCapture={() => {
-                  // capture lost mid-drag (app switch): end it like a cancel (ADR-087)
-                  if (!dragRef.current) return;
+                onLostPointerCapture={(e) => {
+                  // Capture lost while the button is still down (app switch): cancel the drag. Chrome
+                  // also sends it when the button is released, before pointerup: a released button is
+                  // left to pointerup, or a box selection would be dropped (ADR-087).
+                  if (!dragRef.current || e.buttons === 0) return;
                   setDrag(null);
                   audition(null);
                 }}

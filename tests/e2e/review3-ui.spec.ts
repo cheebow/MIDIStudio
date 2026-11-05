@@ -78,3 +78,26 @@ test('an editor height saved on a tall window does not push the status bar off a
   await page.setViewportSize({ width: 1200, height: 620 });
   await expect(page.locator('.statusbar')).toBeInViewport();
 });
+
+test('piano roll: a box selection is kept when the browser reports the lost capture before pointerup (real Chrome)', async ({ page }) => {
+  await page.goto('/');
+  await importMidi(page, build(1, 480, [on(0, 0, 60), on(0, 0, 64), off(1920, 0, 60), off(0, 0, 64)]));
+  // a box over the middle of two long notes
+  const a = await rollPoint(page, 600, 66);
+  const b = await rollPoint(page, 900, 58);
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 6 });
+  // Chrome on macOS: lostpointercapture (button already released) arrives before pointerup
+  await page.getByTestId('piano-roll-grid').dispatchEvent('lostpointercapture', { buttons: 0, pointerId: 1 });
+  await page.mouse.up();
+  await expect(page.getByTestId('note-info-bar')).toContainText('2');
+  // a capture lost with the button still down (app switch) still cancels the drag: pressing on empty
+  // space cleared the selection, and the cancelled box selects nothing (it would select both notes)
+  await page.mouse.move(a.x, a.y);
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y + 200, { steps: 4 });
+  await page.getByTestId('piano-roll-grid').dispatchEvent('lostpointercapture', { buttons: 1, pointerId: 1 });
+  await page.mouse.up();
+  await expect(page.getByTestId('note-info-bar')).toContainText('ノートを選ぶと');
+});
