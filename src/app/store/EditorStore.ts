@@ -20,6 +20,11 @@ export interface EditorState {
   clipboard: ClipboardData | null;
   /** project revision counter: increments on every content change (not on view settings) */
   revision: number;
+  /**
+   * One-shot request to show a position in the note editors (double-click on a clip, ADR-085).
+   * Not saved; the editor of `trackId` scrolls to `tick` and clears it with takeReveal().
+   */
+  reveal: { trackId: string; tick: number } | null;
 }
 
 type Listener = () => void;
@@ -38,6 +43,7 @@ export class EditorStore {
       tool: 'select',
       clipboard: null,
       revision: 0,
+      reveal: null,
     };
   }
 
@@ -116,6 +122,19 @@ export class EditorStore {
 
   setTool(tool: Tool): void {
     this.set({ tool });
+  }
+
+  /** Asks the note editor of `trackId` to scroll to `tick` (ADR-085). */
+  revealTick(trackId: string, tick: number): void {
+    this.set({ reveal: { trackId, tick } });
+  }
+
+  /** The editor of `trackId` takes the pending reveal request (null when there is none for it). */
+  takeReveal(trackId: string): number | null {
+    const r = this.state.reveal;
+    if (!r || r.trackId !== trackId) return null;
+    this.state = { ...this.state, reveal: null }; // no notify: nothing else draws from it
+    return r.tick;
   }
 
   setClipboard(clipboard: ClipboardData | null): void {

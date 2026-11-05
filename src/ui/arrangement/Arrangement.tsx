@@ -363,7 +363,7 @@ export function Arrangement() {
         for (const n of notes) ctx.fillRect(n.tick * pxPerTick - scrollX, y0 + 6 + ((127 - n.pitch) / 127) * (TRACK_H - 12), Math.max(2, n.durationTicks * pxPerTick), 2);
       });
     }
-    follow(pos, x, viewW, scrollRef.current, sig, pxPerTick, settings.followPlayback);
+    follow.update(pos, x, viewW, scrollRef.current, sig, pxPerTick, settings.followPlayback);
   }, [transport, viewW, viewH, height, pxPerTick, scrollX, scrollY, settings.followPlayback, recorder, project.tracks, sig, HEAD_H, follow]);
 
   function hitClip(x: number, y: number): MidiClip | null {
@@ -779,7 +779,9 @@ export function Arrangement() {
                 if (lane) return onHeadDoubleClick(lane, e.clientX - rect.left);
                 const clip = hitClip(e.clientX - rect.left, e.clientY - rect.top);
                 const track = clip && project.tracks.find((tk) => tk.id === clip.trackId);
-                if (track) store.updateSettings({ selectedTrackId: track.id, activePanel: track.displayMode === 'drum' ? 'drum' : 'piano-roll', editorCollapsed: false });
+                if (!clip || !track) return;
+                store.updateSettings({ selectedTrackId: track.id, activePanel: track.displayMode === 'drum' ? 'drum' : 'piano-roll', editorCollapsed: false });
+                store.revealTick(track.id, clip.startTick); // the editor shows the clip's first bar (ADR-085)
               }}
             />
             <canvas ref={overlayRef} className="overlay-canvas" aria-hidden="true" />
