@@ -26,6 +26,8 @@ export interface ChaseResult {
   sysex: { tick: number; port: number; status: 'F0' | 'F7'; data: Uint8Array }[];
 }
 
+/** controllers that Reset All Controllers returns to their default (RP-015; 11 goes to 127) */
+const RESET_BY_CC121 = [1, 11, 64, 65, 66, 67];
 const SKIP_CC = new Set([0, 32, 6, 38, 96, 97, 98, 99, 100, 101, 120, 123, 124, 125, 126, 127]);
 
 export function chaseKey(port: number, channel: number): string {
@@ -90,9 +92,12 @@ export function chaseAt(project: MidiProject, tick: number): ChaseResult {
           s.parameters.set(p, v);
         }
       } else if (c === 121) {
-        // Reset All Controllers (RP-015): controllers and pitch bend back to defaults
-        s.controllers.clear();
+        // Reset All Controllers (RP-015): modulation, expression (to 127), the pedals, pitch bend
+        // and the RPN / NRPN selection. Volume, pan, effect sends, bank and program stay (ADR-084).
+        for (const r of RESET_BY_CC121) s.controllers.delete(r);
+        s.controllers.set(11, 127);
         s.pitchBend = undefined;
+        selected.set(key, null);
       } else if (!SKIP_CC.has(c)) s.controllers.set(c, e.value);
     }
   }

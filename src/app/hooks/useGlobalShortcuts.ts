@@ -155,7 +155,10 @@ export function useGlobalShortcuts(d: ShortcutDeps): void {
       }
       // In performance modes, single-letter shortcuts are off to avoid accidents (INPUT_RECORDING 7).
       const letter = input.mode === 'edit-shortcuts' && !mod && !e.altKey;
-      const k = e.key.toLowerCase();
+      // The letter as typed (AZERTY / Dvorak keep their own letters). With a non-Latin layout
+      // (Cyrillic, Greek...) e.key is not a Latin letter: use the key's position instead (ADR-084).
+      const typed = e.key.toLowerCase();
+      const k = /^[a-z]$/.test(typed) || !/^Key[A-Z]$/.test(e.code) ? typed : e.code.slice(3).toLowerCase();
       const project = store.project;
       const settings = project.settings;
       const track = selectedTrack(project);
@@ -203,7 +206,7 @@ export function useGlobalShortcuts(d: ShortcutDeps): void {
         actions.delete();
       } else if (!mod && e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         handled();
-        const id = settings.selectedTrackId;
+        const id = selectedTrack(project)?.id; // the setting may still name a deleted track (ADR-084)
         if (id) d.tryRun(() => store.run(moveTrack(project, id, e.key === 'ArrowUp' ? -1 : 1)));
       } else if (!mod && !e.altKey && (e.key === 'Home' || (e.key === 'Enter' && !activates(e.target)))) {
         handled();

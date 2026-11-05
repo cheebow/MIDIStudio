@@ -543,6 +543,18 @@ describe('merging drum tracks', () => {
     expect(s.project.tracks.filter((t) => t.channel === 9)).toHaveLength(3);
     expect(mergeDrumTracks(openMidiFile(src()).ok ? (openMidiFile(src()) as { project: MidiProject }).project : s.project)).toBeNull();
   });
+
+  it('ADR-084: merging never changes the original event objects (Undo still holds them)', () => {
+    const r = openMidiFile(src(), { mergeDrums: false });
+    if (!r.ok) throw new Error();
+    const drumTracks = r.project.tracks.filter((t) => t.channel === 9);
+    // events that carry channelOverride: undefined (the key present) on the track merged into
+    const withKey = { ...drumTracks[0], events: drumTracks[0].events.map((e) => ({ ...e, channelOverride: undefined }) as MidiProject['tracks'][number]['events'][number]) };
+    const p: MidiProject = { ...r.project, tracks: r.project.tracks.map((t) => (t.id === withKey.id ? withKey : t)) };
+    const before = JSON.stringify(withKey.events.map((e) => Object.keys(e)));
+    mergeDrumTracks(p);
+    expect(JSON.stringify(withKey.events.map((e) => Object.keys(e)))).toBe(before);
+  });
 });
 
 import { mergeSameChannelTracks } from '../../src/core/editing/trackMerge';

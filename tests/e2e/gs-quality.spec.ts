@@ -138,6 +138,24 @@ test('mixer: knobs and the vertical fader write tick-0 CC events; double-click r
   expect(cc[91]).toBe(40); // reverb default via double-click
 });
 
+test('ADR-084: a burst of wheel ticks on a mixer knob is one undo step', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'ミキサー' }).click();
+  const pan = page.getByRole('slider', { name: 'ピアノ Pan' });
+  const panAt0 = async () => {
+    const out = await exportedSmf(page);
+    const e = out.tracks[1].events.find((x) => x.kind === 'channel' && x.tick === 0 && (x.status & 0xf0) === 0xb0 && x.data[0] === 10);
+    return e && e.kind === 'channel' ? e.data[1] : null;
+  };
+  const start = await panAt0();
+  await pan.hover(); // (reading the export moves the pointer away)
+  for (let i = 0; i < 5; i++) await page.mouse.wheel(0, -100); // five ticks up
+  await expect(pan).toHaveAttribute('aria-valuenow', String((start ?? 64) + 5));
+  expect(await panAt0()).toBe((start ?? 64) + 5);
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
+  expect(await panAt0()).toBe(start);
+});
+
 test.describe('mixer with the real engine (Chromium)', () => {
   test.skip(({ browserName }) => browserName !== 'chromium', 'audio engine runs on Chromium');
   test('level meters light up while playing; a knob moved while playing does not stop or rewind playback', async ({ page }) => {

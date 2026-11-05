@@ -3,6 +3,7 @@ import { EditorStore } from '../../src/app/store/EditorStore';
 import { Recorder, recordTargets } from '../../src/app/recording/Recorder';
 import { StepController } from '../../src/app/recording/StepController';
 import { InputController } from '../../src/input/InputController';
+import { removeTrack } from '../../src/core/editing/operations';
 import { Transport } from '../../src/playback/Transport';
 import { createEmptyProject, createTrack } from '../../src/core/model/defaults';
 import { createCounterIdGenerator, setIdGenerator } from '../../src/core/model/ids';
@@ -80,6 +81,20 @@ describe('recording through the real input path (fake engine)', () => {
     expect(Math.abs(n[2] - 480)).toBeLessThanOrEqual(2);
   });
 
+  it('ADR-084: the same key on two MIDI channels is two voices; releasing one keeps the other; unplugging releases both', async () => {
+    const { store, transport, input } = setup();
+    await transport.setProject(store.project);
+    input.setMode('piano-performance');
+    input.midiMessage({ type: 'note-on', channel: 0, pitch: 60, velocity: 90 }, 'kb', 0);
+    input.midiMessage({ type: 'note-on', channel: 1, pitch: 60, velocity: 90 }, 'kb', 0);
+    expect(transport.activePreviewCount).toBe(2);
+    input.midiMessage({ type: 'note-off', channel: 0, pitch: 60, releaseVelocity: 0 }, 'kb', 1);
+    expect(transport.activePreviewCount).toBe(1);
+    input.midiMessage({ type: 'note-on', channel: 0, pitch: 64, velocity: 90 }, 'kb', 2);
+    input.releaseSource('midi:kb');
+    expect(transport.activePreviewCount).toBe(0);
+  });
+
   it('ADR-083: the Tab sustain is lifted when leaving the PC-keyboard mode or losing focus', async () => {
     const { store, engine, transport, input } = setup();
     await transport.setProject(store.project);
@@ -94,6 +109,24 @@ describe('recording through the real input path (fake engine)', () => {
     input.releaseAll(); // window blur
     expect(input.sustain).toBe(false);
     expect(cc64()).toEqual([127, 0, 127, 0]);
+  });
+
+  it('ADR-084: a target track deleted while recording does not leave the recorder stuck', async () => {
+    const { store, engine, transport, input } = setup();
+    await transport.setProject(store.project);
+    const rec = new Recorder(store, transport, input, () => {}, () => null);
+    input.setMode('piano-performance');
+    await rec.start();
+    input.midiMessage({ type: 'note-on', channel: 0, pitch: 60, velocity: 90 }, 'kb', performance.now());
+    engine.advance(0.5);
+    input.midiMessage({ type: 'note-off', channel: 0, pitch: 60, releaseVelocity: 0 }, 'kb', performance.now());
+    store.run(removeTrack(store.project, store.project.tracks[0].id));
+    expect(() => rec.stop()).not.toThrow();
+    expect(rec.getState().phase).toBe('idle');
+    expect(rec.getState().message).toContain('削除されたトラック');
+    await rec.start(); // recording works again
+    expect(rec.getState().phase).not.toBe('idle');
+    rec.stop();
   });
 
   it('refuses ambiguous or missing record targets', () => {
@@ -182,5 +215,26 @@ describe('early hits during the count-in (ADR-047)', () => {
     expect(notes[0][2]).toBeGreaterThanOrEqual(1);
     expect(rec.getState().message).toContain('開始位置に揃えました');
     expect(rec.getState().message).toContain('1 個は記録していません');
+  });
+
+  it('ADR-084: a pickup pressed and released within the count-in keeps its length', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { store, engine, transport, input } = setup();
+    store.updateSettings({ recording: { ...store.project.settings.recording, countInBars: 1 } });
+    await transport.setProject(store.project);
+    const rec = new Recorder(store, transport, input, () => {}, () => 0);
+    input.setMode('piano-performance');
+    const started = rec.start();
+    await vi.advanceTimersByTimeAsync(1600); // the last count-in beat
+    const t0 = performance.now();
+    input.midiMessage({ type: 'note-on', channel: 0, pitch: 60, velocity: 90 }, 'kb', t0);
+    input.midiMessage({ type: 'note-off', channel: 0, pitch: 60, releaseVelocity: 0 }, 'kb', t0 + 250); // held 0.25 s = an eighth at 120 BPM
+    await vi.advanceTimersByTimeAsync(600);
+    await started;
+    engine.advance(1);
+    rec.stop();
+    const [n] = notesOf(store, 0);
+    expect(n[0]).toBe(0);
+    expect(Math.abs(n[2] - 240)).toBeLessThanOrEqual(2);
   });
 });

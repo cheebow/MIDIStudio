@@ -10,8 +10,13 @@ interface ValueProps {
   defaultValue: number;
   label: string;
   onChange: (v: number) => void;
-  onCommit: (v: number) => void;
+  /** `mergeKey`: commits with the same key are one undo step (a burst of wheel ticks) */
+  onCommit: (v: number, mergeKey?: string) => void;
 }
+
+/** a pause this long between wheel ticks starts a new undo step */
+const WHEEL_IDLE_MS = 600;
+let wheelSessions = 0;
 
 const clamp = (v: number) => Math.max(0, Math.min(127, Math.round(v)));
 
@@ -33,10 +38,19 @@ function useValueGestures({ value, defaultValue, onChange, onCommit }: ValueProp
     onChange(c);
     return c;
   };
-  const commit = (v: number) => {
+  const commit = (v: number, mergeKey?: string) => {
     liveRef.current = null;
     setLive(null);
-    onCommit(clamp(v));
+    onCommit(clamp(v), mergeKey);
+  };
+  const wheel = useRef<{ key: string; at: number } | null>(null);
+  /** ends a drag: pointerup, or a lost capture / cancel (window blur mid-drag) so the drag never sticks (ADR-084) */
+  const endDrag = () => {
+    if (!drag.current) return;
+    const l = liveRef.current;
+    const v = l ?? drag.current.v;
+    drag.current = null;
+    if (l !== null || v !== (value ?? defaultValue)) commit(v);
   };
   const startDrag = (e: React.PointerEvent, from: number) => {
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -55,17 +69,17 @@ function useValueGestures({ value, defaultValue, onChange, onCommit }: ValueProp
         const px = typeof pxPerStep === 'function' ? pxPerStep() : pxPerStep;
         set(drag.current.v + ((drag.current.y - e.clientY) / px) * fine);
       },
-      onPointerUp: () => {
-        if (!drag.current) return;
-        const l = liveRef.current;
-        const v = l ?? drag.current.v;
-        drag.current = null;
-        if (l !== null || v !== (value ?? defaultValue)) commit(v);
-      },
+      onPointerUp: endDrag,
+      onPointerCancel: endDrag,
+      onLostPointerCapture: endDrag,
       onDoubleClick: () => commit(set(defaultValue)),
       onWheel: (e: React.WheelEvent) => {
         const v = set(base() + (e.deltaY < 0 ? 1 : -1));
-        commit(v);
+        // one undo step per burst of wheel ticks, not one per tick (ADR-084)
+        const now = performance.now();
+        if (!wheel.current || now - wheel.current.at > WHEEL_IDLE_MS) wheel.current = { key: `wheel-${++wheelSessions}`, at: now };
+        wheel.current.at = now;
+        commit(v, wheel.current.key);
       },
       onKeyDown: (e: React.KeyboardEvent) => {
         const step: Record<string, number> = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1, PageUp: 10, PageDown: -10 };

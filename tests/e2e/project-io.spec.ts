@@ -23,6 +23,22 @@ test('C13 / O04: import -> export is semantically equal; broken files keep the c
   await expect(page.getByTestId('track-header')).toHaveCount(2);
 });
 
+test('ADR-084: a file that cannot be read (moved, no permission) is reported, not ignored', async ({ page }) => {
+  await page.goto('/');
+  for (const [testId, name] of [['midi-input', 'gone.mid'], ['project-input', 'gone.midstudio']]) {
+    await page.evaluate(([id, fileName]) => {
+      const input = document.querySelector(`[data-testid="${id}"]`) as HTMLInputElement;
+      const f = new File([new Uint8Array(4)], fileName);
+      const fail = () => Promise.reject(new DOMException('The file could not be read', 'NotReadableError'));
+      f.arrayBuffer = fail;
+      f.text = fail;
+      Object.defineProperty(input, 'files', { value: [f], configurable: true });
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }, [testId, name]);
+    await expect(page.getByTestId('error')).toContainText(`${name} を開けませんでした`);
+  }
+});
+
 test('O01: browser save -> reload -> recent restores tracks, loop and editor settings', async ({ page }) => {
   await page.goto('/');
   await importMidi(page, format1Song());

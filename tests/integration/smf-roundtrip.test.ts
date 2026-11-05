@@ -27,6 +27,7 @@ const cases: [string, Uint8Array][] = [
   ['Format 0 with running status (PPQ 96)', format0Song()],
   ['retriggered overlapping notes', build(1, 480, [on(0, 0, 60), on(240, 0, 60, 90), off(240, 0, 60), off(240, 0, 60)])],
   ['unpaired / zero-length notes', build(1, 480, [off(0, 0, 50), on(0, 0, 51), off(0, 0, 51), on(10, 0, 52)])],
+  ['port prefix after a tick-0 SysEx (ADR-084)', build(1, 480, [sysex(0, GS_RESET), port(0, 1), on(0, 0, 60), off(480, 0, 60)])],
   ['two ports, same channel', build(1, 480, [port(0, 0), on(0, 0, 60), off(480, 0, 60)], [port(0, 1), on(0, 0, 60), off(480, 0, 60)])],
   ['RPN/NRPN and pitch bend extremes', build(1, 480, [cc(0, 3, 101, 0), cc(0, 3, 100, 0), cc(0, 3, 6, 12), cc(0, 3, 99, 1), cc(0, 3, 98, 8), cc(0, 3, 6, 64), bend(0, 3, -8192), bend(10, 3, 8191), bend(10, 3, 0)])],
   ['GS SysEx (F0 and F7 continuation)', build(1, 480, [sysex(0, GS_RESET), sysex(10, GS_RHYTHM_PART_11), sysexF7(10, [0x01, 0x02, 0xf7])])],

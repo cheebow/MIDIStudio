@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { build, off, on, program } from '../fixtures/songs';
-import { exportedSmf, importMidi, rollPoint } from './helpers';
+import { exportedSmf, importMidi, menu, rollPoint } from './helpers';
 import type { SmfFile } from '../../src/core/smf/types';
 
 const notesOf = (smf: SmfFile) =>
@@ -24,6 +24,59 @@ test('track view: Delete removes the selected clip together with its notes', asy
   expect(notesOf(await exportedSmf(page))).toEqual([]);
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
   expect(notesOf(await exportedSmf(page))).toEqual([{ tick: 0, pitch: 60 }]);
+});
+
+test('ADR-084: the wheel events of a trackpad tap / scroll momentum do not close a menu that just opened; a real scroll later does', async ({ page }) => {
+  await page.goto('/');
+  await importMidi(page, build(1, 480, [program(0, 0, 0), on(0, 0, 60), off(480, 0, 60)]));
+  const p = await firstClip(page);
+  await page.mouse.click(p.x, p.y, { button: 'right' });
+  const menu = page.getByTestId('context-menu');
+  await expect(menu).toBeVisible();
+  await page.mouse.move(p.x - 60, p.y); // off the menu (it opens at the pointer, down-right)
+  await page.mouse.wheel(0, 3); // comes with the two-finger click
+  await page.mouse.wheel(0, 60); // momentum of a scroll just before
+  await page.waitForTimeout(100);
+  await expect(menu).toBeVisible();
+  await page.waitForTimeout(500);
+  await page.mouse.wheel(0, 5); // a nudge is not a scroll
+  await expect(menu).toBeVisible();
+  await page.mouse.wheel(0, 120);
+  await expect(menu).toBeHidden();
+});
+
+test('ADR-084: splitting several selected clips at the playhead is one undo step; ⌘C with nothing selected keeps the clipboard', async ({ page }) => {
+  await page.goto('/');
+  // two tracks, each one clip 0..3840 (notes at 0 and 2880)
+  await importMidi(page, build(1, 480, [program(0, 0, 0), on(0, 0, 60), off(480, 0, 60), on(2400, 0, 62), off(480, 0, 62)], [on(0, 1, 64), off(480, 1, 64), on(2400, 1, 65), off(480, 1, 65)]));
+  const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
+  const p = await firstClip(page);
+  await page.mouse.click(p.x, p.y);
+  await page.keyboard.down('Shift');
+  await page.mouse.click(p.x, p.y + 48);
+  await page.keyboard.up('Shift');
+  // copy the two clips, then press ⌘C again with nothing selected: the clipboard keeps the clips
+  await page.keyboard.press(`${mod}+c`);
+  await page.mouse.click(p.x + 96 * 7, p.y); // an empty part of the lane: nothing selected
+  await page.keyboard.press(`${mod}+c`);
+  await page.keyboard.press(`${mod}+v`);
+  expect(notesOf(await exportedSmf(page))).toHaveLength(8);
+  await page.keyboard.press(`${mod}+z`);
+  expect(notesOf(await exportedSmf(page))).toHaveLength(4);
+  // split both clips at bar 2 at once; one undo brings both back whole
+  await page.mouse.click(p.x, p.y);
+  await page.keyboard.down('Shift');
+  await page.mouse.click(p.x, p.y + 48);
+  await page.keyboard.up('Shift');
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Period'); // playhead to bar 2
+  await menu(page, '編集', '再生位置で分割', 'クリップ');
+  await page.keyboard.press(`${mod}+z`);
+  // if the first track were still split, deleting its clip at bar 1 would leave the note at 2880
+  await page.mouse.click(p.x + 96 * 7, p.y); // clear the selection (both clips are still selected)
+  await page.mouse.click(p.x, p.y);
+  await page.keyboard.press('Delete');
+  expect(notesOf(await exportedSmf(page))).toEqual([{ tick: 0, pitch: 64 }, { tick: 2880, pitch: 65 }]);
 });
 
 test('track view: right-click a clip → duplicate, then delete via the menu', async ({ page }) => {

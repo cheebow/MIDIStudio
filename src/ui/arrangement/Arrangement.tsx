@@ -537,7 +537,7 @@ export function Arrangement() {
         } else store.run(moveClips(store.project, d.ids, d.dx, { trackOffset: d.trackOffset }));
       }
     } catch (err) {
-      console.warn(err);
+      reportError((err as Error).message); // shown in the banner like the other editors (ADR-084)
     }
   }
 

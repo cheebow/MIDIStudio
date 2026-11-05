@@ -8,6 +8,7 @@ import type { HumanizeSettings, ListSettings, MidiProject, ProjectViewSettings, 
 import { SMF_LIMITS } from '../smf/types';
 import { t } from '../../i18n';
 import { adoptLooseNotes } from '../editing/operations';
+import { isSorted, sortEvents } from '../events/order';
 
 export const PROJECT_FILE_FORMAT = 'midi-studio-project';
 export const CURRENT_SCHEMA_VERSION = 1;
@@ -66,7 +67,7 @@ export function parseProjectFile(text: string): ProjectParseResult {
   }
   const errors = validateProject(env.project);
   if (errors.length > 0) return { ok: false, errors };
-  const loaded = env.project as MidiProject;
+  const loaded = normaliseOrder(env.project as MidiProject);
   // Settings and key maps gain fields over time; missing ones fall back to defaults.
   const project: MidiProject = adoptLooseNotes({
     ...loaded,
@@ -74,6 +75,29 @@ export function parseProjectFile(text: string): ProjectParseResult {
     inputPresets: { ...defaultInputPresets(), ...loaded.inputPresets },
   }); // notes outside every clip would be silent (ADR-064): older files get clips around them
   return { ok: true, project, ...(from !== CURRENT_SCHEMA_VERSION ? { migratedFrom: from } : {}) };
+}
+
+/**
+ * A hand-edited or damaged file may list events out of order or carry a nextOriginOrder that is not
+ * past every originOrder. Everything assumes sorted events and fresh numbers (a new event would
+ * otherwise share a number and sort unpredictably), so both are put right on load (ADR-084).
+ */
+function normaliseOrder(p: MidiProject): MidiProject {
+  let max = -1;
+  const see = (e: { originOrder: number; releaseOrder?: number }) => {
+    max = Math.max(max, e.originOrder, e.releaseOrder ?? -1);
+  };
+  p.conductor.forEach(see);
+  p.conductorMeta.forEach(see);
+  for (const tr of p.tracks) tr.events.forEach(see);
+  const sortedIfNeeded = <T extends { tick: number; originOrder: number; id: string }>(xs: T[]): T[] => (isSorted(xs) ? xs : sortEvents(xs));
+  return {
+    ...p,
+    nextOriginOrder: Math.max(p.nextOriginOrder, max + 1),
+    conductor: sortedIfNeeded(p.conductor),
+    conductorMeta: sortedIfNeeded(p.conductorMeta),
+    tracks: p.tracks.map((tr) => (isSorted(tr.events) ? tr : { ...tr, events: sortEvents(tr.events) })),
+  };
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -278,6 +302,8 @@ export function validateProject(p: unknown): string[] {
             break;
           case 'meta':
             if (!isInt(e.metaType, 0, 127)) err(t('{we}: metaType が不正です。', { we }));
+            // an End of Track in the middle would cut the exported track there (ADR-084)
+            else if (e.metaType === 0x2f) err(t('{we}: End of Track（FF 2F）はイベントとして持てません。', { we }));
             b64Ok(e.dataBase64, we);
             break;
           default:

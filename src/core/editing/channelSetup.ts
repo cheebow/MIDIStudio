@@ -3,6 +3,7 @@
 import type { MidiEvent, MidiProject } from '../model/types';
 import type { Command } from './history';
 import { addEvents, EditError, type NewEvent } from './operations';
+import { sortEvents } from '../events/order';
 import { t } from '../../i18n';
 
 /**
@@ -35,6 +36,23 @@ export function setBankProgram(project: MidiProject, trackId: string, v: { msb: 
 /** Pitch Bend Sensitivity (RPN 0/0) at tick 0, followed by RPN Null so later Data Entry is safe. */
 export function setPitchBendRange(project: MidiProject, trackId: string, semitones: number): Command {
   if (!Number.isInteger(semitones) || semitones < 0 || semitones > 24) throw new EditError(t('ベンド幅は 0〜24 半音です。'));
+  // Already set at tick 0 (a Data Entry while RPN 0/0 is selected): change that value instead of
+  // adding another six events every time (ADR-084).
+  const track = project.tracks.find((tr) => tr.id === trackId);
+  if (!track) throw new EditError('track not found');
+  let msb = 127;
+  let lsb = 127;
+  for (const e of sortEvents(track.events.filter((x) => x.tick === 0 && x.kind === 'cc' && (x.channelOverride === undefined || x.channelOverride === track.channel)))) {
+    if (e.kind !== 'cc') continue;
+    if (e.controller === 101) msb = e.value;
+    else if (e.controller === 100) lsb = e.value;
+    else if (e.controller === 99 || e.controller === 98) [msb, lsb] = [127, 127]; // an NRPN deselects the RPN
+    else if (e.controller === 6 && msb === 0 && lsb === 0) {
+      if (e.value === semitones) return { label: 'ベンド幅を設定', patch: {} };
+      const tracks = project.tracks.map((tr) => (tr.id === trackId ? { ...tr, events: tr.events.map((x) => (x.id === e.id ? { ...e, value: semitones } : x)) } : tr));
+      return { label: 'ベンド幅を設定', patch: { tracks } };
+    }
+  }
   const events: NewEvent[] = [
     { kind: 'cc', tick: 0, controller: 101, value: 0 },
     { kind: 'cc', tick: 0, controller: 100, value: 0 },

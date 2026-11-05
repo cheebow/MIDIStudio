@@ -25,6 +25,21 @@ describe('.midstudio file', () => {
     expect(r.project.ppq).toBe(960);
   });
 
+  it('ADR-084: a hand-edited file with unsorted events or a stale nextOriginOrder is put right; an End of Track event is refused', () => {
+    const p = imported();
+    const tr = p.tracks[0];
+    const maxOrder = Math.max(...p.tracks.flatMap((t) => t.events.map((e) => Math.max(e.originOrder, (e as { releaseOrder?: number }).releaseOrder ?? -1))));
+    const damaged: MidiProject = { ...p, nextOriginOrder: 0, tracks: [{ ...tr, events: [...tr.events].reverse() }, ...p.tracks.slice(1)] };
+    const r = parseProjectFile(serializeProject(damaged));
+    if (!r.ok) throw new Error(r.errors.join('\n'));
+    expect(r.project.tracks[0].events.map((e) => e.id)).toEqual(tr.events.map((e) => e.id));
+    expect(r.project.nextOriginOrder).toBe(Math.max(maxOrder, ...p.conductor.map((c) => c.originOrder), ...p.conductorMeta.map((c) => c.originOrder)) + 1);
+    const eot: MidiProject = { ...p, tracks: [{ ...tr, events: [...tr.events, { id: 'eot', kind: 'meta', tick: 10, metaType: 0x2f, dataBase64: '', originOrder: 999999 }] }, ...p.tracks.slice(1)] };
+    const bad = parseProjectFile(serializeProject(eot));
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.errors.join()).toContain('FF 2F');
+  });
+
   it('O01: loop range, editor settings and key maps are restored', () => {
     const p = createEmptyProject();
     const edited: MidiProject = {

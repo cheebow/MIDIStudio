@@ -4,6 +4,11 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { MenuList, type MenuItem } from './MenuBar';
 import { IS_MAC } from '../platform';
 
+/** wheel events this soon after opening are ignored (trackpad tap / scroll momentum) */
+const WHEEL_GRACE_MS = 400;
+/** after that, this much deliberate scrolling (px, summed) closes the menu */
+const WHEEL_CLOSE_PX = 40;
+
 interface OpenMenu {
   x: number;
   y: number;
@@ -26,6 +31,17 @@ export function useContextMenu(): { open: (e: { clientX: number; clientY: number
       if (e instanceof PointerEvent && ref.current?.contains(e.target as Node)) return;
       setMenu(null);
     };
+    // A trackpad two-finger tap / click sends small wheel events with the right-click, and the
+    // momentum of a scroll just before keeps sending them: closing on those made the menu vanish
+    // as soon as it opened (ADR-084). Wheel closes it only after a moment and a deliberate scroll.
+    const openedAt = performance.now();
+    let scrolled = 0;
+    const wheel = (e: WheelEvent) => {
+      if (ref.current?.contains(e.target as Node)) return;
+      if (performance.now() - openedAt < WHEEL_GRACE_MS) return;
+      scrolled += Math.abs(e.deltaX) + Math.abs(e.deltaY);
+      if (scrolled >= WHEEL_CLOSE_PX) setMenu(null);
+    };
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
@@ -34,12 +50,12 @@ export function useContextMenu(): { open: (e: { clientX: number; clientY: number
     };
     window.addEventListener('pointerdown', close, true);
     window.addEventListener('keydown', key, true);
-    window.addEventListener('wheel', close, true);
+    window.addEventListener('wheel', wheel, true);
     window.addEventListener('blur', close);
     return () => {
       window.removeEventListener('pointerdown', close, true);
       window.removeEventListener('keydown', key, true);
-      window.removeEventListener('wheel', close, true);
+      window.removeEventListener('wheel', wheel, true);
       window.removeEventListener('blur', close);
     };
   }, [menu]);

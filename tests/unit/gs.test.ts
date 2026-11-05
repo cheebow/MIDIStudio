@@ -50,6 +50,14 @@ describe('GS in the project (REQ-EDT-08, MIDI_GS_SPEC 9)', () => {
     expect(gsRhythmChannels(r.project).get('A:10')).toBe(2);
   });
 
+  it('ADR-084: Use for Rhythm Part set on several tracks: the latest in time wins, not the last track', () => {
+    const off11 = encodeGsDt1(partAddress(0x15, 10), [0x00]);
+    // track 1 turns Ch11 back to normal at tick 960; track 2 made it a rhythm part at tick 0
+    const r = openMidiFile(build(1, 480, [sysex(960, off11), on(0, 0, 60), off(10, 0, 60)], [sysex(0, GS_RHYTHM_PART_11), on(0, 1, 60), off(10, 1, 60)]), { mergeDrums: false, mergeControllers: false, trackOrder: 'file' });
+    if (!r.ok) throw new Error();
+    expect(gsRhythmChannels(r.project).has('A:10')).toBe(false);
+  });
+
   it('GS Reset / Rhythm Part survive Import -> Save -> Export with the same payload and tick', () => {
     const src = build(1, 480, [sysex(0, GS_RESET), sysex(240, GS_RHYTHM_PART_11), on(0, 0, 60), off(10, 0, 60)]);
     const r = openMidiFile(src);
@@ -115,6 +123,11 @@ describe('Bank / Program / mixer / tempo edits (E13, REQ-PLAY-01)', () => {
     q = applyCommand(q, setInitialController(q, q.tracks[0].id, 7, 90)).project;
     q = applyCommand(q, setInitialController(q, q.tracks[0].id, 7, 80)).project;
     expect(q.tracks[0].events.filter((e) => e.kind === 'cc' && e.controller === 7).map((e) => e.kind === 'cc' && e.value)).toEqual([80]);
+    // ADR-084: setting the bend range again changes the value instead of adding six more events
+    const before = q.tracks[0].events.length;
+    q = applyCommand(q, setPitchBendRange(q, q.tracks[0].id, 2)).project;
+    expect(q.tracks[0].events.length).toBe(before);
+    expect(q.tracks[0].events.filter((e) => e.kind === 'cc' && e.controller === 6).map((e) => e.kind === 'cc' && e.value)).toEqual([2]);
   });
 
   it('tempo and time signature edits keep integer µs and valid signatures', () => {

@@ -10,18 +10,22 @@ import { t } from '../../i18n';
 
 /** Channels set as rhythm parts by "Use for Rhythm Part" (value > 0) anywhere in the song. */
 export function gsRhythmChannels(project: MidiProject): Map<string, number> {
-  const out = new Map<string, number>(); // `${port}:${channel}` -> map number
-  for (const t of project.tracks) {
+  // Settings from several tracks apply in playback order (tick, track, order), so the latest one
+  // in time wins, not the one on the last track (ADR-084).
+  const found: { tick: number; ti: number; order: number; key: string; value: number }[] = [];
+  project.tracks.forEach((t, ti) => {
     for (const e of t.events) {
       if (e.kind !== 'sysex' || e.status !== 'F0') continue;
       const b = base64ToBytes(e.dataBase64);
       const d = b && decodeGs(b);
-      if (d?.param?.name === 'Use for Rhythm Part' && d.channel !== undefined) {
-        const key = `${t.port}:${d.channel}`;
-        if (d.data[0] > 0) out.set(key, d.data[0]);
-        else out.delete(key);
-      }
+      if (d?.param?.name === 'Use for Rhythm Part' && d.channel !== undefined) found.push({ tick: e.tick, ti, order: e.originOrder, key: `${t.port}:${d.channel}`, value: d.data[0] });
     }
+  });
+  found.sort((a, b) => a.tick - b.tick || a.ti - b.ti || a.order - b.order);
+  const out = new Map<string, number>(); // `${port}:${channel}` -> map number
+  for (const f of found) {
+    if (f.value > 0) out.set(f.key, f.value);
+    else out.delete(f.key);
   }
   return out;
 }

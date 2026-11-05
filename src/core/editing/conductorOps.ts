@@ -3,7 +3,7 @@
 import { newId } from '../model/ids';
 import type { ConductorEvent, MidiProject } from '../model/types';
 import { sortEvents } from '../events/order';
-import { usFromBpm } from '../timing/tempoMap';
+import { MAX_BPM, MIN_BPM, usFromBpm } from '../timing/tempoMap';
 import { TimeSignatureMap } from '../timing/timeSignatureMap';
 import type { Command } from './history';
 import { EditError } from './operations';
@@ -14,7 +14,7 @@ function withConductor(conductor: ConductorEvent[], label: string): Command {
 }
 
 export function setTempo(project: MidiProject, tick: number, bpm: number): Command {
-  if (!(bpm >= 1 && bpm <= 999)) throw new EditError(t('テンポは 1〜999 BPM で入力してください。'));
+  if (!(bpm >= MIN_BPM && bpm <= MAX_BPM)) throw new EditError(t('テンポは 4〜999 BPM で入力してください。'));
   const us = usFromBpm(bpm);
   const existing = project.conductor.find((c) => c.kind === 'tempo' && c.tick === tick);
   const conductor = existing
@@ -48,7 +48,7 @@ export type ConductorValue =
 const KIND_LABEL: Record<ConductorValue['kind'], string> = { tempo: 'テンポ', 'time-signature': '拍子', 'key-signature': '調号', marker: 'マーカー' };
 
 function validate(v: ConductorValue): void {
-  if (v.kind === 'tempo' && !(v.bpm >= 1 && v.bpm <= 999)) throw new EditError(t('テンポは 1〜999 BPM で入力してください。'));
+  if (v.kind === 'tempo' && !(v.bpm >= MIN_BPM && v.bpm <= MAX_BPM)) throw new EditError(t('テンポは 4〜999 BPM で入力してください。'));
   if (v.kind === 'time-signature') {
     if (!Number.isInteger(v.numerator) || v.numerator < 1 || v.numerator > 32) throw new EditError(t('拍子の分子は 1〜32 です。'));
     if (![1, 2, 4, 8, 16, 32].includes(v.denominator)) throw new EditError(t('拍子の分母は 1, 2, 4, 8, 16, 32 のいずれかです。'));

@@ -18,6 +18,14 @@ export function bpmFromUs(usPerQuarter: number): number {
   return 60_000_000 / usPerQuarter;
 }
 
+/**
+ * Tempo range for editing. The SMF tempo meta holds 24 bits of µs per quarter (at most 16,777,215
+ * = about 3.58 BPM), so slower tempos cannot be saved (ADR-084).
+ */
+export const MIN_BPM = 4;
+export const MAX_BPM = 999;
+export const MAX_TEMPO_US = 0xffffff;
+
 export function usFromBpm(bpm: number): number {
   return Math.round(60_000_000 / bpm);
 }

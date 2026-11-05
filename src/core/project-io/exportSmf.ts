@@ -6,6 +6,7 @@ import { encodeUtf8 } from '../model/text';
 import type { ConductorEvent, MidiEvent, MidiProject, MidiTrack, SourceText } from '../model/types';
 import { compareEvents } from '../events/order';
 import { writeSmf } from '../smf/writer';
+import { MAX_TEMPO_US } from '../timing/tempoMap';
 import type { SmfEvent, SmfFile, SmfTrack } from '../smf/types';
 import { t } from '../../i18n';
 
@@ -154,6 +155,13 @@ export function projectToSmf(project: MidiProject): ExportResult {
     conductorItems.push({ tick: m.tick, group: 0, order: m.originOrder, seq: seq++, ev: { kind: 'meta', tick: m.tick, metaType: m.metaType, data: b64(m.dataBase64) } });
   }
   for (const c of project.conductor) {
+    // a tempo slower than the 24-bit field allows (only from an old or hand-edited project) is
+    // written as the slowest possible one, with a warning, not masked into another tempo (ADR-084)
+    if (c.kind === 'tempo' && c.usPerQuarter > MAX_TEMPO_US) {
+      warnings.push({ code: 'W_EXPORT_TEMPO_RANGE', message: t('Tick {tick} のテンポが遅すぎるため、SMF に書ける最も遅いテンポ（約 3.58 BPM）にしました。', { tick: c.tick }) });
+      conductorItems.push({ tick: c.tick, group: 0, order: c.originOrder, seq: seq++, ev: conductorToSmf({ ...c, usPerQuarter: MAX_TEMPO_US }) });
+      continue;
+    }
     conductorItems.push({ tick: c.tick, group: 0, order: c.originOrder, seq: seq++, ev: conductorToSmf(c) });
   }
   const tracks: SmfTrack[] = [finish(conductorItems, project.conductorEndOfTrackTick ?? 0)];

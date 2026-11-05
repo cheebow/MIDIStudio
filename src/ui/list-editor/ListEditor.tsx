@@ -283,7 +283,7 @@ export function ListEditor() {
         const s = text.trim();
         if (cur.event.kind === 'tempo') {
           if (!/^\d+(\.\d+)?$/.test(s)) {
-            setMessage(t('テンポは 1〜999 BPM で入力してください。'));
+            setMessage(t('テンポは 4〜999 BPM で入力してください。'));
             return false;
           }
           cmd = setTempo(store.project, cur.tick, Number(s));

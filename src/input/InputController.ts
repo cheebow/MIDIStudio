@@ -144,7 +144,9 @@ export class InputController {
 
   /** External MIDI keyboard input (Web MIDI). Plays into the piano target (drum target in drum modes). */
   midiMessage(m: ParsedMidiInput, deviceId: string, timeStamp: number): void {
-    const sourceId = `midi:${deviceId}`;
+    // one source per device and channel: the same key played on two channels (layered / split
+    // keyboards) is two voices, and releasing one must not stop the other (ADR-084)
+    const sourceId = `midi:${deviceId}#${m.channel}`;
     const target: 'piano' | 'drum' = this.mode === 'drum-performance' || this.mode === 'step-drums' ? 'drum' : 'piano';
     const ch = this._keepMidiChannel ? { channel: m.channel } : {};
     const base = { atMs: timeStamp, target, sourceId, ...ch };
@@ -180,10 +182,14 @@ export class InputController {
   /** Releases every note held by one source (device unplugged / disabled). */
   releaseSource(sourceId: string): void {
     for (const key of [...this.routed.keys()]) {
-      if (!key.startsWith(`${sourceId}:`)) continue;
-      // key = `${sourceId}:${target}:${pitch}`; device ids may themselves contain ':'
-      const [target, pitch] = key.slice(sourceId.length + 1).split(':');
-      this.dispatch({ type: 'note-off', pitch: Number(pitch), releaseVelocity: 0, sourceId, atMs: performance.now(), target: target as 'piano' | 'drum' });
+      // key = `${source}:${target}:${pitch}`, where a MIDI source is `${sourceId}#${channel}`;
+      // device ids may themselves contain ':'
+      let source: string;
+      if (key.startsWith(`${sourceId}:`)) source = sourceId;
+      else if (key.startsWith(`${sourceId}#`)) source = key.slice(0, key.indexOf(':', sourceId.length));
+      else continue;
+      const [target, pitch] = key.slice(source.length + 1).split(':');
+      this.dispatch({ type: 'note-off', pitch: Number(pitch), releaseVelocity: 0, sourceId: source, atMs: performance.now(), target: target as 'piano' | 'drum' });
     }
   }
 

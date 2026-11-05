@@ -462,8 +462,14 @@ export function PianoRoll() {
     }
     if (drag.kind === 'move') {
       const rawStart = drag.anchor.tick + (cx - drag.startX) / pxPerTick;
-      const dTick = (p.ctrlKey || p.metaKey ? Math.round(rawStart) : snap(rawStart + gridLen / 2)) - drag.anchor.tick;
-      const dPitch = pitchAt(cy) - drag.anchor.pitch;
+      // limit the offsets for the group as moveEvents does, so the preview is what the drop gives:
+      // a chord dragged against pitch 0 / 127 or tick 0 keeps its shape (ADR-084)
+      const moving = notes.filter((n) => selection.eventIds.has(n.id));
+      const lo = moving.length ? Math.min(...moving.map((n) => n.pitch)) : drag.anchor.pitch;
+      const hi = moving.length ? Math.max(...moving.map((n) => n.pitch)) : drag.anchor.pitch;
+      const first = moving.length ? Math.min(...moving.map((n) => n.tick)) : drag.anchor.tick;
+      const dTick = Math.max(-first, (p.ctrlKey || p.metaKey ? Math.round(rawStart) : snap(rawStart + gridLen / 2)) - drag.anchor.tick);
+      const dPitch = Math.max(-lo, Math.min(127 - hi, pitchAt(cy) - drag.anchor.pitch));
       if (dPitch !== drag.dPitch) audition(drag.anchor.pitch + dPitch);
       setDrag({ ...drag, dTick, dPitch, duplicate: drag.duplicate || p.altKey });
     } else if (drag.kind === 'resize') {

@@ -31,7 +31,7 @@ const HIT_PX = 6;
 
 // Drag coordinates are content px (x from tick 0, y from the top of the lanes, scroll included), so
 // the drag survives scrolling while it is held (ADR-068).
-type Drag = { kind: 'move'; anchor: NoteEvent; startX: number; startY: number; dTick: number; dLane: number; duplicate: boolean } | { kind: 'box'; x0: number; y0: number; x1: number; y1: number } | LoopDrag;
+type Drag = { kind: 'move'; anchor: NoteEvent; startX: number; startY: number; dTick: number; dLane: number; duplicate: boolean } | { kind: 'box'; x0: number; y0: number; x1: number; y1: number; additive: boolean } | LoopDrag;
 /** numbers the undo-merge keys of a duplicate drag (the copy and its lane change are one step) */
 let dragCounter = 0;
 
@@ -337,7 +337,7 @@ export function DrumEditor() {
       return;
     }
     if (!e.shiftKey) store.selectEvents([]);
-    setDrag({ kind: 'box', x0: cx, y0: cy, x1: cx, y1: cy });
+    setDrag({ kind: 'box', x0: cx, y0: cy, x1: cx, y1: cy, additive: e.shiftKey }); // Shift adds to the selection, as in the piano roll (ADR-084)
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -411,7 +411,8 @@ export function DrumEditor() {
       const la = laneAt(Math.min(d.y0, d.y1));
       const lb = laneAt(Math.max(d.y0, d.y1));
       const pitches = new Set(lanes.slice(Math.max(0, la), lb + 1).map((l) => l.pitch));
-      store.selectEvents(notes.filter((n) => n.tick >= ta && n.tick <= tb && pitches.has(n.pitch)).map((n) => n.id));
+      const ids = notes.filter((n) => n.tick >= ta && n.tick <= tb && pitches.has(n.pitch)).map((n) => n.id);
+      store.selectEvents(d.additive ? [...store.getState().selection.eventIds, ...ids] : ids);
     }
   }
 
