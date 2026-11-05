@@ -6,6 +6,7 @@ import { encodeUtf8 } from '../model/text';
 import type { ConductorEvent, MidiEvent, MidiProject, MidiTrack, SourceText } from '../model/types';
 import { compareEvents } from '../events/order';
 import { writeSmf } from '../smf/writer';
+import { MAX_TEMPO_US } from '../timing/tempoMap';
 import type { SmfEvent, SmfFile, SmfTrack } from '../smf/types';
 import { t } from '../../i18n';
 
@@ -77,6 +78,17 @@ function trackToSmf(track: MidiTrack, warnings: ExportWarning[]): SmfTrack {
   const ch = (e: { channelOverride?: number }) => e.channelOverride ?? track.channel;
   let lastEnd = track.endOfTrackTick ?? 0;
   const events: MidiEvent[] = [...track.events].sort(compareEvents);
+  // Earliest Note On per (tick, channel, pitch): a kept Note Off (releaseOrder) must not land after a
+  // Note On of the same key at its tick, or it would cut that note (a note moved onto the end of an
+  // imported note of the same pitch; ADR-082).
+  const noteKey = (tick: number, c: number, pitch: number) => `${tick}|${c}|${pitch}`;
+  const firstOn = new Map<string, number>();
+  for (const e of events) {
+    if (e.kind !== 'note') continue;
+    const k = noteKey(e.tick, ch(e), e.pitch);
+    const prev = firstOn.get(k);
+    if (prev === undefined || e.originOrder < prev) firstOn.set(k, e.originOrder);
+  }
   for (const e of events) {
     switch (e.kind) {
       case 'note': {
@@ -87,7 +99,10 @@ function trackToSmf(track: MidiTrack, warnings: ExportWarning[]): SmfTrack {
           e.sourceEncoding === 'note-on-zero'
             ? { kind: 'channel', tick: off, status: 0x90 | c, data: [e.pitch, 0] }
             : { kind: 'channel', tick: off, status: 0x80 | c, data: [e.pitch, e.releaseVelocity] };
-        if (e.releaseOrder !== undefined) push(off, 0, e.releaseOrder, offEv);
+        if (e.releaseOrder !== undefined) {
+          const on = firstOn.get(noteKey(off, c, e.pitch));
+          push(off, 0, on !== undefined && on < e.releaseOrder ? on - 0.5 : e.releaseOrder, offEv);
+        }
         else push(off, -1, e.originOrder, offEv);
         lastEnd = Math.max(lastEnd, off);
         break;
@@ -140,6 +155,13 @@ export function projectToSmf(project: MidiProject): ExportResult {
     conductorItems.push({ tick: m.tick, group: 0, order: m.originOrder, seq: seq++, ev: { kind: 'meta', tick: m.tick, metaType: m.metaType, data: b64(m.dataBase64) } });
   }
   for (const c of project.conductor) {
+    // a tempo slower than the 24-bit field allows (only from an old or hand-edited project) is
+    // written as the slowest possible one, with a warning, not masked into another tempo (ADR-084)
+    if (c.kind === 'tempo' && c.usPerQuarter > MAX_TEMPO_US) {
+      warnings.push({ code: 'W_EXPORT_TEMPO_RANGE', message: t('Tick {tick} のテンポが遅すぎるため、SMF に書ける最も遅いテンポ（約 3.58 BPM）にしました。', { tick: c.tick }) });
+      conductorItems.push({ tick: c.tick, group: 0, order: c.originOrder, seq: seq++, ev: conductorToSmf({ ...c, usPerQuarter: MAX_TEMPO_US }) });
+      continue;
+    }
     conductorItems.push({ tick: c.tick, group: 0, order: c.originOrder, seq: seq++, ev: conductorToSmf(c) });
   }
   const tracks: SmfTrack[] = [finish(conductorItems, project.conductorEndOfTrackTick ?? 0)];

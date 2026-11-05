@@ -13,7 +13,7 @@ import { maxOf } from '../../core/model/numbers';
 import { useEditActions, useEditorState, useServices } from '../../app/store/context';
 import { isSecondaryClick, useContextMenu } from '../menu/ContextMenu';
 import { emptyMenuItems, noteMenuItems } from '../menu/editMenus';
-import { conductorMarks, drawLoopRuler, drawPlayhead, drawRulerConductorMarks, drawStepCursor, fitCanvas, readTheme } from '../canvas';
+import { barPageScrollLeft, conductorMarks, drawLoopRuler, drawPlayhead, drawRulerConductorMarks, drawStepCursor, fitCanvas, readTheme } from '../canvas';
 import { ControllerLane } from '../piano-roll/ControllerLane';
 import { NoteInfoBar } from '../editing/NoteInfoBar';
 import { DrumPads } from './DrumPads';
@@ -31,7 +31,7 @@ const HIT_PX = 6;
 
 // Drag coordinates are content px (x from tick 0, y from the top of the lanes, scroll included), so
 // the drag survives scrolling while it is held (ADR-068).
-type Drag = { kind: 'move'; anchor: NoteEvent; startX: number; startY: number; dTick: number; dLane: number; duplicate: boolean } | { kind: 'box'; x0: number; y0: number; x1: number; y1: number } | LoopDrag;
+type Drag = { kind: 'move'; anchor: NoteEvent; startX: number; startY: number; dTick: number; dLane: number; duplicate: boolean } | { kind: 'box'; x0: number; y0: number; x1: number; y1: number; additive: boolean } | LoopDrag;
 /** numbers the undo-merge keys of a duplicate drag (the copy and its lane change are one step) */
 let dragCounter = 0;
 
@@ -39,7 +39,7 @@ export function DrumEditor() {
   const { store, transport, audioReady, step, input, recorder, reportError } = useServices();
   const editActions = useEditActions();
   const ctxMenu = useContextMenu();
-  const { project, selection, tool } = useEditorState();
+  const { project, selection, tool, reveal } = useEditorState();
   const settings = project.settings;
   const track: MidiTrack | undefined = selectedTrack(project);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -87,6 +87,16 @@ export function DrumEditor() {
   const leadPx = Math.round(sig.ticksPerBar(0) * pxPerTick);
   const view = useMemo(() => ({ ...size, ...scroll, x: scroll.x - leadPx }), [size, scroll, leadPx]);
   useZoomAnchor(scrollRef, pxPerTick, leadPx, size.w - NAMES_W);
+
+  // Double-click on a clip asks to show its start (ADR-085): the bar of the clip start at the left edge.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !reveal || !track) return;
+    const tick = store.takeReveal(track.id);
+    if (tick === null) return;
+    el.scrollLeft = barPageScrollLeft(sig, tick, pxPerTick) + leadPx; // the bar starts at the left edge (past the margin before bar 1)
+    follow.hold();
+  }, [reveal, track, store, sig, pxPerTick, leadPx, follow]);
   const end = useMemo(() => maxOf(notes, (n) => n.tick + n.durationTicks, ppq * 4 * 32) + ppq * 16, [notes, ppq]);
   const gridW = view.w - NAMES_W;
   const totalH = RULER_H + lanes.length * LANE_H;
@@ -245,7 +255,7 @@ export function DrumEditor() {
       }
     }
     if (input.mode === 'step-piano' || input.mode === 'step-drums') drawStepCursor(ctx, Math.round(step.cursor * pxPerTick - view.x) + 0.5, view.h);
-    follow(pos, x, gridW, scrollRef.current, sig, pxPerTick, settings.followPlayback);
+    follow.update(pos, x, gridW, scrollRef.current, sig, pxPerTick, settings.followPlayback);
   }, [transport, view, gridW, totalH, pxPerTick, settings.followPlayback, step, input, recorder, track?.id, laneOf, sig, follow, notes]);
 
   if (!track) return <p className="placeholder">{t('トラックがありません。')}</p>;
@@ -337,7 +347,7 @@ export function DrumEditor() {
       return;
     }
     if (!e.shiftKey) store.selectEvents([]);
-    setDrag({ kind: 'box', x0: cx, y0: cy, x1: cx, y1: cy });
+    setDrag({ kind: 'box', x0: cx, y0: cy, x1: cx, y1: cy, additive: e.shiftKey }); // Shift adds to the selection, as in the piano roll (ADR-084)
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -393,7 +403,8 @@ export function DrumEditor() {
         const key = `dup-${++dragCounter}`;
         store.run(r.command, { select: r.ids, mergeKey: key });
         if (d.dLane !== 0) {
-          const copies = r.ids.map((id, i) => ({ id, changes: { pitch: pitchAfter(notes.find((n) => n.id === ids[i])!) } }));
+          // copies come back in time order, not selection order: map each to its own original (ADR-083)
+          const copies = r.ids.map((id, i) => ({ id, changes: { pitch: pitchAfter(notes.find((n) => n.id === r.sourceIds[i])!) } }));
           store.run(updateEvents(store.project, copies, '複製'), { mergeKey: key });
         }
         return;
@@ -410,7 +421,8 @@ export function DrumEditor() {
       const la = laneAt(Math.min(d.y0, d.y1));
       const lb = laneAt(Math.max(d.y0, d.y1));
       const pitches = new Set(lanes.slice(Math.max(0, la), lb + 1).map((l) => l.pitch));
-      store.selectEvents(notes.filter((n) => n.tick >= ta && n.tick <= tb && pitches.has(n.pitch)).map((n) => n.id));
+      const ids = notes.filter((n) => n.tick >= ta && n.tick <= tb && pitches.has(n.pitch)).map((n) => n.id);
+      store.selectEvents(d.additive ? [...store.getState().selection.eventIds, ...ids] : ids);
     }
   }
 
@@ -502,6 +514,8 @@ export function DrumEditor() {
                 onPointerUp={onPointerUp}
                 onPointerCancel={() => setDrag(null)}
                 onKeyDown={(e) => {
+                  // in step input Backspace undoes the last step (global shortcut), not "delete selection" (ADR-083)
+                  if (e.key === 'Backspace' && (input.mode === 'step-piano' || input.mode === 'step-drums')) return;
                   if (e.key === 'Delete' || e.key === 'Backspace') {
                     e.preventDefault();
                     e.stopPropagation();

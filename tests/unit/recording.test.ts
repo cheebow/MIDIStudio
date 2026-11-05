@@ -97,6 +97,29 @@ describe('live recording', () => {
     expect(notes(applyCommand(p, merged.command).project).map((n) => n[1])).toEqual([60, 67, 64]);
   });
 
+  it('ADR-084: with the pass given by the caller, a pass played later in the bar (no jump back) is its own take', () => {
+    const tempo = new TempoMap(480, []);
+    const take = new LiveTake({ tempo, loop: { startTick: 0, endTick: 1920 } });
+    take.add({ type: 'note-on', pitch: 60, velocity: 100, songSeconds: 0.3, pass: 0 });
+    take.add({ type: 'note-off', pitch: 60, releaseVelocity: 64, songSeconds: 0.5, pass: 0 });
+    // the next note comes in the third pass, later in the bar than the first: the time did not jump back
+    take.add({ type: 'note-on', pitch: 64, velocity: 100, songSeconds: 1.5, pass: 2 });
+    take.add({ type: 'note-off', pitch: 64, releaseVelocity: 64, songSeconds: 1.7, pass: 2 });
+    const r = take.finish(1.8);
+    expect(r.takes.map((t) => [t.pass, t.events.map((e) => e.kind === 'note' && e.pitch)])).toEqual([[0, [60]], [2, [64]]]);
+    const p = createEmptyProject();
+    const last = takeToCommand(p, p.tracks[0].id, r, { mode: 'overdub', loopChoice: 'last' })!;
+    expect(notes(applyCommand(p, last.command).project).map((n) => n[1])).toEqual([64]);
+  });
+
+  it('ADR-083: a note held across the loop end and stopped before any other input runs to the loop end', () => {
+    const tempo = new TempoMap(480, []);
+    const take = new LiveTake({ tempo, loop: { startTick: 0, endTick: 1920 } });
+    take.add({ type: 'note-on', pitch: 64, velocity: 100, songSeconds: 1.5625 }); // tick 1500
+    const r = take.finish(0.3125); // stopped at tick 300 of the next pass
+    expect(r.takes[0].events[0]).toMatchObject({ pitch: 64, tick: 1500, durationTicks: 420 });
+  });
+
   it('I11: overdub keeps existing notes, replace removes notes in the recorded range; one undo step', () => {
     let p = createEmptyProject();
     p = applyCommand(p, addEvents(p, p.tracks[0].id, [
@@ -113,6 +136,25 @@ describe('live recording', () => {
     const rep = applyCommand(p, takeToCommand(p, p.tracks[0].id, res, { mode: 'replace' })!.command);
     expect(notes(rep.project).map((n) => n[1])).toEqual([40, 60, 42]);
     expect(applyCommand(rep.project, rep.inverse).project).toEqual(p);
+  });
+
+  it('ADR-082: replace keeps the program / bank / mixer set-up and controllers the take did not record', () => {
+    let p = createEmptyProject();
+    p = applyCommand(p, addEvents(p, p.tracks[0].id, [
+      { kind: 'cc', tick: 0, controller: 0, value: 0 },
+      { kind: 'program', tick: 0, program: 27 },
+      { kind: 'cc', tick: 0, controller: 7, value: 90 },
+      { kind: 'cc', tick: 0, controller: 64, value: 127 },
+      { kind: 'pitch-bend', tick: 10, value: 100 },
+      { kind: 'note', tick: 0, pitch: 40, velocity: 100, durationTicks: 100, releaseVelocity: 64 },
+    ])!.command).project;
+    const take = new LiveTake({ tempo: new TempoMap(480, []) });
+    take.add({ type: 'note-on', pitch: 60, velocity: 100, songSeconds: 0 });
+    take.add({ type: 'cc', controller: 64, value: 0, songSeconds: 0.1 });
+    take.add({ type: 'note-off', pitch: 60, releaseVelocity: 64, songSeconds: 0.5 });
+    const rep = applyCommand(p, takeToCommand(p, p.tracks[0].id, take.finish(1), { mode: 'replace', replaceRange: { startTick: 0, endTick: 1920 } })!.command).project;
+    const kinds = rep.tracks[0].events.map((e) => (e.kind === 'cc' ? `cc${e.controller}=${e.value}` : e.kind === 'note' ? `note${e.pitch}` : e.kind));
+    expect(kinds).toEqual(['cc0=0', 'program', 'cc7=90', 'note60', 'pitch-bend', 'cc64=0']);
   });
 
   it('record quantize moves only the new notes', () => {

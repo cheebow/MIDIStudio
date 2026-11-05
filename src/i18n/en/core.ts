@@ -99,7 +99,7 @@ export const EN_CORE: Record<string, string> = {
   'PPQ が異なります: {a} / {b}': 'PPQ differs: {a} / {b}',
   '曲の終わり（End of Track）が異なります: {a} / {b}': 'End of Track differs: {a} / {b}',
   // conductorOps.ts
-  'テンポは 1〜999 BPM で入力してください。': 'Enter a tempo between 1 and 999 BPM.',
+  'テンポは 4〜999 BPM で入力してください。': 'Enter a tempo between 4 and 999 BPM.',
   '拍子の分子は 1〜32 です。': 'The time signature numerator must be between 1 and 32.',
   '拍子の分母は 1, 2, 4, 8, 16, 32 のいずれかです。': 'The time signature denominator must be 1, 2, 4, 8, 16 or 32.',
   '調号は ♭7〜♯7 です。': 'The key signature must be between 7 flats and 7 sharps.',
@@ -138,6 +138,7 @@ export const EN_CORE: Record<string, string> = {
   'MTrk 1 に演奏データがあるため、テンポトラックとしてではなく通常のトラックとして読み込みました。': 'MTrk 1 contains performance data, so it was loaded as a normal track rather than as the conductor track.',
   '同じ Tick に異なるテンポまたは拍子が {n} 箇所ありました。すべて保持し、ファイル内の順序で後のものが有効になります。': 'Different tempos or time signatures at the same tick were found in {n} places. All are kept; the later one in file order takes effect.',
   // exportSmf.ts
+  'Tick {tick} のテンポが遅すぎるため、SMF に書ける最も遅いテンポ（約 3.58 BPM）にしました。': 'The tempo at tick {tick} is too slow for an SMF; the slowest one it can hold (about 3.58 BPM) was written.',
   'トラック「{name}」の Tick {tick}: 書き出せない形式の raw イベントがあります（{reason}）。': 'Track "{name}", tick {tick}: a raw event cannot be exported ({reason}).',
   // midiFile.ts
   'GS の「Use for Rhythm Part」設定により、{tracks} をドラム表示にしました（MIDI データは変更していません）。': 'Because of the GS "Use for Rhythm Part" setting, {tracks} are shown as drums (the MIDI data is unchanged).',
@@ -192,6 +193,7 @@ export const EN_CORE: Record<string, string> = {
   '{we}: SysEx status が不正です。': '{we}: SysEx status is invalid.',
   '{we}: reason が不正です。': '{we}: reason is invalid.',
   '{we}: metaType が不正です。': '{we}: metaType is invalid.',
+  '{we}: End of Track（FF 2F）はイベントとして持てません。': '{we}: an End of Track (FF 2F) cannot be kept as an event.',
   '{we}: 未知のイベント種類 "{kind}" です。': '{we}: unknown event kind "{kind}".',
   'clips が配列ではありません。': 'clips is not an array.',
   '{w}: 存在しないトラックを参照しています。': '{w}: refers to a track that does not exist.',

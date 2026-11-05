@@ -28,6 +28,8 @@ export interface TransportState {
  * tempo, controllers after the playhead — waits for the next stop / seek / loop wrap, so playback
  * never stutters while editing (ADR-048).
  */
+/** stands for the pitch bend in the set of performed controllers */
+const PITCH_BEND = -1;
 const IMMEDIATE_RELOAD = new Set(['first project', 'ppq', 'loop', 'track settings', 'tracks']);
 
 export interface TransportPosition {
@@ -69,12 +71,15 @@ export class Transport {
   private loaded: MidiProject | null = null;
   /** tempo map of the song the engine has loaded (differs from `tempo` until an edit is reloaded) */
   private engineTempo: TempoMap | null = null;
+  private engineSignature: TimeSignatureMap | null = null;
   private generation = 0;
   private state: TransportState = { status: 'stopped', loading: false, error: null, pendingEdits: false };
   private listeners = new Set<Listener>();
   /** position while not playing, in ticks */
   private parkedTick = 0;
   private previewNotes = new Map<string, number[]>();
+  /** controllers (PITCH_BEND for the bend) the player has sent live, per "port:channel" */
+  private performed = new Map<string, Set<number>>();
   private reloadChain: Promise<void> = Promise.resolve();
   /** keep the engine running until at least this tick (recording); 0 = song end */
   private tailTick = 0;
@@ -231,6 +236,7 @@ export class Transport {
   private async reload(atTick: number, resume: boolean): Promise<void> {
     const project = this.project;
     const tempo = this.tempo;
+    const signature = this.signature;
     if (!project || !tempo) return;
     this.deferredStale = false;
     this.staleInLoop = false;
@@ -249,6 +255,7 @@ export class Transport {
       if (gen !== this.generation) return;
       this.loaded = project;
       this.engineTempo = tempo;
+      this.engineSignature = signature;
       // A seek during the load moved parkedTick; a pause / stop during the load cleared the resume.
       const play = this.resumeAfterLoad;
       this.engine.seekSeconds(tempo.tickToSeconds(this.parkedTick));
@@ -327,6 +334,12 @@ export class Transport {
       this.pause();
       return Promise.resolve();
     }
+    // A second press while play() is still loading the song cancels that start (ADR-083); it used
+    // to queue a second load that restarted from the start position.
+    if (this.state.loading && this.resumeAfterLoad) {
+      this.resumeAfterLoad = false;
+      return Promise.resolve();
+    }
     return this.play();
   }
 
@@ -386,6 +399,20 @@ export class Transport {
     return this.signature;
   }
 
+  /**
+   * The maps of the song the engine is actually playing. A tempo / time-signature edit while
+   * playing is loaded later (ADR-048), so anything clocked by the engine's seconds (the metronome)
+   * must use these, not the edited maps, or it drifts off the music (ADR-083).
+   */
+  get playingMaps(): { tempo: TempoMap; signature: TimeSignatureMap; loop: { startSeconds: number; endSeconds: number } | null } | null {
+    const tempo = this.engineTempo ?? this.tempo;
+    const signature = this.engineSignature ?? this.signature;
+    if (!tempo || !signature) return null;
+    const l = (this.loaded ?? this.project)?.loop;
+    const loop = l?.enabled && l.endTick > l.startTick ? { startSeconds: tempo.tickToSeconds(l.startTick), endSeconds: tempo.tickToSeconds(l.endTick) } : null;
+    return { tempo, signature, loop };
+  }
+
   // ------------------------------------------------------------ live preview
 
   /**
@@ -400,8 +427,17 @@ export class Transport {
     const ch = track.channel;
     // Previews play on their own synth: give its channel the song's state at the playhead
     // (bank / program / controllers), or the track's first sound when none is set yet.
+    // Controllers the player is driving right now (pedal, wheels) keep their live value: re-sending
+    // the song's CC64 = 0 on every note would lift a held pedal (ADR-082).
     const chase = chaseAt(project, Math.floor(this.getPosition().tick) + 1).channels.get(`${port}:${ch}`);
-    if (chase) for (const m of chaseMessages(chase)) this.engine.send(m, port);
+    const live = this.performed.get(`${port}:${ch}`);
+    if (chase) {
+      for (const m of chaseMessages(chase)) {
+        const type = m[0] & 0xf0;
+        if (live && ((type === 0xb0 && live.has(m[1])) || (type === 0xe0 && live.has(PITCH_BEND)))) continue;
+        this.engine.send(m, port);
+      }
+    }
     if (!chase || chase.program === undefined) for (const m of firstSoundMessages(track)) this.engine.send(m, port);
     const key = `${sourceId}:${port}:${ch}:${pitch}`;
     if (this.previewNotes.has(key)) this.engine.send([0x80 | ch, pitch, 0], port);
@@ -418,17 +454,29 @@ export class Transport {
     this.engine.send([0x80 | track.channel, pitch, 0], port);
   }
 
-  /** Live controller message (CC / bend / pressure) on a track's port and channel. */
-  sendToTrack(trackId: string, bytes: number[]): void {
+  /**
+   * Live controller message (CC / bend / pressure) on a track's port and channel. `performed`: it
+   * comes from the player (MIDI keyboard, Tab sustain), so previews keep that value instead of the
+   * song's (the mixer's live preview is not a performance and leaves the chase alone).
+   */
+  sendToTrack(trackId: string, bytes: number[], opts: { performed?: boolean } = {}): void {
     const track = this.project?.tracks.find((t) => t.id === trackId);
     if (!track || !this.engine.ready) return;
-    this.engine.send([(bytes[0] & 0xf0) | track.channel, ...bytes.slice(1)], portIndex(track.port), 'both');
+    const port = portIndex(track.port);
+    const type = bytes[0] & 0xf0;
+    if (opts.performed && (type === 0xb0 || type === 0xe0)) {
+      const key = `${port}:${track.channel}`;
+      const live = this.performed.get(key) ?? new Set<number>();
+      live.add(type === 0xe0 ? PITCH_BEND : bytes[1]);
+      this.performed.set(key, live);
+    }
+    this.engine.send([type | track.channel, ...bytes.slice(1)], port, 'both');
   }
 
   /** Releases every preview note (focus loss, mode change, device unplugged...). */
   releaseAllPreviews(sourceId?: string): void {
     for (const [key, [port, ch, pitch]] of this.previewNotes) {
-      if (sourceId !== undefined && !key.startsWith(`${sourceId}:`)) continue;
+      if (sourceId !== undefined && !key.startsWith(`${sourceId}:`) && !key.startsWith(`${sourceId}#`)) continue; // (MIDI sources are per channel)
       this.engine.send([0x80 | ch, pitch, 0], port);
       this.previewNotes.delete(key);
     }
@@ -441,6 +489,7 @@ export class Transport {
   /** Safety panic: all voices off, previews cleared; transport state is kept. */
   panic(): void {
     this.previewNotes.clear();
+    this.performed.clear();
     this.engine.panic();
   }
 }

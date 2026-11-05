@@ -4,6 +4,7 @@
 //         values in effect and keep the engine running instead of reloading (an audible gap).
 // 'reload': anything else (notes, programs, tempo, loop, mute / solo...).
 import { portIndex } from '../model/ports';
+import { looseNoteIds } from '../model/looseNotes';
 import type { ConductorEvent, MidiEvent, MidiProject, MidiTrack, TrackMetaEvent } from '../model/types';
 
 export interface LiveController {
@@ -35,6 +36,20 @@ function sameConductor(a: readonly (ConductorEvent | TrackMetaEvent)[], b: reado
     const keys = new Set([...Object.keys(x), ...Object.keys(y)]);
     for (const k of keys) if (x[k] !== y[k]) return false;
   }
+  return true;
+}
+
+function onlyOrderChanged(a: MidiEvent, b: MidiEvent): boolean {
+  const x = a as unknown as Record<string, unknown>;
+  const y = b as unknown as Record<string, unknown>;
+  const keys = new Set([...Object.keys(x), ...Object.keys(y)]);
+  for (const k of keys) if (k !== 'originOrder' && x[k] !== y[k]) return false;
+  return true;
+}
+
+function sameIds(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const id of a) if (!b.has(id)) return false;
   return true;
 }
 
@@ -72,6 +87,9 @@ export function classifyPlaybackChange(prev: MidiProject, next: MidiProject, pla
     const b = next.tracks[i];
     if (a.id !== b.id) return reload('track order');
     if (!trackSettingsEqual(a, b)) return reload('track settings');
+    // Notes outside every clip are silent (ADR-064): a clip-only edit (resize, delete keeping the
+    // notes, take in) changes what sounds without touching the events (ADR-082).
+    if (prev.clips !== next.clips && !sameIds(looseNoteIds(prev, a), looseNoteIds(next, b))) return reload('clips');
     if (a.events === b.events) continue;
     const old = new Map<string, MidiEvent>();
     for (const e of a.events) old.set(e.id, e);
@@ -83,6 +101,12 @@ export function classifyPlaybackChange(prev: MidiProject, next: MidiProject, pla
       }
       if (o) {
         old.delete(e.id);
+        // Only renumbered (an event added before it at the same tick, ADR-081) and already played:
+        // the change itself is the added event; the tick still marks the old song as stale here.
+        if (e.tick <= playheadTick && onlyOrderChanged(o, e)) {
+          maxTick = Math.max(maxTick, e.tick);
+          continue;
+        }
         if (!liveCc(o, a) || !liveCc(e, b)) return reload('event changed');
       } else if (!liveCc(e, b)) return reload('event added');
     }

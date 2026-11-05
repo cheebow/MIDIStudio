@@ -4,6 +4,7 @@ import { writeSmf } from '../../src/core/smf/writer';
 import { compareSmfSemantics } from '../../src/core/smf/semantic';
 import { openMidiFile } from '../../src/core/project-io/midiFile';
 import { exportSmfBytes, projectToSmf } from '../../src/core/project-io/exportSmf';
+import { moveEvents } from '../../src/core/editing/operations';
 import type { SmfFile } from '../../src/core/smf/types';
 import { bend, build, cc, format0Song, format1Song, meta, off, on, port, program, sysex, sysexF7, tempo, text, timeSig, GS_RESET, GS_RHYTHM_PART_11 } from '../fixtures/songs';
 
@@ -26,6 +27,7 @@ const cases: [string, Uint8Array][] = [
   ['Format 0 with running status (PPQ 96)', format0Song()],
   ['retriggered overlapping notes', build(1, 480, [on(0, 0, 60), on(240, 0, 60, 90), off(240, 0, 60), off(240, 0, 60)])],
   ['unpaired / zero-length notes', build(1, 480, [off(0, 0, 50), on(0, 0, 51), off(0, 0, 51), on(10, 0, 52)])],
+  ['port prefix after a tick-0 SysEx (ADR-084)', build(1, 480, [sysex(0, GS_RESET), port(0, 1), on(0, 0, 60), off(480, 0, 60)])],
   ['two ports, same channel', build(1, 480, [port(0, 0), on(0, 0, 60), off(480, 0, 60)], [port(0, 1), on(0, 0, 60), off(480, 0, 60)])],
   ['RPN/NRPN and pitch bend extremes', build(1, 480, [cc(0, 3, 101, 0), cc(0, 3, 100, 0), cc(0, 3, 6, 12), cc(0, 3, 99, 1), cc(0, 3, 98, 8), cc(0, 3, 6, 64), bend(0, 3, -8192), bend(10, 3, 8191), bend(10, 3, 0)])],
   ['GS SysEx (F0 and F7 continuation)', build(1, 480, [sysex(0, GS_RESET), sysex(10, GS_RHYTHM_PART_11), sysexF7(10, [0x01, 0x02, 0xf7])])],
@@ -100,5 +102,25 @@ describe('SMF semantic round trip (C13, C08, REQ-MIDI-03)', () => {
       [480, 0x90],
       [960, 0x80],
     ]);
+  });
+
+  it('ADR-082: a note moved onto the end of an imported note of the same pitch is not cut by its kept Note Off', () => {
+    const opened = openMidiFile(build(1, 480, [on(0, 0, 60), off(480, 0, 60), on(480, 0, 60), off(480, 0, 60)]));
+    if (!opened.ok) throw new Error();
+    const p = opened.project;
+    const notes = p.tracks[0].events.filter((e) => e.kind === 'note');
+    const moved = moveEvents(p, [notes[0].id], 1440);
+    if (!moved) throw new Error();
+    const next = { ...p, ...moved.patch };
+    const t = projectToSmf(next).smf.tracks[1].events.filter((e) => e.kind === 'channel');
+    expect(t.map((e) => e.kind === 'channel' && [e.tick, e.status])).toEqual([
+      [960, 0x90],
+      [1440, 0x80],
+      [1440, 0x90],
+      [1920, 0x80],
+    ]);
+    const again = openMidiFile(exportSmfBytes(next).bytes);
+    if (!again.ok) throw new Error();
+    expect(again.issues.map((i) => i.code)).not.toContain('W_IMPORT_NOTE_OVERLAP');
   });
 });

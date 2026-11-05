@@ -73,6 +73,9 @@ function canMergeClips(clipIds: ReadonlySet<string>, project: MidiProject): bool
   return false;
 }
 
+/** makes each "split at cursor" a fresh undo step (merge key) */
+let splitCounter = 0;
+
 export default function App() {
   const features = useMemo(() => detectFeatures(globalThis as never), []);
   const blockers = audioBlockers(features);
@@ -86,11 +89,7 @@ export default function App() {
     const store = new EditorStore(createStarterProject({ title: t('新しい曲') }));
     const input = new InputController(transport, () => store.project, store.project.inputPresets);
     const step = new StepController(store, input);
-    const metronome = new Metronome(adapter, () => {
-      const tempo = transport.tempoMap;
-      const signature = transport.timeSignatureMap;
-      return tempo && signature ? { tempo, signature } : null;
-    });
+    const metronome = new Metronome(adapter, () => transport.playingMaps);
     const recorder = new Recorder(store, transport, input, (t, accent) => metronome.clickAt(t, accent), () => adapter.audioContext?.currentTime ?? null);
     const midi = new MidiInputAdapter(
       {
@@ -253,8 +252,19 @@ export default function App() {
     if (opts.message) setInfo(opts.message);
   }
 
+  // Reading a file or the browser storage can fail (file moved, permission, quota...): show it
+  // instead of losing the rejection in a `void` call (ADR-084).
+  const readFailed = (name: string, e: unknown) => setError(t('{name} を開けませんでした（現在の曲はそのままです）: {errors}', { name, errors: t(errorText(e)) }));
+
   async function importMidi(file: File) {
-    importMidiBytes(new Uint8Array(await file.arrayBuffer()), file.name);
+    let bytes: Uint8Array;
+    try {
+      bytes = new Uint8Array(await file.arrayBuffer());
+    } catch (e) {
+      readFailed(file.name, e);
+      return;
+    }
+    importMidiBytes(bytes, file.name);
   }
 
   /** SMF bytes from a file or a bundled sample; `title` replaces an untitled song's name. */
@@ -284,7 +294,14 @@ export default function App() {
   }
 
   async function openProject(file: File) {
-    const r = parseProjectFile(await file.text());
+    let text: string;
+    try {
+      text = await file.text();
+    } catch (e) {
+      readFailed(file.name, e);
+      return;
+    }
+    const r = parseProjectFile(text);
     if (!r.ok) {
       setError(t('{name} を開けませんでした（現在の曲はそのままです）: {errors}', { name: file.name, errors: r.errors.slice(0, 5).map((m) => t(m)).join(' / ') }));
       return;
@@ -344,8 +361,17 @@ export default function App() {
   }
 
   async function openRecent(id: string) {
-    const rec = await db.loadProject(id);
-    if (!rec) return;
+    let rec: Awaited<ReturnType<typeof db.loadProject>>;
+    try {
+      rec = await db.loadProject(id);
+    } catch (e) {
+      setError(t('ブラウザに保存した曲を読み込めませんでした: {error}', { error: t(errorText(e)) }));
+      return;
+    }
+    if (!rec) {
+      setError(t('ブラウザに保存した曲が見つかりませんでした（別のタブで削除された可能性があります）。'));
+      return;
+    }
     const r = parseProjectFile(rec.json);
     if (!r.ok) {
       setError(t('保存データが壊れています（現在の曲はそのままです）: {errors}', { errors: r.errors.slice(0, 3).map((m) => t(m)).join(' / ') }));
@@ -377,18 +403,24 @@ export default function App() {
     redo: () => store.redo(),
     // Copy / cut / paste / duplicate / delete act on the selected notes, or, when only clips
     // (regions) are selected in the track view, on those clips as a group (ADR-057).
+    // ⌘C / ⌘X with nothing selected keep the clipboard as it is (ADR-084)
     copy: () => {
       const sel = store.getState().selection;
-      store.setClipboard(clipsOnly(sel) ? copyClips(store.project, sel.clipIds) : copyEvents(store.project, sel.eventIds));
+      const data = clipsOnly(sel) ? copyClips(store.project, sel.clipIds) : copyEvents(store.project, sel.eventIds);
+      if (data) store.setClipboard(data);
     },
     cut: () => {
       const sel = store.getState().selection;
       if (clipsOnly(sel)) {
-        store.setClipboard(copyClips(store.project, sel.clipIds));
+        const data = copyClips(store.project, sel.clipIds);
+        if (!data) return;
+        store.setClipboard(data);
         store.run(deleteClips(store.project, sel.clipIds, { deleteEvents: true }, '切り取り'));
         return;
       }
-      store.setClipboard(copyEvents(store.project, sel.eventIds));
+      const data = copyEvents(store.project, sel.eventIds);
+      if (!data) return;
+      store.setClipboard(data);
       store.run(deleteEvents(store.project, sel.eventIds, '切り取り'));
     },
     paste: () =>
@@ -466,7 +498,9 @@ export default function App() {
         const tick = Math.round(transport.getPosition().tick);
         const ids = [...store.getState().selection.clipIds];
         const targets = ids.length ? ids : store.project.clips.filter((c) => c.trackId === selectedTrack?.id && tick > c.startTick && tick < c.endTick).map((c) => c.id);
-        for (const id of targets) store.run(splitClip(store.project, id, tick));
+        // several clips split at once are one undo step (ADR-084)
+        const mergeKey = `split-${++splitCounter}`;
+        for (const id of targets) store.run(splitClip(store.project, id, tick), { mergeKey });
       }),
     addTrack: () => {
       const used = new Set(store.project.tracks.filter((t) => t.port === 'A').map((t) => t.channel));

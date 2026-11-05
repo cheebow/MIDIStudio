@@ -26,6 +26,8 @@ export interface ChaseResult {
   sysex: { tick: number; port: number; status: 'F0' | 'F7'; data: Uint8Array }[];
 }
 
+/** controllers that Reset All Controllers returns to their default (RP-015; 11 goes to 127) */
+const RESET_BY_CC121 = [1, 11, 64, 65, 66, 67];
 const SKIP_CC = new Set([0, 32, 6, 38, 96, 97, 98, 99, 100, 101, 120, 123, 124, 125, 126, 127]);
 
 export function chaseKey(port: number, channel: number): string {
@@ -43,54 +45,62 @@ export function chaseAt(project: MidiProject, tick: number): ChaseResult {
     return s;
   };
   const selected = new Map<string, string | null>();
-  const sysexWithOrder: { order: [number, number, number]; item: ChaseResult['sysex'][number] }[] = [];
-
+  // Several tracks may share a port / channel: apply their events in playback order (tick, then
+  // track, then the order within the track), not track by track, or the last track would win over
+  // a later value on an earlier track (ADR-083).
+  type Item = { tick: number; ti: number; order: number; port: number; channel: number; e: ChaseEvent };
+  type ChaseEvent = Extract<MidiProject['tracks'][number]['events'][number], { kind: 'cc' | 'program' | 'pitch-bend' | 'sysex' }>;
+  const items: Item[] = [];
   project.tracks.forEach((track, ti) => {
     const port = portIndex(track.port);
-    const events = [...track.events].sort(compareEvents);
-    for (const e of events) {
+    for (const e of [...track.events].sort(compareEvents)) {
       if (e.tick >= tick) break;
-      if (e.kind === 'sysex') {
-        const data = base64ToBytes(e.dataBase64);
-        if (data) sysexWithOrder.push({ order: [e.tick, ti, e.originOrder], item: { tick: e.tick, port, status: e.status, data } });
-        continue;
-      }
-      if (e.kind !== 'cc' && e.kind !== 'program' && e.kind !== 'pitch-bend') continue;
-      const ch = e.channelOverride ?? track.channel;
-      const s = state(port, ch);
-      const key = chaseKey(port, ch);
-      if (e.kind === 'program') s.program = e.program;
-      else if (e.kind === 'pitch-bend') s.pitchBend = e.value;
-      else {
-        const c = e.controller;
-        if (c === 0) s.bankMsb = e.value;
-        else if (c === 32) s.bankLsb = e.value;
-        else if (c === 101 || c === 100 || c === 99 || c === 98) {
-          const isRpn = c === 101 || c === 100;
-          const prev = selected.get(key);
-          const [kind, msb, lsb] = prev ? prev.split(':') : [isRpn ? 'rpn' : 'nrpn', '127', '127'];
-          const k = isRpn ? 'rpn' : 'nrpn';
-          const nm = c === 101 || c === 99 ? e.value : kind === k ? Number(msb) : 127;
-          const nl = c === 100 || c === 98 ? e.value : kind === k ? Number(lsb) : 127;
-          selected.set(key, nm === 127 && nl === 127 ? null : `${k}:${nm}:${nl}`);
-        } else if (c === 6 || c === 38) {
-          const p = selected.get(key);
-          if (p) {
-            const v = s.parameters.get(p) ?? {};
-            if (c === 6) v.msb = e.value;
-            else v.lsb = e.value;
-            s.parameters.set(p, v);
-          }
-        } else if (c === 121) {
-          // Reset All Controllers (RP-015): controllers and pitch bend back to defaults
-          s.controllers.clear();
-          s.pitchBend = undefined;
-        } else if (!SKIP_CC.has(c)) s.controllers.set(c, e.value);
-      }
+      if (e.kind === 'sysex') items.push({ tick: e.tick, ti, order: e.originOrder, port, channel: -1, e });
+      else if (e.kind === 'cc' || e.kind === 'program' || e.kind === 'pitch-bend') items.push({ tick: e.tick, ti, order: e.originOrder, port, channel: e.channelOverride ?? track.channel, e });
     }
   });
-  sysexWithOrder.sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1] || a.order[2] - b.order[2]);
-  for (const x of sysexWithOrder) sysex.push(x.item);
+  items.sort((a, b) => a.tick - b.tick || a.ti - b.ti || a.order - b.order);
+
+  for (const { port, channel: ch, e } of items) {
+    if (e.kind === 'sysex') {
+      const data = base64ToBytes(e.dataBase64);
+      if (data) sysex.push({ tick: e.tick, port, status: e.status, data });
+      continue;
+    }
+    const s = state(port, ch);
+    const key = chaseKey(port, ch);
+    if (e.kind === 'program') s.program = e.program;
+    else if (e.kind === 'pitch-bend') s.pitchBend = e.value;
+    else {
+      const c = e.controller;
+      if (c === 0) s.bankMsb = e.value;
+      else if (c === 32) s.bankLsb = e.value;
+      else if (c === 101 || c === 100 || c === 99 || c === 98) {
+        const isRpn = c === 101 || c === 100;
+        const prev = selected.get(key);
+        const [kind, msb, lsb] = prev ? prev.split(':') : [isRpn ? 'rpn' : 'nrpn', '127', '127'];
+        const k = isRpn ? 'rpn' : 'nrpn';
+        const nm = c === 101 || c === 99 ? e.value : kind === k ? Number(msb) : 127;
+        const nl = c === 100 || c === 98 ? e.value : kind === k ? Number(lsb) : 127;
+        selected.set(key, nm === 127 && nl === 127 ? null : `${k}:${nm}:${nl}`);
+      } else if (c === 6 || c === 38) {
+        const p = selected.get(key);
+        if (p) {
+          const v = s.parameters.get(p) ?? {};
+          if (c === 6) v.msb = e.value;
+          else v.lsb = e.value;
+          s.parameters.set(p, v);
+        }
+      } else if (c === 121) {
+        // Reset All Controllers (RP-015): modulation, expression (to 127), the pedals, pitch bend
+        // and the RPN / NRPN selection. Volume, pan, effect sends, bank and program stay (ADR-084).
+        for (const r of RESET_BY_CC121) s.controllers.delete(r);
+        s.controllers.set(11, 127);
+        s.pitchBend = undefined;
+        selected.set(key, null);
+      } else if (!SKIP_CC.has(c)) s.controllers.set(c, e.value);
+    }
+  }
   return { channels, sysex };
 }
 

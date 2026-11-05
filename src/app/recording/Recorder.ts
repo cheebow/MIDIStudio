@@ -52,6 +52,11 @@ export class Recorder {
   /** notes moved to the start position / dropped as too early (for the message at stop) */
   private early = 0;
   private dropped = 0;
+  /** count-in pickups held now: their real press time */
+  private pickupOn = new Map<string, number>();
+  /** input clock (performance.now) when playback started, and the loop in song seconds */
+  private playStartMs: number | null = null;
+  private loopSeconds: { start: number; end: number } | null = null;
 
   constructor(
     private readonly store: EditorStore,
@@ -107,6 +112,7 @@ export class Recorder {
     this.startSeconds = this.transport.getPosition().seconds;
     this.early = 0;
     this.dropped = 0;
+    this.pickupOn.clear();
     this.loopAtStart = project.loop;
     const loop = project.loop.enabled && !rec.punch ? { startTick: project.loop.startTick, endTick: project.loop.endTick } : undefined;
     const punch = rec.punch && project.loop.endTick > project.loop.startTick ? { inTick: project.loop.startTick, outTick: project.loop.endTick } : undefined;
@@ -139,7 +145,11 @@ export class Recorder {
     // keep the transport running past the end of the song while recording
     this.transport.setTail(startTick + project.ppq * 4 * 2000);
     try {
+      this.playStartMs = null;
       await this.transport.play(startTick);
+      // loop recording: passes are counted on the input clock from here (ADR-084)
+      this.playStartMs = performance.now();
+      this.loopSeconds = loop ? { start: tempo.tickToSeconds(loop.startTick), end: tempo.tickToSeconds(loop.endTick) } : null;
     } catch (e) {
       // e.g. the audio engine could not start: do not stay in "recording" with the input attached
       this.stop();
@@ -163,9 +173,23 @@ export class Recorder {
         return;
       }
       if (e.type === 'note-on') this.early++;
-      songSeconds = this.startSeconds;
+      // A pickup pressed and released within the count-in keeps its length (ADR-084): its end is
+      // placed after the start position by the time it was held, not on the start (1 tick).
+      // (the transport is parked during the count-in, so the held time comes from the input clock)
+      const key = `${e.sourceId}:${e.channel ?? -1}:${'pitch' in e ? e.pitch : -1}`;
+      if (e.type === 'note-on') this.pickupOn.set(key, e.atMs);
+      const on = e.type === 'note-off' ? this.pickupOn.get(key) : undefined;
+      if (on !== undefined) this.pickupOn.delete(key);
+      songSeconds = on !== undefined ? this.startSeconds + Math.max(0, e.atMs - on) / 1000 : this.startSeconds;
     }
-    const ch = e.channel !== undefined ? { channel: e.channel } : {};
+    const ch: { channel?: number; pass?: number } = e.channel !== undefined ? { channel: e.channel } : {};
+    // Loop recording: which pass this input is in, from the time since playback started. A pass
+    // with no input (or played later in the bar) is then not merged into the next one (ADR-084).
+    const ls = this.loopSeconds;
+    if (phase === 'recording' && ls && this.playStartMs !== null && ls.end > ls.start) {
+      const at = this.startSeconds + (e.atMs - this.playStartMs) / 1000;
+      ch.pass = at < ls.end ? 0 : 1 + Math.floor((at - ls.end) / (ls.end - ls.start));
+    }
     let input: RecordInput;
     switch (e.type) {
       case 'note-on':
@@ -211,23 +235,38 @@ export class Recorder {
     const patch: Record<string, unknown> = {};
     let closed = 0;
     let count = 0;
-    for (const [trackId, take] of this.takes) {
-      const res = take.finish(stopSeconds);
-      closed += res.closedAtStop;
-      count += res.takes.reduce((n, t) => n + t.events.length, 0);
-      const replaceRange = rec.punch && this.loopAtStart ? { startTick: this.loopAtStart.startTick, endTick: this.loopAtStart.endTick } : undefined;
-      const r = takeToCommand(p, trackId, res, { mode: rec.mode, loopChoice: rec.loopTakes, quantize: grid && grid.den === 1 ? grid : null, replaceRange });
-      if (!r) continue;
-      p = applyCommand(p, r.command).project;
-      Object.assign(patch, r.command.patch);
+    let lost = 0;
+    try {
+      for (const [trackId, take] of this.takes) {
+        const res = take.finish(stopSeconds);
+        const events = res.takes.reduce((n, t) => n + t.events.length, 0);
+        // the target track was deleted (or its creation undone) while recording: nothing to add to (ADR-084)
+        if (!p.tracks.some((tr) => tr.id === trackId)) {
+          lost += events;
+          continue;
+        }
+        closed += res.closedAtStop;
+        count += events;
+        const replaceRange = rec.punch && this.loopAtStart ? { startTick: this.loopAtStart.startTick, endTick: this.loopAtStart.endTick } : undefined;
+        const r = takeToCommand(p, trackId, res, { mode: rec.mode, loopChoice: rec.loopTakes, quantize: grid && grid.den === 1 ? grid : null, replaceRange });
+        if (!r) continue;
+        p = applyCommand(p, r.command).project;
+        Object.assign(patch, r.command.patch);
+      }
+      const cmd: Command = { label: rec.mode === 'replace' ? '録音（置き換え）' : '録音', patch };
+      this.store.run(Object.keys(patch).length ? cmd : null);
+    } catch (e) {
+      // never leave the recorder in 'recording' with the input detached: Record would refuse forever
+      this.takes.clear();
+      this.set({ phase: 'idle', countIn: 0, message: t('録音を保存できませんでした: {error}', { error: e instanceof Error ? e.message : String(e) }) });
+      return;
     }
     this.takes.clear();
-    const cmd: Command = { label: rec.mode === 'replace' ? '録音（置き換え）' : '録音', patch };
-    this.store.run(Object.keys(patch).length ? cmd : null);
     const notes = closed ? t('押されたままのノート {n} 個を停止位置で終わらせました。', { n: closed }) : '';
     const early = this.early ? t('{n} 個のノートを開始位置に揃えました。', { n: this.early }) : '';
     const dropped = this.dropped ? t('早すぎたノート {n} 個は記録していません。', { n: this.dropped }) : '';
-    const rest = [notes, early, dropped].filter(Boolean).join(' ');
+    const gone = lost ? t('録音中に削除されたトラックの {n} 個のイベントは追加できませんでした。', { n: lost }) : '';
+    const rest = [notes, early, dropped, gone].filter(Boolean).join(' ');
     this.set({ phase: 'idle', countIn: 0, message: count ? t('{count} 個のイベントを録音しました。{rest}', { count, rest }) : t('録音されたイベントはありません。{rest}', { rest }) });
   }
 }

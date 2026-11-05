@@ -8,6 +8,7 @@ import type { MidiProject } from '../model/types';
 import { hasChannel } from '../events/order';
 import { eventValueRange } from './eventValue';
 import { setTempo } from '../editing/conductorOps';
+import { MAX_BPM, MIN_BPM } from '../timing/tempoMap';
 import { setAbsoluteTick, setGateTime, setRowChannel, setRowKey, setRowValue, setStepTime } from './listEdit';
 import { isConductorEvent, type ListRow, type ListUnit } from './listRows';
 import { t } from '../../i18n';
@@ -26,7 +27,7 @@ export type NudgeResult = { ok: true; value: number } | { ok: false; message: st
 /** Value range of a cell: [min, max], or null when the cell has no number. */
 export function cellRange(row: ListRow, col: NudgeCol): [number, number] | null {
   const e = row.event;
-  if (isConductorEvent(e)) return col === 'vel' && e.kind === 'tempo' ? [1, 999] : null; // BPM; the rest is edited in the conductor tab
+  if (isConductorEvent(e)) return col === 'vel' && e.kind === 'tempo' ? [MIN_BPM, MAX_BPM] : null; // BPM; the rest is edited in the conductor tab
   switch (col) {
     case 'key':
       return e.kind === 'note' || e.kind === 'poly-pressure' ? [0, 127] : null;

@@ -75,6 +75,8 @@ export class InputController {
 
   setMode(mode: InputMode): void {
     this.router.setMode(mode);
+    // The Tab pedal belongs to the PC-keyboard mode: leaving it lifts the pedal (ADR-083)
+    if (this.sustainOn && mode !== 'piano-performance') this.setSustain(false);
     this.update({ mode, pianoHeld: new Set(), drumHeld: new Set() });
   }
 
@@ -96,6 +98,7 @@ export class InputController {
 
   releaseAll(): void {
     this.router.releaseAll();
+    if (this.sustainOn) this.setSustain(false); // focus loss: the Tab keyup never arrives
     for (const key of [...this.routed.keys()]) if (key.startsWith('screen-pad:')) this.padUp(Number(key.split(':')[2]));
   }
 
@@ -110,7 +113,7 @@ export class InputController {
       if (trackId) {
         const bytes =
           e.type === 'cc' ? [0xb0, e.controller, e.value] : e.type === 'pitch-bend' ? [0xe0, (e.value + 8192) & 0x7f, ((e.value + 8192) >> 7) & 0x7f] : e.type === 'channel-pressure' ? [0xd0, e.value] : [0xa0, e.pitch, e.value];
-        this.transport.sendToTrack(trackId, bytes);
+        this.transport.sendToTrack(trackId, bytes, { performed: true });
       }
       for (const s of this.sinks) s(e, trackId);
       return;
@@ -137,7 +140,9 @@ export class InputController {
 
   /** External MIDI keyboard input (Web MIDI). Plays into the piano target (drum target in drum modes). */
   midiMessage(m: ParsedMidiInput, deviceId: string, timeStamp: number): void {
-    const sourceId = `midi:${deviceId}`;
+    // one source per device and channel: the same key played on two channels (layered / split
+    // keyboards) is two voices, and releasing one must not stop the other (ADR-084)
+    const sourceId = `midi:${deviceId}#${m.channel}`;
     const target: 'piano' | 'drum' = this.mode === 'drum-performance' || this.mode === 'step-drums' ? 'drum' : 'piano';
     const ch = this._keepMidiChannel ? { channel: m.channel } : {};
     const base = { atMs: timeStamp, target, sourceId, ...ch };
@@ -145,9 +150,14 @@ export class InputController {
       case 'note-on':
         this.dispatch({ type: 'note-on', pitch: m.pitch, velocity: m.velocity, ...base });
         break;
-      case 'note-off':
-        this.dispatch({ type: 'note-off', pitch: m.pitch, releaseVelocity: m.releaseVelocity, ...base });
+      case 'note-off': {
+        // A key pressed before an input-mode switch (⌥R / ⌥K) is released to where it was played,
+        // or its preview would never stop and the recorder would lose its end (ADR-083).
+        const other = target === 'piano' ? 'drum' : 'piano';
+        const playedTo = !this.routed.has(`${sourceId}:${target}:${m.pitch}`) && this.routed.has(`${sourceId}:${other}:${m.pitch}`) ? other : target;
+        this.dispatch({ type: 'note-off', pitch: m.pitch, releaseVelocity: m.releaseVelocity, ...base, target: playedTo });
         break;
+      }
       case 'cc':
         this.dispatch({ type: 'cc', controller: m.controller, value: m.value, ...base });
         break;
@@ -168,10 +178,14 @@ export class InputController {
   /** Releases every note held by one source (device unplugged / disabled). */
   releaseSource(sourceId: string): void {
     for (const key of [...this.routed.keys()]) {
-      if (!key.startsWith(`${sourceId}:`)) continue;
-      // key = `${sourceId}:${target}:${pitch}`; device ids may themselves contain ':'
-      const [target, pitch] = key.slice(sourceId.length + 1).split(':');
-      this.dispatch({ type: 'note-off', pitch: Number(pitch), releaseVelocity: 0, sourceId, atMs: performance.now(), target: target as 'piano' | 'drum' });
+      // key = `${source}:${target}:${pitch}`, where a MIDI source is `${sourceId}#${channel}`;
+      // device ids may themselves contain ':'
+      let source: string;
+      if (key.startsWith(`${sourceId}:`)) source = sourceId;
+      else if (key.startsWith(`${sourceId}#`)) source = key.slice(0, key.indexOf(':', sourceId.length));
+      else continue;
+      const [target, pitch] = key.slice(source.length + 1).split(':');
+      this.dispatch({ type: 'note-off', pitch: Number(pitch), releaseVelocity: 0, sourceId: source, atMs: performance.now(), target: target as 'piano' | 'drum' });
     }
   }
 

@@ -125,6 +125,8 @@ export const EN_APP: Record<string, string> = {
   'MIDI（SMF Format 1, PPQ {ppq}）を書き出しました。注意: {list}': 'MIDI (SMF Format 1, PPQ {ppq}) exported. Note: {list}',
   'MIDI（SMF Format 1, PPQ {ppq}）を書き出しました。': 'MIDI (SMF Format 1, PPQ {ppq}) exported.',
   '保存データが壊れています（現在の曲はそのままです）: {errors}': 'The saved data is corrupted (the current song is unchanged): {errors}',
+  'ブラウザに保存した曲を読み込めませんでした: {error}': 'Could not read the song saved in the browser: {error}',
+  'ブラウザに保存した曲が見つかりませんでした（別のタブで削除された可能性があります）。': 'The song saved in the browser was not found (it may have been deleted in another tab).',
   '「{title}」を開きました。': '"{title}" opened.',
   '丸めて実行しますか？': 'Round and continue?',
   ノートの長さを揃える: 'Set note length',
@@ -231,6 +233,8 @@ export const EN_APP: Record<string, string> = {
   '押されたままのノート {n} 個を停止位置で終わらせました。': '{n} held notes were ended at the stop position.',
   '{n} 個のノートを開始位置に揃えました。': '{n} notes were aligned to the start.',
   '早すぎたノート {n} 個は記録していません。': '{n} notes played too early were not recorded.',
+  '録音中に削除されたトラックの {n} 個のイベントは追加できませんでした。': '{n} events of a track deleted while recording could not be added.',
+  '録音を保存できませんでした: {error}': 'The recording could not be saved: {error}',
   '{count} 個のイベントを録音しました。{rest}': 'Recorded {count} events. {rest}',
   '録音されたイベントはありません。{rest}': 'No events were recorded. {rest}',
 

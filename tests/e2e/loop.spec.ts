@@ -4,6 +4,28 @@ import { importMidi } from './helpers';
 
 const loopInputs = (page: import('@playwright/test').Page) => page.locator('.transport .bar-input');
 
+test('ADR-084: the loop bar fields can be retyped digit by digit; a start past the end keeps the loop one bar long', async ({ page }) => {
+  await page.goto('/');
+  await importMidi(page, build(1, 480, [on(0, 0, 60), off(480, 0, 60)]));
+  const [start, end] = [loopInputs(page).nth(0), loopInputs(page).nth(1)];
+  await end.fill('5');
+  await end.click();
+  await end.press('Backspace'); // empty while retyping: not forced back to 2
+  await expect(end).toHaveValue('');
+  await end.pressSequentially('12');
+  await expect(end).toHaveValue('12');
+  await start.click();
+  await start.press('Backspace');
+  await start.pressSequentially('3');
+  await expect(start).toHaveValue('3');
+  await expect(end).toHaveValue('12');
+  // a start after the end: on Enter the end moves to keep one bar (no one-tick loop)
+  await start.fill('20');
+  await start.press('Enter');
+  await expect(start).toHaveValue('20');
+  await expect(end).toHaveValue('21');
+});
+
 test('ADR-053: the loop range is dragged on the track-view ruler: an end resizes, the band moves (bar snap)', async ({ page }) => {
   await page.goto('/');
   await importMidi(page, build(1, 480, [on(0, 0, 60), off(480, 0, 60)]));

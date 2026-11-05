@@ -20,6 +20,11 @@ export interface EditorState {
   clipboard: ClipboardData | null;
   /** project revision counter: increments on every content change (not on view settings) */
   revision: number;
+  /**
+   * One-shot request to show a position in the note editors (double-click on a clip, ADR-085).
+   * Not saved; the editor of `trackId` scrolls to `tick` and clears it with takeReveal().
+   */
+  reveal: { trackId: string; tick: number } | null;
 }
 
 type Listener = () => void;
@@ -38,6 +43,7 @@ export class EditorStore {
       tool: 'select',
       clipboard: null,
       revision: 0,
+      reveal: null,
     };
   }
 
@@ -67,16 +73,34 @@ export class EditorStore {
     this.set({ project: r.project, history: r.history, selection, dirty: true, lastAction: cmd.label, revision: this.state.revision + 1 });
   }
 
+  /**
+   * Mute / solo / arm are not undo steps (setTrackFlags), but an undo / redo patch restores whole
+   * track objects captured before the flag change. Keep the current flags of the tracks that still
+   * exist so Undo never silently unmutes a track (ADR-082).
+   */
+  private keepTrackFlags(project: MidiProject): MidiProject {
+    if (project.tracks === this.state.project.tracks) return project;
+    const now = new Map(this.state.project.tracks.map((t) => [t.id, t]));
+    let changed = false;
+    const tracks = project.tracks.map((t) => {
+      const c = now.get(t.id);
+      if (!c || (c.mute === t.mute && c.solo === t.solo)) return t;
+      changed = true;
+      return { ...t, mute: c.mute, solo: c.solo };
+    });
+    return changed ? { ...project, tracks } : project;
+  }
+
   undo(): void {
     if (!canUndo(this.state.history)) return;
     const r = undo(this.state.project, this.state.history);
-    this.set({ project: r.project, history: r.history, selection: pruneSelection(this.state.selection, r.project), dirty: true, lastAction: r.label ? t('元に戻す: {label}', { label: t(r.label) }) : null, revision: this.state.revision + 1 });
+    this.set({ project: this.keepTrackFlags(r.project), history: r.history, selection: pruneSelection(this.state.selection, r.project), dirty: true, lastAction: r.label ? t('元に戻す: {label}', { label: t(r.label) }) : null, revision: this.state.revision + 1 });
   }
 
   redo(): void {
     if (!canRedo(this.state.history)) return;
     const r = redo(this.state.project, this.state.history);
-    this.set({ project: r.project, history: r.history, selection: pruneSelection(this.state.selection, r.project), dirty: true, lastAction: r.label ? t('やり直し: {label}', { label: t(r.label) }) : null, revision: this.state.revision + 1 });
+    this.set({ project: this.keepTrackFlags(r.project), history: r.history, selection: pruneSelection(this.state.selection, r.project), dirty: true, lastAction: r.label ? t('やり直し: {label}', { label: t(r.label) }) : null, revision: this.state.revision + 1 });
   }
 
   /** Replaces the whole project (new / open / import). Clears history and selection. */
@@ -98,6 +122,19 @@ export class EditorStore {
 
   setTool(tool: Tool): void {
     this.set({ tool });
+  }
+
+  /** Asks the note editor of `trackId` to scroll to `tick` (ADR-085). */
+  revealTick(trackId: string, tick: number): void {
+    this.set({ reveal: { trackId, tick } });
+  }
+
+  /** The editor of `trackId` takes the pending reveal request (null when there is none for it). */
+  takeReveal(trackId: string): number | null {
+    const r = this.state.reveal;
+    if (!r || r.trackId !== trackId) return null;
+    this.state = { ...this.state, reveal: null }; // no notify: nothing else draws from it
+    return r.tick;
   }
 
   setClipboard(clipboard: ClipboardData | null): void {

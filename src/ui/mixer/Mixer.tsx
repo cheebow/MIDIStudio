@@ -7,6 +7,7 @@ import { controllerAt, programAt, setControllerAt } from '../../core/editing/cha
 import { usePlaybackPosition } from '../../app/hooks/usePlayback';
 import { programLabel } from '../../core/gm/instruments';
 import type { MidiTrack } from '../../core/model/types';
+import { selectedTrack } from '../../core/model/selectedTrack';
 import { useEditorState, useServices } from '../../app/store/context';
 import { Fader, Knob } from './controls';
 
@@ -45,11 +46,11 @@ export function Mixer() {
   const at = (tk: MidiTrack, c: number) => controllerAt(tk, c, tick);
   const initial = (tk: MidiTrack, c: number) => at(tk, c).event?.value ?? null;
   const preview = (tk: MidiTrack, c: number) => (v: number) => transport.sendToTrack(tk.id, [0xb0, c, v]);
-  const commit = (tk: MidiTrack, c: number) => (v: number) => {
+  const commit = (tk: MidiTrack, c: number) => (v: number, mergeKey?: string) => {
     if (initial(tk, c) === v) return;
     try {
       // a controller-only edit at the playhead is applied live by the Transport: no reload (ADR-039)
-      store.run(setControllerAt(store.project, tk.id, c, v, tick));
+      store.run(setControllerAt(store.project, tk.id, c, v, tick), mergeKey ? { mergeKey: `${mergeKey}-${tk.id}-${c}` } : {});
     } catch (e) {
       reportError((e as Error).message);
     }
@@ -63,13 +64,15 @@ export function Mixer() {
     return undefined;
   };
 
+  const selectedId = selectedTrack(project)?.id;
+
   return (
     <div className="mixer" role="region" aria-label={t('ミキサー')}>
       <div className="mixer-strips">
         {project.tracks.map((tk, i) => {
           const pc = programAt(tk, tick).event;
           const silent = tk.mute || (anySolo && !tk.solo);
-          const selected = project.settings.selectedTrackId === tk.id;
+          const selected = selectedId === tk.id; // same fallback as the editors (ADR-084)
           const knob = (c: number, name: string, def: number, extra: { bipolar?: boolean; format?: (v: number) => string } = {}) => (
             <Knob label={`${tk.name} ${name}`} value={initial(tk, c)} defaultValue={def} color={tk.color} onChange={preview(tk, c)} onCommit={commit(tk, c)} automation={autoNote(tk, c)} {...extra} />
           );

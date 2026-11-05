@@ -3,7 +3,7 @@ import { createCounterIdGenerator, setIdGenerator } from '../../src/core/model/i
 import type { MidiProject } from '../../src/core/model/types';
 import { setControllerAt } from '../../src/core/editing/channelSetup';
 import { applyCommand } from '../../src/core/editing/history';
-import { addEvents, deleteEvents, updateClip, updateEvents, updateTrack } from '../../src/core/editing/operations';
+import { addEvents, deleteEvents, resizeClip, updateClip, updateEvents, updateTrack } from '../../src/core/editing/operations';
 import { upsertConductorEvent } from '../../src/core/editing/conductorOps';
 import { openMidiFile } from '../../src/core/project-io/midiFile';
 import { classifyPlaybackChange } from '../../src/core/project-io/playbackDiff';
@@ -56,5 +56,16 @@ describe('classifyPlaybackChange (ADR-039)', () => {
     expect(classifyPlaybackChange(p, { ...p, loop: { enabled: true, startTick: 0, endTick: 1920 } }, 1200).kind).toBe('reload');
     expect(classifyPlaybackChange(p, apply(p, updateTrack(p, t.id, { mute: true })), 1200).kind).toBe('reload');
     expect(classifyPlaybackChange(p, apply(p, updateTrack(p, t.id, { channel: 3 })), 1200).kind).toBe('reload');
+  });
+
+  it('ADR-082: a clip-only edit that leaves notes outside every clip (or takes them back in) reloads', () => {
+    const p = song();
+    const clip = p.clips.find((c) => c.trackId === p.tracks[0].id)!;
+    const shrunk = apply(p, resizeClip(p, clip.id, { endTick: 480 })); // the note at 960 becomes loose
+    expect(classifyPlaybackChange(p, shrunk, 0)).toEqual({ kind: 'reload', reason: 'clips' });
+    expect(classifyPlaybackChange(shrunk, p, 0)).toEqual({ kind: 'reload', reason: 'clips' });
+    // resizing without changing which notes sound stays "none"
+    const longer = apply(p, resizeClip(p, clip.id, { endTick: clip.endTick + 480 }));
+    expect(classifyPlaybackChange(p, longer, 0).kind).toBe('none');
   });
 });

@@ -59,6 +59,25 @@ test('tempo tab: add a tempo change by bar and BPM; edit position and value in p
   expect(metas.filter((m) => m[1] === 0x58)).toEqual((await exportedSmf(page)).tracks[0].events.filter((e) => e.kind === 'meta' && e.metaType === 0x58).map((e) => (e.kind === 'meta' ? [e.tick, 0x58, e.data[0]] : [])));
 });
 
+test('ADR-084: a time-signature change re-labels the other rows; leaving a row untouched does not move its event', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'コンダクター' }).click();
+  await page.getByTestId('add-tempo').click();
+  await page.getByTestId('conductor-dialog').getByRole('textbox', { name: '位置' }).fill('5');
+  await page.getByTestId('conductor-dialog').getByRole('textbox', { name: 'テンポ' }).fill('140');
+  await page.getByTestId('conductor-dialog').getByRole('button', { name: 'OK' }).click();
+  await page.getByTestId('add-time-signature').click();
+  await page.getByTestId('conductor-dialog').getByRole('textbox', { name: '位置' }).fill('2');
+  await page.getByTestId('conductor-dialog').getByRole('textbox', { name: '拍子' }).fill('3/4');
+  await page.getByTestId('conductor-dialog').getByRole('button', { name: 'OK' }).click();
+  // tick 7680 is bar 6 in 3/4 from bar 2 (1920 + 4 × 1440)
+  const pos = page.getByTestId('tempo-row').filter({ hasText: 'テンポ' }).nth(1).getByRole('textbox', { name: '位置' });
+  await expect(pos).toHaveValue('006.01.000');
+  await pos.focus();
+  await pos.blur();
+  expect(await tempos(page)).toEqual([[0, 500000], [7680, 428571]]);
+});
+
 test('track view: right-click the tempo lane to add a tempo; double-click it to change it', async ({ page }) => {
   await page.goto('/');
   await importMidi(page, build(1, 480, [on(0, 0, 60), off(480, 0, 60)]));

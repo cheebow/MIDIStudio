@@ -9,7 +9,7 @@ import { useEditActions, useEditorState, useServices } from '../../app/store/con
 import { t } from '../../i18n';
 import { isSecondaryClick, useContextMenu } from '../menu/ContextMenu';
 import { emptyMenuItems, noteMenuItems } from '../menu/editMenus';
-import { conductorMarks, drawLoopRuler, drawPlayhead, drawRulerConductorMarks, drawStepCursor, fitCanvas, isBlackKey, pitchName, readTheme } from '../canvas';
+import { barPageScrollLeft, conductorMarks, drawLoopRuler, drawPlayhead, drawRulerConductorMarks, drawStepCursor, fitCanvas, isBlackKey, pitchName, readTheme } from '../canvas';
 import { ControllerLane } from './ControllerLane';
 import { NoteInfoBar } from '../editing/NoteInfoBar';
 import { useAnimationLoop, useDragState, useElementSize, usePlayheadFollow, useSignatureMap, useZoomAnchor } from '../hooks';
@@ -38,7 +38,7 @@ export function PianoRoll() {
   const { store, transport, audioReady, step, input, recorder, reportError } = useServices();
   const editActions = useEditActions();
   const ctxMenu = useContextMenu();
-  const { project, selection, tool } = useEditorState();
+  const { project, selection, tool, reveal } = useEditorState();
   const settings = project.settings;
   const track: MidiTrack | undefined = selectedTrack(project);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -84,6 +84,16 @@ export function PianoRoll() {
     const r = snapTick(t, grid, 'floor');
     return r.tick;
   };
+
+  // Double-click on a clip asks to show its start (ADR-085): the bar of the clip start at the left edge.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !reveal || !track) return;
+    const tick = store.takeReveal(track.id);
+    if (tick === null) return;
+    el.scrollLeft = barPageScrollLeft(sig, tick, pxPerTick) + leadPx; // the bar starts at the left edge (past the margin before bar 1)
+    follow.hold();
+  }, [reveal, track, store, sig, pxPerTick, leadPx, follow]);
 
   // When the edited track changes, scroll vertically to its notes (or to the saved pitch).
   const trackId = track?.id;
@@ -304,7 +314,7 @@ export function PianoRoll() {
       }
     }
     if (input.mode === 'step-piano' || input.mode === 'step-drums') drawStepCursor(ctx, Math.round(step.cursor * pxPerTick - view.x) + 0.5, view.h);
-    follow(pos, x, w, scrollRef.current, sig, pxPerTick, settings.followPlayback);
+    follow.update(pos, x, w, scrollRef.current, sig, pxPerTick, settings.followPlayback);
   }, [transport, view, pxPerTick, settings.followPlayback, step, input, recorder, track?.id, sig, follow, notes]);
 
   // Ctrl / ⌘ + wheel (and trackpad pinch, which Chrome reports as wheel + ctrlKey) zooms the roll.
@@ -462,8 +472,14 @@ export function PianoRoll() {
     }
     if (drag.kind === 'move') {
       const rawStart = drag.anchor.tick + (cx - drag.startX) / pxPerTick;
-      const dTick = (p.ctrlKey || p.metaKey ? Math.round(rawStart) : snap(rawStart + gridLen / 2)) - drag.anchor.tick;
-      const dPitch = pitchAt(cy) - drag.anchor.pitch;
+      // limit the offsets for the group as moveEvents does, so the preview is what the drop gives:
+      // a chord dragged against pitch 0 / 127 or tick 0 keeps its shape (ADR-084)
+      const moving = notes.filter((n) => selection.eventIds.has(n.id));
+      const lo = moving.length ? Math.min(...moving.map((n) => n.pitch)) : drag.anchor.pitch;
+      const hi = moving.length ? Math.max(...moving.map((n) => n.pitch)) : drag.anchor.pitch;
+      const first = moving.length ? Math.min(...moving.map((n) => n.tick)) : drag.anchor.tick;
+      const dTick = Math.max(-first, (p.ctrlKey || p.metaKey ? Math.round(rawStart) : snap(rawStart + gridLen / 2)) - drag.anchor.tick);
+      const dPitch = Math.max(-lo, Math.min(127 - hi, pitchAt(cy) - drag.anchor.pitch));
       if (dPitch !== drag.dPitch) audition(drag.anchor.pitch + dPitch);
       setDrag({ ...drag, dTick, dPitch, duplicate: drag.duplicate || p.altKey });
     } else if (drag.kind === 'resize') {
@@ -522,7 +538,8 @@ export function PianoRoll() {
     // ↑ ↓ shift the PC keyboard's octave while performing / step-entering (global shortcut)
     if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && (input.mode === 'piano-performance' || input.mode === 'step-piano')) return;
     // ← → are rest / back (Shift: step length) while step-entering (ADR-076)
-    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && (input.mode === 'step-piano' || input.mode === 'step-drums')) return;
+    // (Backspace too: it undoes the last step and moves the cursor back, ADR-083)
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Backspace') && (input.mode === 'step-piano' || input.mode === 'step-drums')) return;
     const ids = [...selection.eventIds].filter((id) => track.events.some((ev) => ev.id === id));
     const step = Math.max(1, Math.round(gridLen));
     const run = (fn: () => void) => {

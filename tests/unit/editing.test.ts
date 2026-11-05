@@ -171,6 +171,19 @@ describe('event operations', () => {
     expect(s.notes.map((n) => n.tick)).toEqual([0, 480]);
     expect(new Set(s.notes.map((n) => n.id)).size).toBe(2);
   });
+
+  it('ADR-083: duplicateEvents tells which original each copy came from (copies are in time order)', () => {
+    const s = new Session(createEmptyProject());
+    const { command, ids } = addEvents(s.project, s.track.id, [note(480, 42), note(0, 36)])!;
+    s.run(command);
+    const d = duplicateEvents(s.project, [ids[0], ids[1]], 1920)!; // selection order: the later note first
+    s.run(d.command);
+    const byId = new Map(s.notes.map((n) => [n.id, n]));
+    d.ids.forEach((id, i) => {
+      expect(byId.get(id)!.pitch).toBe(byId.get(d.sourceIds[i])!.pitch);
+      expect(byId.get(id)!.tick).toBe(byId.get(d.sourceIds[i])!.tick + 1920);
+    });
+  });
 });
 
 describe('clips (E03 / E04, REQ-PRJ-06)', () => {
@@ -529,6 +542,18 @@ describe('merging drum tracks', () => {
     s.undo();
     expect(s.project.tracks.filter((t) => t.channel === 9)).toHaveLength(3);
     expect(mergeDrumTracks(openMidiFile(src()).ok ? (openMidiFile(src()) as { project: MidiProject }).project : s.project)).toBeNull();
+  });
+
+  it('ADR-084: merging never changes the original event objects (Undo still holds them)', () => {
+    const r = openMidiFile(src(), { mergeDrums: false });
+    if (!r.ok) throw new Error();
+    const drumTracks = r.project.tracks.filter((t) => t.channel === 9);
+    // events that carry channelOverride: undefined (the key present) on the track merged into
+    const withKey = { ...drumTracks[0], events: drumTracks[0].events.map((e) => ({ ...e, channelOverride: undefined }) as MidiProject['tracks'][number]['events'][number]) };
+    const p: MidiProject = { ...r.project, tracks: r.project.tracks.map((t) => (t.id === withKey.id ? withKey : t)) };
+    const before = JSON.stringify(withKey.events.map((e) => Object.keys(e)));
+    mergeDrumTracks(p);
+    expect(JSON.stringify(withKey.events.map((e) => Object.keys(e)))).toBe(before);
   });
 });
 

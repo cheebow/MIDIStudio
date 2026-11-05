@@ -41,6 +41,41 @@ function formatTime(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${s.toFixed(3).padStart(6, '0')}`;
 }
 
+/**
+ * A loop bar number. While typing, the text is a draft: it is applied as soon as it is a whole
+ * number that `valid` accepts; Enter or leaving the field applies it with `fix` (the caller keeps
+ * the loop at least one bar long) or puts back the current value when it is not a number (ADR-084).
+ */
+function BarInput({ value, min, valid, onCommit }: { value: number; min: number; valid: (bar: number) => boolean; onCommit: (bar: number, fix: boolean) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const parse = (s: string) => (/^\d+$/.test(s.trim()) ? Number(s) : null);
+  const finish = () => {
+    if (draft === null) return;
+    const n = parse(draft);
+    const b = n === null ? null : Math.max(min, n);
+    setDraft(null);
+    if (b !== null && b !== value) onCommit(b, true);
+  };
+  return (
+    <input
+      type="number"
+      min={min}
+      className="bar-input"
+      value={draft ?? value}
+      onChange={(e) => {
+        const s = e.target.value;
+        const b = parse(s);
+        if (b !== null && b >= min && valid(b)) {
+          setDraft(null);
+          if (b !== value) onCommit(b, false);
+        } else setDraft(s);
+      }}
+      onKeyDown={(e) => e.key === 'Enter' && finish()}
+      onBlur={finish}
+    />
+  );
+}
+
 export function TransportBar({ transport, project, audioReady, ensureAudio, metronome, onMetronomeChange, onLoopChange, onError, record }: Props) {
   const state = useTransportState(transport);
   const pos = usePlaybackPosition(transport);
@@ -99,25 +134,27 @@ export function TransportBar({ transport, project, audioReady, ensureAudio, metr
       </label>
       <label className="note">
         {t('小節')}
-        <input
-          type="number"
+        {/* ADR-084: typed text is a draft; it applies as soon as it is a valid range (so "12" can be
+            typed digit by digit), and on Enter / leaving the field it is fixed up (at least one bar) */}
+        <BarInput
           min={1}
-          className="bar-input"
           value={bar(project.loop.startTick)}
-          onChange={(e) => {
-            const start = Math.round(sig.barBeatToTick(Math.max(1, Number(e.target.value) || 1)));
-            onLoopChange({ ...project.loop, startTick: start, endTick: Math.max(project.loop.endTick, start + 1) });
+          valid={(b) => b < bar(project.loop.endTick - 1) + 1}
+          onCommit={(b, fix) => {
+            const startTick = Math.round(sig.barBeatToTick(b));
+            const endTick = fix && startTick >= project.loop.endTick ? Math.round(sig.barBeatToTick(b + 1)) : project.loop.endTick;
+            onLoopChange({ ...project.loop, startTick, endTick });
           }}
         />
         〜
-        <input
-          type="number"
+        <BarInput
           min={2}
-          className="bar-input"
           value={bar(project.loop.endTick - 1) + 1}
-          onChange={(e) => {
-            const endTick = Math.round(sig.barBeatToTick(Math.max(2, Number(e.target.value) || 2)));
-            onLoopChange({ ...project.loop, endTick: Math.max(endTick, project.loop.startTick + 1) });
+          valid={(b) => b > bar(project.loop.startTick)}
+          onCommit={(b, fix) => {
+            const startBar = bar(project.loop.startTick);
+            const endTick = Math.round(sig.barBeatToTick(fix ? Math.max(b, startBar + 1) : b));
+            onLoopChange({ ...project.loop, endTick });
           }}
         />
       </label>

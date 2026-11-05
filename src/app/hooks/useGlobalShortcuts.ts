@@ -38,7 +38,7 @@ const PANEL_KEYS: Record<string, EditorPanel> = { Digit1: 'piano-roll', Digit2: 
 
 const targetKind = (t: EventTarget | null) => (isTextTarget(t) ? 'text' : (t as HTMLElement | null)?.closest?.('dialog') ? 'dialog' : 'other');
 /** Enter on a focused button / tab / link activates it: never also treat it as "go to start". */
-const activates = (t: EventTarget | null) => Boolean((t as HTMLElement | null)?.closest?.('button, a, summary, [role="button"], [role="tab"], [role="menuitem"], [role="slider"]'));
+const activates = (t: EventTarget | null) => Boolean((t as HTMLElement | null)?.closest?.('button, a, summary, input[type="checkbox"], input[type="radio"], [role="button"], [role="tab"], [role="menuitem"], [role="slider"]'));
 
 export function useGlobalShortcuts(d: ShortcutDeps): void {
   // Re-subscribed on every render on purpose: the handlers read the latest closures.
@@ -49,7 +49,8 @@ export function useGlobalShortcuts(d: ShortcutDeps): void {
       // Space is play / pause: a focused toolbar button must not also fire (browsers click on keyup)
       if (e.code === 'Space' && !(IS_MAC ? e.metaKey : e.ctrlKey) && targetKind(e.target) === 'other' && !(e.target as HTMLElement | null)?.closest?.('.menubar, .menu-items') && activates(e.target)) e.preventDefault();
       // Tab is a momentary sustain pedal in the PC-keyboard mode (ADR-044 追記)
-      if (e.key === 'Tab' && input.mode === 'piano-performance' && input.sustain) input.setSustain(false);
+      // (released in any mode: Esc while holding Tab must not leave the pedal down, ADR-083)
+      if (e.key === 'Tab' && input.sustain) input.setSustain(false);
     };
     const sigMap = () => new TimeSignatureMap(store.project.ppq, store.project.conductor.filter((c) => c.kind === 'time-signature'));
     /** start of the bar `delta` bars away from the one containing `tick` */
@@ -154,7 +155,10 @@ export function useGlobalShortcuts(d: ShortcutDeps): void {
       }
       // In performance modes, single-letter shortcuts are off to avoid accidents (INPUT_RECORDING 7).
       const letter = input.mode === 'edit-shortcuts' && !mod && !e.altKey;
-      const k = e.key.toLowerCase();
+      // The letter as typed (AZERTY / Dvorak keep their own letters). With a non-Latin layout
+      // (Cyrillic, Greek...) e.key is not a Latin letter: use the key's position instead (ADR-084).
+      const typed = e.key.toLowerCase();
+      const k = /^[a-z]$/.test(typed) || !/^Key[A-Z]$/.test(e.code) ? typed : e.code.slice(3).toLowerCase();
       const project = store.project;
       const settings = project.settings;
       const track = selectedTrack(project);
@@ -202,7 +206,7 @@ export function useGlobalShortcuts(d: ShortcutDeps): void {
         actions.delete();
       } else if (!mod && e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         handled();
-        const id = settings.selectedTrackId;
+        const id = selectedTrack(project)?.id; // the setting may still name a deleted track (ADR-084)
         if (id) d.tryRun(() => store.run(moveTrack(project, id, e.key === 'ArrowUp' ? -1 : 1)));
       } else if (!mod && !e.altKey && (e.key === 'Home' || (e.key === 'Enter' && !activates(e.target)))) {
         handled();

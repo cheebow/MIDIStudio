@@ -174,6 +174,31 @@ const toBottom = (page: Page, selector: string) =>
     }, selector), { timeout: 20_000 })
     .toBeLessThan(1);
 
+test('ADR-084: drum editor: Shift + box adds to the selection (as in the piano roll)', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'ドラム' }).click();
+  await menu(page, 'トラック', 'ドラムトラックにする');
+  const lanes = await drumLanes(page);
+  const [a, b] = [lanes[0], lanes[1]];
+  await importMidi(page, build(1, 480, [on(0, 9, a), off(120, 9, a), on(840, 9, b), off(120, 9, b)]));
+  await page.getByRole('tab', { name: 'ドラム' }).click();
+  await page.getByTestId('tool-select').click();
+  const grid = (await page.getByTestId('drum-grid').boundingBox())!;
+  const box = async (pitch: number, shift: boolean) => {
+    const y = await drumLaneY(page, pitch);
+    if (shift) await page.keyboard.down('Shift');
+    await page.mouse.move(grid.x + 280, y - 6); // the margin before bar 1
+    await page.mouse.down();
+    await page.mouse.move(grid.x + 600, y + 6, { steps: 4 });
+    await page.mouse.up();
+    if (shift) await page.keyboard.up('Shift');
+  };
+  await box(a, false);
+  await box(b, true);
+  await page.getByTestId('drum-grid').press('Delete');
+  expect(notesOf(await exportedSmf(page))).toEqual([]); // both boxes' hits were selected
+});
+
 test('drum editor: a box selection dragged past the bottom edge scrolls down and selects the lowest lane', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('tab', { name: 'ドラム' }).click();

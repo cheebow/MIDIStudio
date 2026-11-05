@@ -63,6 +63,17 @@ export class TimeSignatureMap {
     return s[lo];
   }
 
+  /** Tick where the signature in effect at `tick` starts (0 for the first one). */
+  segmentStartAt(tick: number): number {
+    return this.segmentAt(tick).tick;
+  }
+
+  /** First signature change strictly after `tick`, or null. */
+  changeAfter(tick: number): number | null {
+    for (const s of this.segments) if (s.tick > tick) return s.tick;
+    return null;
+  }
+
   signatureAt(tick: number): { numerator: number; denominator: number } {
     const s = this.segmentAt(tick);
     return { numerator: s.num, denominator: s.den };

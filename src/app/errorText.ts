@@ -4,9 +4,13 @@ export function errorText(e: unknown): string {
   return String(e);
 }
 
+/** Inputs that take no typing: a focused checkbox (LOOP, SNAP...) must not switch off the PC keyboard (ADR-083). */
+const NON_TEXT_INPUTS = new Set(['checkbox', 'radio', 'color', 'button', 'submit', 'reset', 'file', 'image']);
+
 /** Text inputs keep their keys: shortcuts and musical keys must not fire while typing. */
 export function isTextTarget(t: EventTarget | null): boolean {
   const el = t as HTMLElement | null;
   if (!el) return false;
-  return el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
+  if (el.tagName === 'INPUT') return !NON_TEXT_INPUTS.has((el as HTMLInputElement).type);
+  return el.isContentEditable || ['TEXTAREA', 'SELECT'].includes(el.tagName);
 }

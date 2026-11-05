@@ -4,13 +4,21 @@
 import type { NewEvent } from '../editing/operations';
 import type { TempoMap } from '../timing/tempoMap';
 
-export type RecordInput =
+export type RecordInput = (
   | { type: 'note-on'; pitch: number; velocity: number; songSeconds: number; channel?: number }
   | { type: 'note-off'; pitch: number; releaseVelocity: number; songSeconds: number; channel?: number }
   | { type: 'cc'; controller: number; value: number; songSeconds: number; channel?: number }
   | { type: 'pitch-bend'; value: number; songSeconds: number; channel?: number }
   | { type: 'channel-pressure'; value: number; songSeconds: number; channel?: number }
-  | { type: 'poly-pressure'; pitch: number; value: number; songSeconds: number; channel?: number };
+  | { type: 'poly-pressure'; pitch: number; value: number; songSeconds: number; channel?: number }
+) & {
+  /**
+   * Loop recording: the 0-based pass this input belongs to, when the caller knows it from its own
+   * clock. Without it a pass starts only when the song time jumps back, so a pass with no input
+   * (or one played later in the bar) merged with the next one (ADR-084).
+   */
+  pass?: number;
+};
 
 export interface TakeOptions {
   tempo: TempoMap;
@@ -79,11 +87,15 @@ export class LiveTake {
 
   add(input: RecordInput): void {
     const tick = this.toTick(input.songSeconds);
-    if (this.opts.loop && this.lastTick >= 0 && tick + this.opts.tempo.ppq / 8 < this.lastTick) {
-      // wrapped to the loop start: close held notes at the loop end and start the next pass
-      for (const key of [...this.open.keys()]) this.closeNote(key, this.opts.loop.endTick, 64);
-      this.pass++;
-      this.takes.push({ pass: this.pass, events: [] });
+    const loop = this.opts.loop;
+    const target = input.pass !== undefined ? input.pass : loop && this.lastTick >= 0 && tick + this.opts.tempo.ppq / 8 < this.lastTick ? this.pass + 1 : this.pass;
+    if (loop && target > this.pass) {
+      // a new pass: close held notes at the loop end; passes without input stay empty
+      for (const key of [...this.open.keys()]) this.closeNote(key, loop.endTick, 64);
+      while (this.pass < target) {
+        this.pass++;
+        this.takes.push({ pass: this.pass, events: [] });
+      }
     }
     this.lastTick = tick;
     const ch = input.channel !== undefined ? { channelOverride: input.channel } : {};
@@ -127,7 +139,10 @@ export class LiveTake {
   finish(stopSeconds: number): TakeResult {
     const stopTick = this.toTick(stopSeconds);
     const held = this.open.size;
-    for (const key of [...this.open.keys()]) this.closeNote(key, Math.max(stopTick, this.open.get(key)!.tick + 1), 64);
+    // Stopped after a loop wrap with no input since: the held notes ran to the loop end, not to a
+    // stop position that now lies before them (they would shrink to 1 tick, ADR-083).
+    const wrapped = this.opts.loop !== undefined && this.lastTick >= 0 && stopTick + this.opts.tempo.ppq / 8 < this.lastTick;
+    for (const key of [...this.open.keys()]) this.closeNote(key, wrapped ? this.opts.loop!.endTick : Math.max(stopTick, this.open.get(key)!.tick + 1), 64);
     const range = { startTick: Number.isFinite(this.minTick) ? this.minTick : stopTick, endTick: Math.max(this.maxTick, stopTick) };
     return { takes: this.takes.filter((t) => t.events.length > 0), closedAtStop: held, range };
   }
