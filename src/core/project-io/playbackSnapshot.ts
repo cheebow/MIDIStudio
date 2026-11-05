@@ -32,9 +32,12 @@ export interface PlaybackSnapshot {
 export function buildPlaybackSnapshot(source: MidiProject, opts: { tailTick?: number } = {}): PlaybackSnapshot {
   const project = withoutLooseNotes(source); // notes outside every clip do not sound (ADR-064)
   const audible = audibleTrackIds(project);
-  const tracks: MidiTrack[] = project.tracks.map((t) => (audible.has(t.id) ? t : { ...t, events: t.events.filter((e) => !isNoteLike(e)) }));
+  // A tempo meta kept as a raw event is malformed (valid ones are conductor events): it is written
+  // to files as it was, but never given to the engine (a 0 µs or odd-length tempo, ADR-087).
+  const playable = (e: MidiEvent) => !(e.kind === 'meta' && e.metaType === 0x51);
+  const tracks: MidiTrack[] = project.tracks.map((t) => ({ ...t, events: t.events.filter((e) => playable(e) && (audible.has(t.id) || !isNoteLike(e))) }));
   const loopOn = project.loop.enabled && project.loop.endTick > project.loop.startTick;
-  const conductorMeta = [...project.conductorMeta];
+  const conductorMeta = project.conductorMeta.filter(playable);
   // The engine loops when it reaches an event at/after the loop end; guarantee one exists.
   if (loopOn) conductorMeta.push({ id: '__loop_end__', kind: 'meta', tick: project.loop.endTick, metaType: 0x01, dataBase64: '', originOrder: Number.MAX_SAFE_INTEGER });
   if (opts.tailTick) conductorMeta.push({ id: '__tail__', kind: 'meta', tick: opts.tailTick, metaType: 0x01, dataBase64: '', originOrder: Number.MAX_SAFE_INTEGER });

@@ -500,7 +500,11 @@ export function Arrangement() {
       setDrag({ ...drag, tick });
     } else {
       const raw = (cx - drag.startX) / pxPerTick;
-      const newStart = Math.max(0, snap(drag.clip.startTick + raw));
+      // limited by the earliest clip of the group, as moveClips does: the preview is what the drop
+      // gives, and an Alt-copy never starts before bar 1 (ADR-087)
+      const ids = new Set(drag.ids);
+      const first = Math.min(drag.clip.startTick, ...project.clips.filter((c) => ids.has(c.id)).map((c) => c.startTick));
+      const newStart = Math.max(drag.clip.startTick - first, snap(drag.clip.startTick + raw));
       const trackOffset = Math.round((cy - drag.startY) / TRACK_H); // up / down moves (or, with Alt, copies) to another track (ADR-062)
       setDrag({ ...drag, dx: newStart - drag.clip.startTick, duplicate: drag.duplicate || p.altKey, trackOffset });
     }
@@ -718,7 +722,7 @@ export function Arrangement() {
           </span>
         </div>
         {markerH > 0 && (
-          <div className="tempo-lane-label marker-lane-label" style={{ height: markerH }} role="button" tabIndex={0} onClick={() => store.updateSettings({ activePanel: 'tempo', editorCollapsed: false })} title={t('マーカー（SMF のマーカーイベント）。クリックで「コンダクター」タブを開きます。右クリック・ダブルクリックで追加・変更できます。')}>
+          <div className="tempo-lane-label marker-lane-label" style={{ height: markerH }} role="button" tabIndex={0} onClick={() => store.updateSettings({ activePanel: 'tempo', editorCollapsed: false })} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && store.updateSettings({ activePanel: 'tempo', editorCollapsed: false })} title={t('マーカー（SMF のマーカーイベント）。クリックで「コンダクター」タブを開きます。右クリック・ダブルクリックで追加・変更できます。')}>
             {t('マーカー')}
           </div>
         )}
@@ -772,6 +776,9 @@ export function Arrangement() {
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onPointerCancel={() => setDrag(null)}
+              // capture lost while the button is still down (app switch): cancel the drag. Chrome also
+              // sends it when the button is released, before pointerup: then pointerup finishes it (ADR-087)
+              onLostPointerCapture={(e) => e.buttons !== 0 && setDrag(null)}
               onContextMenu={onContextMenu}
               onDoubleClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -797,7 +804,13 @@ export function Arrangement() {
             onSubmit={(e) => {
               e.preventDefault();
               const f = new FormData(e.currentTarget);
-              store.run(updateClip(store.project, clipEdit.id, { name: String(f.get('name') ?? '') || undefined, color: String(f.get('color')) }));
+              // A clip without its own colour follows its track: the picker shows the track colour, and
+              // only a different pick gives the clip a colour. OK without a change adds no undo step (ADR-087).
+              const name = String(f.get('name') ?? '') || undefined;
+              const picked = String(f.get('color'));
+              const shown = (clipEdit.color ?? project.tracks.find((tk) => tk.id === clipEdit.trackId)?.color ?? '#4f8ef7').slice(0, 7);
+              const color = clipEdit.color !== undefined || picked !== shown ? picked : undefined;
+              if (name !== clipEdit.name || color !== clipEdit.color) store.run(updateClip(store.project, clipEdit.id, { name, ...(color !== undefined ? { color } : {}) }));
               setClipEdit(null);
             }}
           >

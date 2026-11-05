@@ -7,6 +7,7 @@ import { reassignKey } from '../../input/KeyboardRouter';
 import { keyLabel } from '../../input/keyLabels';
 import { pitchName } from '../canvas';
 import { t } from '../../i18n';
+import { NumberInput } from '../NumberInput';
 
 type MapKey = 'pianoKeys' | 'drumPadKeys' | 'numpadKeys';
 const RESERVED = new Set(['Escape', 'Space', 'Tab', 'Enter', 'MetaLeft', 'MetaRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'ShiftLeft', 'ShiftRight', 'CapsLock']);
@@ -76,11 +77,11 @@ export function KeyBindings({ presets, onChange }: { presets: SavedInputPresets;
           </select>
         </label>
         <label>
-          Velocity <input type="number" min={1} max={127} value={presets.defaultVelocity} onChange={(e) => onChange({ ...presets, defaultVelocity: Math.max(1, Math.min(127, Number(e.target.value) || 100)) })} />
+          Velocity <NumberInput min={1} max={127} value={presets.defaultVelocity} onValue={(n) => onChange({ ...presets, defaultVelocity: n })} />
         </label>
         <label>
           {t('アクセント（Shift）')}{' '}
-          <input type="number" min={1} max={127} value={presets.accentVelocity} onChange={(e) => onChange({ ...presets, accentVelocity: Math.max(1, Math.min(127, Number(e.target.value) || 120)) })} />
+          <NumberInput min={1} max={127} value={presets.accentVelocity} onValue={(n) => onChange({ ...presets, accentVelocity: n })} />
         </label>
         <button onClick={() => onChange(defaultInputPresets())}>{t('既定に戻す')}</button>
       </div>

@@ -311,4 +311,8 @@ export const EN_APP: Record<string, string> = {
   結合: 'Merge',
   '同じトラックのクリップを 2 つ以上選択してください': 'Select two or more clips on the same track',
   クリップを結合: 'Merge clips',
+  // ADR-087: error boundary
+  '問題が起きたため、画面を表示できません。': 'Something went wrong and the screen cannot be shown.',
+  'ページを再読み込みしてください。自動保存があれば、起動時に復元できます。': 'Reload the page. If there is an autosave, you can restore it at startup.',
+  再読み込み: 'Reload',
 };

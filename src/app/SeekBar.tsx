@@ -153,6 +153,7 @@ export function SeekBar({ transport, project, sig, endTick }: { transport: Trans
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={() => setDrag(null)}
+        onLostPointerCapture={(e) => e.buttons !== 0 && setDrag(null)} // only while the button is down (ADR-087)
         onKeyDown={onKeyDown}
       />
     </div>

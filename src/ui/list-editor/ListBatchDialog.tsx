@@ -8,6 +8,7 @@ import { useEditorState, useServices } from '../../app/store/context';
 import { batchEditRows, batchSummary, type ListBatchOp } from '../../core/list/listTransform';
 import { parseTicksInput } from '../../core/list/listEdit';
 import { parseNoteName } from '../../core/list/noteNames';
+import { NumberInput } from '../NumberInput';
 
 type Kind = ListBatchOp['kind'];
 
@@ -87,7 +88,7 @@ export function ListBatchDialog({ ids, onClose }: { ids: string[]; onClose: () =
           <legend>{t('変更')}</legend>
           {option('shift', t('位置をずらす'), <input value={shift} onChange={(e) => setShift(e.target.value)} aria-label={t('移動量')} placeholder={`±${unitLabel}`} className="pct" data-testid="batch-shift" />, s.total)}
           {option('gate-set', t('GT を一定にする'), <input value={gate} onChange={(e) => setGate(e.target.value)} aria-label={t('GT')} placeholder={unitLabel} className="pct" />, s.notes)}
-          {option('gate-percent', t('GT を比率で'), <><input type="number" min={1} max={400} value={percent} onChange={(e) => setPercent(Math.max(1, Math.min(400, Number(e.target.value) || 1)))} aria-label={t('GT の比率（%）')} className="pct" data-testid="batch-gate-percent" /> %</>, s.notes)}
+          {option('gate-percent', t('GT を比率で'), <><NumberInput min={1} max={400} value={percent} onValue={setPercent} aria-label={t('GT の比率（%）')} className="pct" data-testid="batch-gate-percent" /> %</>, s.notes)}
           {option(
             'channel',
             t('チャンネル'),
@@ -101,8 +102,8 @@ export function ListBatchDialog({ ids, onClose }: { ids: string[]; onClose: () =
             </select>,
             s.channel,
           )}
-          {option('value-set', t('値を一定にする'), <input type="number" min={-8192} max={8191} value={value} onChange={(e) => setValue(Number(e.target.value) || 0)} aria-label={t('値')} className="pct" data-testid="batch-value" />, s.valued)}
-          {option('value-add', t('値を加算'), <input type="number" min={-8192} max={8191} value={delta} onChange={(e) => setDelta(Number(e.target.value) || 0)} aria-label={t('加算する量')} className="pct" />, s.valued)}
+          {option('value-set', t('値を一定にする'), <NumberInput min={-8192} max={8191} value={value} onValue={setValue} aria-label={t('値')} className="pct" data-testid="batch-value" />, s.valued)}
+          {option('value-add', t('値を加算'), <NumberInput min={-8192} max={8191} value={delta} onValue={setDelta} aria-label={t('加算する量')} className="pct" />, s.valued)}
           {option('key-set', t('ノート番号を一定にする'), <input value={key} onChange={(e) => setKey(e.target.value)} aria-label={t('ノート番号または音名')} className="pct" />, s.keyed)}
         </fieldset>
         <div className="row">

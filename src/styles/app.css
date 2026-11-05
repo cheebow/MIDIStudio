@@ -65,6 +65,8 @@ a { color: var(--accent); }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 .shell { display: flex; flex-direction: column; height: 100vh; min-height: 560px; }
+.fatal-error { max-width: 640px; margin: 64px auto; padding: 0 16px; }
+.fatal-error pre { white-space: pre-wrap; background: var(--panel); padding: 8px; border-radius: 4px; }
 .shell > .menubar, .shell > .toolbar, .shell > .banner, .shell > .statusbar { flex: none; }
 .menubar { display: flex; gap: 2px; padding: 2px 8px; background: var(--panel); border-bottom: 1px solid var(--border); }
 .menu { position: relative; }

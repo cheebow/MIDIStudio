@@ -3,7 +3,7 @@
 import { newId } from '../model/ids';
 import type { ConductorEvent, MidiProject } from '../model/types';
 import { sortEvents } from '../events/order';
-import { MAX_BPM, MIN_BPM, usFromBpm } from '../timing/tempoMap';
+import { bpmFromUs, MAX_BPM, MIN_BPM, usFromBpm } from '../timing/tempoMap';
 import { TimeSignatureMap } from '../timing/timeSignatureMap';
 import type { Command } from './history';
 import { EditError } from './operations';
@@ -16,7 +16,8 @@ function withConductor(conductor: ConductorEvent[], label: string): Command {
 export function setTempo(project: MidiProject, tick: number, bpm: number): Command {
   if (!(bpm >= MIN_BPM && bpm <= MAX_BPM)) throw new EditError(t('テンポは 4〜999 BPM で入力してください。'));
   const us = usFromBpm(bpm);
-  const existing = project.conductor.find((c) => c.kind === 'tempo' && c.tick === tick);
+  // the one that takes effect: when an imported file has two at one tick, the last one wins (ADR-087)
+  const existing = sortEvents(project.conductor).findLast((c) => c.kind === 'tempo' && c.tick === tick);
   const conductor = existing
     ? project.conductor.map((c) => (c === existing ? { ...c, usPerQuarter: us } : c))
     : [...project.conductor, { id: newId('evt'), kind: 'tempo' as const, tick, usPerQuarter: us, originOrder: project.nextOriginOrder }];
@@ -26,7 +27,7 @@ export function setTempo(project: MidiProject, tick: number, bpm: number): Comma
 export function setTimeSignature(project: MidiProject, tick: number, numerator: number, denominator: number): Command {
   if (!Number.isInteger(numerator) || numerator < 1 || numerator > 32) throw new EditError(t('拍子の分子は 1〜32 です。'));
   if (![1, 2, 4, 8, 16, 32].includes(denominator)) throw new EditError(t('拍子の分母は 1, 2, 4, 8, 16, 32 のいずれかです。'));
-  const existing = project.conductor.find((c) => c.kind === 'time-signature' && c.tick === tick);
+  const existing = sortEvents(project.conductor).findLast((c) => c.kind === 'time-signature' && c.tick === tick);
   const conductor = existing
     ? project.conductor.map((c) => (c === existing ? { ...c, numerator, denominator } : c))
     : [...project.conductor, { id: newId('evt'), kind: 'time-signature' as const, tick, numerator, denominator, originOrder: project.nextOriginOrder }];
@@ -79,9 +80,13 @@ export function upsertConductorEvent(project: MidiProject, tick: number, value: 
   const base = { id: old?.id ?? newId('evt'), tick: at, originOrder: old?.originOrder ?? project.nextOriginOrder };
   let ev: ConductorEvent;
   switch (value.kind) {
-    case 'tempo':
-      ev = { ...base, kind: 'tempo', usPerQuarter: usFromBpm(value.bpm) };
+    case 'tempo': {
+      // the BPM shown (2 decimals) of an unchanged tempo keeps its exact µs: moving it, or OK without
+      // a change, must not rewrite the value (integer µs is the source of truth, ADR-087)
+      const same = old?.kind === 'tempo' && Math.round(bpmFromUs(old.usPerQuarter) * 100) / 100 === value.bpm;
+      ev = { ...base, kind: 'tempo', usPerQuarter: same ? old.usPerQuarter : usFromBpm(value.bpm) };
       break;
+    }
     case 'time-signature': {
       const prev = old?.kind === 'time-signature' ? old : undefined;
       ev = { ...base, kind: 'time-signature', numerator: value.numerator, denominator: value.denominator, ...(prev?.clocksPerClick !== undefined ? { clocksPerClick: prev.clocksPerClick, thirtySecondsPerQuarter: prev.thirtySecondsPerQuarter } : {}) };
@@ -91,7 +96,8 @@ export function upsertConductorEvent(project: MidiProject, tick: number, value: 
       ev = { ...base, kind: 'key-signature', sharpsFlats: value.sharpsFlats, minor: value.minor };
       break;
     case 'marker':
-      ev = { ...base, kind: 'marker', text: value.text };
+      // unchanged text keeps its original bytes (e.g. Shift_JIS), as track names do (ADR-087)
+      ev = { ...base, kind: 'marker', text: value.text, ...(old?.kind === 'marker' && old.text === value.text && old.rawBase64 !== undefined ? { rawBase64: old.rawBase64 } : {}) };
       break;
   }
   const label = `${KIND_LABEL[value.kind]}を${old ? '変更' : '追加'}`;

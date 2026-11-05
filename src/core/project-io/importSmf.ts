@@ -98,7 +98,11 @@ function metaEvent(e: Extract<SmfEvent, { kind: 'meta' }>, order: number): Track
 /** Builds track events from channel messages, pairing Note On/Off per channel+pitch (FIFO). */
 class TrackBuilder {
   readonly events: MidiEvent[] = [];
-  private open = new Map<number, { tick: number; velocity: number; order: number; bytes: number[] }[]>();
+  /**
+   * Open Note Ons per channel+pitch, a FIFO read from `head`: Array.shift() is O(n), and a crafted
+   * file of many stacked Note Ons would make the import quadratic (minutes for a 2 MB file, ADR-087).
+   */
+  private open = new Map<number, { items: { tick: number; velocity: number; order: number; bytes: number[] }[]; head: number }>();
   overlaps = 0;
   zeroLength = 0;
   unpairedOff = 0;
@@ -126,9 +130,9 @@ class TrackBuilder {
       case 0x90:
         if (b > 0) {
           const key = ch * 128 + a;
-          const q = this.open.get(key) ?? [];
-          if (q.length > 0) this.overlaps++;
-          q.push({ tick, velocity: b, order, bytes: [e.status, a, b] });
+          const q = this.open.get(key) ?? { items: [], head: 0 };
+          if (q.items.length > q.head) this.overlaps++;
+          q.items.push({ tick, velocity: b, order, bytes: [e.status, a, b] });
           this.open.set(key, q);
         } else {
           this.noteOff(tick, order, e.status, a, b); // velocity 0 = Note Off
@@ -157,7 +161,12 @@ class TrackBuilder {
 
   private noteOff(tick: number, order: number, status: number, pitch: number, velocity: number) {
     const ch = status & 0x0f;
-    const on = this.open.get(ch * 128 + pitch)?.shift();
+    const q = this.open.get(ch * 128 + pitch);
+    const on = q && q.head < q.items.length ? q.items[q.head++] : undefined;
+    if (q && q.head === q.items.length) {
+      q.items.length = 0;
+      q.head = 0;
+    }
     if (!on) {
       this.unpairedOff++;
       this.raw(tick, order, [status, pitch, velocity], 'unpaired-note-off');
@@ -188,7 +197,7 @@ class TrackBuilder {
   finish(trackLabel: string, trackIndex: number): MidiEvent[] {
     let unterminated = 0;
     for (const q of this.open.values()) {
-      for (const on of q) {
+      for (const on of q.items.slice(q.head)) {
         unterminated++;
         this.raw(on.tick, on.order, on.bytes, 'unpaired-note-on');
       }
@@ -253,17 +262,25 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
   let conductorEnd: number | undefined;
   const movedConductor = new Set<number>();
 
+  // malformed conductor metas already reported (Format 0 looks at them twice: System list, then System track)
+  const badConductor = new WeakSet<SmfEvent>();
   const takeConductor = (e: Extract<SmfEvent, { kind: 'meta' }>, order: number, trackIndex: number): boolean => {
-    if (!CONDUCTOR_META.has(e.metaType)) return false;
+    if (!CONDUCTOR_META.has(e.metaType) || badConductor.has(e)) return false;
     const c = toConductor(e, order, ctx, trackIndex);
-    if (!c) return false;
+    if (!c) {
+      badConductor.add(e);
+      return false;
+    }
     conductor.push(c);
     return true;
   };
 
   // Format 1, track 0 without channel / SysEx events is the conductor track.
   let firstMusicTrack = 0;
-  if (smf.format === 1 && smf.tracks.length > 0 && !hasPlayableEvents(smf.tracks[0].events)) {
+  // A Format 0 file with several MTrk chunks (malformed) is read like Format 1, so no track is lost
+  // (the reader warns W_SMF_FORMAT0_TRACKS, ADR-087).
+  const multiTrack = smf.format === 1 || smf.tracks.length > 1;
+  if (multiTrack && smf.tracks.length > 0 && !hasPlayableEvents(smf.tracks[0].events)) {
     firstMusicTrack = 1;
     const t0 = smf.tracks[0];
     conductorEnd = t0.endOfTrackTick;
@@ -342,7 +359,7 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
     };
   };
 
-  if (smf.format === 1) {
+  if (multiTrack) {
     for (let i = firstMusicTrack; i < smf.tracks.length; i++) {
       const t = smf.tracks[i];
       tracks.push(convertTrack(t.events, i, t.endOfTrackTick, mostCommonChannel(t.events), `Track ${tracks.length + 1}`));
@@ -369,6 +386,7 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
     let nameFromTrack: { name: string; source?: SourceText } | null = null;
     // Conductor metas and the first track name are taken from the system list.
     const systemRest: SmfEvent[] = [];
+    const midPorts: SmfEvent[] = [];
     let port: number | null = null;
     for (const e of system) {
       const order = orders.get(e)!;
@@ -381,7 +399,25 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
         port = e.data[0];
         continue;
       }
+      if (e.kind === 'meta' && e.metaType === 0x21) {
+        // A port change during the song applies to the channel events after it: each channel track
+        // gets it at the same tick, so the export sends them to the same port (ADR-087). In the
+        // System track it would become that track's own port prefix and the change would be lost.
+        midPorts.push(e);
+        continue;
+      }
       systemRest.push(e);
+    }
+    if (byChannel.size === 0) systemRest.push(...midPorts); // no channel track to carry them: kept as events, never dropped
+    else systemRest.sort((a, b) => orders.get(a)! - orders.get(b)!);
+    for (const [ch, list] of byChannel) {
+      if (midPorts.length === 0) break;
+      const copies = midPorts.map((e) => {
+        const c = { ...e };
+        orders.set(c, orders.get(e)!);
+        return c;
+      });
+      byChannel.set(ch, [...list, ...copies].sort((a, b) => orders.get(a)! - orders.get(b)!));
     }
     if (nameFromTrack && !options.title) {
       title = nameFromTrack.name;

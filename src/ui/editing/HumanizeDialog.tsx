@@ -7,6 +7,7 @@ import { useServices } from '../../app/store/context';
 import { t } from '../../i18n';
 import { Dialog } from '../Dialog';
 import { useNoteTarget } from './noteTarget';
+import { NumberInput } from '../NumberInput';
 
 export function HumanizeDialog({ onClose }: { onClose: () => void }) {
   const { store, reportError } = useServices();
@@ -29,7 +30,7 @@ export function HumanizeDialog({ onClose }: { onClose: () => void }) {
       {unit}
       <span className="row">
         <input type="range" aria-label={label} min={0} max={max} step={step} value={s[key]} onChange={(e) => set({ [key]: Number(e.target.value) })} />
-        <input type="number" aria-label={`${label}（${unit}）`} min={0} max={max} value={s[key]} onChange={(e) => set({ [key]: Math.max(0, Math.min(max, Number(e.target.value) || 0)) })} className="pct" />
+        <NumberInput aria-label={`${label}（${unit}）`} min={0} max={max} value={s[key]} onValue={(n) => set({ [key]: n })} className="pct" />
       </span>
     </label>
   );

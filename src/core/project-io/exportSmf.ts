@@ -96,7 +96,8 @@ function trackToSmf(track: MidiTrack, warnings: ExportWarning[]): SmfTrack {
         push(e.tick, 0, e.originOrder, { kind: 'channel', tick: e.tick, status: 0x90 | c, data: [e.pitch, e.velocity] });
         const off = e.tick + e.durationTicks;
         const offEv: SmfEvent =
-          e.sourceEncoding === 'note-on-zero'
+          // Note On velocity 0 carries no release velocity: one set after import is written as a Note Off (ADR-087)
+          e.sourceEncoding === 'note-on-zero' && e.releaseVelocity === 0
             ? { kind: 'channel', tick: off, status: 0x90 | c, data: [e.pitch, 0] }
             : { kind: 'channel', tick: off, status: 0x80 | c, data: [e.pitch, e.releaseVelocity] };
         if (e.releaseOrder !== undefined) {

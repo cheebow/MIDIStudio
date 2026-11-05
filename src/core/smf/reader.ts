@@ -167,9 +167,8 @@ export function readSmf(input: Uint8Array): SmfReadResult {
             sawEot = true;
             eotTick = tick;
           } else {
-            if (metaType === 0x51 && (len !== 3 || ((data[0] << 16) | (data[1] << 8) | data[2]) === 0)) {
-              throw new ReadError('E_SMF_TEMPO', t('テンポイベントが不正です（長さが3でない、または 0 μs/4分音符）。'), at, trackIndex);
-            }
+            // a malformed tempo (length not 3, or 0 µs) is passed on: the importer keeps it as a raw
+            // meta with a warning instead of refusing the whole file (ADR-087)
             events.push({ kind: 'meta', tick, metaType, data });
           }
           continue;

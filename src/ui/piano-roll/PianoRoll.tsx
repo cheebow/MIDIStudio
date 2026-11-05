@@ -478,7 +478,8 @@ export function PianoRoll() {
       const lo = moving.length ? Math.min(...moving.map((n) => n.pitch)) : drag.anchor.pitch;
       const hi = moving.length ? Math.max(...moving.map((n) => n.pitch)) : drag.anchor.pitch;
       const first = moving.length ? Math.min(...moving.map((n) => n.tick)) : drag.anchor.tick;
-      const dTick = Math.max(-first, (p.ctrlKey || p.metaKey ? Math.round(rawStart) : snap(rawStart + gridLen / 2)) - drag.anchor.tick);
+      // snap off: the raw position (the half-grid offset only centres a floor-snap, ADR-087)
+      const dTick = Math.max(-first, (p.ctrlKey || p.metaKey || !settings.snapEnabled ? Math.round(rawStart) : snap(rawStart + gridLen / 2)) - drag.anchor.tick);
       const dPitch = Math.max(-lo, Math.min(127 - hi, pitchAt(cy) - drag.anchor.pitch));
       if (dPitch !== drag.dPitch) audition(drag.anchor.pitch + dPitch);
       setDrag({ ...drag, dTick, dPitch, duplicate: drag.duplicate || p.altKey });
@@ -587,6 +588,14 @@ export function PianoRoll() {
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
                 onPointerCancel={() => {
+                  setDrag(null);
+                  audition(null);
+                }}
+                onLostPointerCapture={(e) => {
+                  // Capture lost while the button is still down (app switch): cancel the drag. Chrome
+                  // also sends it when the button is released, before pointerup: a released button is
+                  // left to pointerup, or a box selection would be dropped (ADR-087).
+                  if (!dragRef.current || e.buttons === 0) return;
                   setDrag(null);
                   audition(null);
                 }}

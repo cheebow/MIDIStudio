@@ -1,5 +1,6 @@
 import type { RecordingSettings } from '../../core/model/types';
 import { t } from '../../i18n';
+import { NumberInput } from '../NumberInput';
 
 export function RecordSettingsForm({ value, onChange }: { value: RecordingSettings; onChange: (v: RecordingSettings) => void }) {
   const set = (p: Partial<RecordingSettings>) => onChange({ ...value, ...p });
@@ -44,7 +45,7 @@ export function RecordSettingsForm({ value, onChange }: { value: RecordingSettin
       </label>
       <label>
         {t('レイテンシ補正（ms）')}
-        <input type="number" min={-500} max={500} value={value.latencyMs} onChange={(e) => set({ latencyMs: Math.max(-500, Math.min(500, Number(e.target.value) || 0)) })} />
+        <NumberInput min={-500} max={500} value={value.latencyMs} onValue={(n) => set({ latencyMs: n })} />
         <span className="note">{t('入力が遅れて記録される場合に、その分を前へずらします。環境により異なるため実測して設定してください。')}</span>
       </label>
     </div>

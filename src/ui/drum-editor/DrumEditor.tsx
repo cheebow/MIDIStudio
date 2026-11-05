@@ -375,7 +375,11 @@ export function DrumEditor() {
     }
     if (drag.kind === 'move') {
       const raw = drag.anchor.tick + (cx - drag.startX) / pxPerTick;
-      const dTick = (settings.snapEnabled ? snapTick(raw + gridLen / 2, grid, 'floor').tick : Math.round(raw)) - drag.anchor.tick;
+      // limited for the whole selection as in the piano roll (ADR-084): the preview is what the drop
+      // gives, a pattern dragged against tick 0 keeps its shape, and an Alt-copy never gets a negative tick (ADR-087)
+      const moving = notes.filter((n) => selection.eventIds.has(n.id));
+      const first = moving.length ? Math.min(...moving.map((n) => n.tick)) : drag.anchor.tick;
+      const dTick = Math.max(-first, (settings.snapEnabled ? snapTick(raw + gridLen / 2, grid, 'floor').tick : Math.round(raw)) - drag.anchor.tick);
       setDrag({ ...drag, dTick, dLane: Math.round((cy - drag.startY) / LANE_H), duplicate: drag.duplicate || p.altKey });
     } else setDrag({ ...drag, x1: cx, y1: cy });
   }
@@ -475,9 +479,18 @@ export function DrumEditor() {
                           aria-label={t('レーン名')}
                           onBlur={(e) => {
                             setRenaming(null);
+                            if (e.target.dataset.cancel) return; // Esc: keep the old name (as the track rename does, ADR-087)
                             if (e.target.value && e.target.value !== l.name) editMap('レーン名を変更', (m) => renameLane(m, l.pitch, e.target.value));
                           }}
-                          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') e.currentTarget.blur();
+                            else if (e.key === 'Escape') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              e.currentTarget.dataset.cancel = '1';
+                              e.currentTarget.blur();
+                            }
+                          }}
                         />
                       ) : (
                         <button
@@ -513,6 +526,7 @@ export function DrumEditor() {
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
                 onPointerCancel={() => setDrag(null)}
+                onLostPointerCapture={(e) => e.buttons !== 0 && setDrag(null)} // only while the button is down (ADR-087)
                 onKeyDown={(e) => {
                   // in step input Backspace undoes the last step (global shortcut), not "delete selection" (ADR-083)
                   if (e.key === 'Backspace' && (input.mode === 'step-piano' || input.mode === 'step-drums')) return;

@@ -36,11 +36,39 @@ function staticPages(): Plugin {
   };
 }
 
+/**
+ * Content-Security-Policy for the built app (ADR-087). GitHub Pages cannot send headers, so it is a
+ * <meta> tag. Everything comes from the site itself: no external host can be reached even if a
+ * crafted file got a URL into the page. 'wasm-unsafe-eval': SpessaSynth's SF3 (Vorbis) decoder is
+ * WebAssembly. Build only: the dev server needs inline scripts and a WebSocket for hot reload.
+ */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "media-src 'self' blob:",
+  "worker-src 'self' blob:",
+  "connect-src 'self'",
+  "font-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+].join('; ');
+
+function contentSecurityPolicy(): Plugin {
+  return {
+    name: 'content-security-policy',
+    apply: 'build',
+    transformIndexHtml: () => [{ tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', content: CSP }, injectTo: 'head-prepend' }],
+  };
+}
+
 // For GitHub Pages sub-path deployment set BASE_PATH, e.g. BASE_PATH=/MIDIStudio/ npm run build
 export default defineConfig({
   base: process.env.BASE_PATH ?? '/',
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
-  plugins: [react(), staticPages()],
+  plugins: [react(), staticPages(), contentSecurityPolicy()],
   worker: { format: 'es' },
   build: {
     // spessasynth_lib (~620 kB) is a separate chunk loaded on first audio start.
