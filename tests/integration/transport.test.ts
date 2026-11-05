@@ -122,12 +122,18 @@ describe('Transport', () => {
     expect(engine.loads).toHaveLength(1);
     expect(t.getState()).toMatchObject({ status: 'playing', pendingEdits: true });
     expect(engine.playing).toBe(true);
+    // ADR-083: the metronome follows the song the engine plays, not the edited tempo
+    const oldUs = p.conductor.find((c) => c.kind === 'tempo' && c.tick === 1920);
+    expect(oldUs && oldUs.kind === 'tempo' && oldUs.usPerQuarter).not.toBe(500000);
+    expect(t.playingMaps?.tempo.usPerQuarterAt(2400)).toBe(oldUs && oldUs.kind === 'tempo' ? oldUs.usPerQuarter : -1);
+    expect(t.tempoMap?.usPerQuarterAt(2400)).toBe(500000);
     engine.advance(0.5);
     expect(t.getPosition().tick).toBeGreaterThan(before);
     const at = t.getPosition().tick;
     t.pause();
     expect(t.getState().pendingEdits).toBe(false);
     await t.play();
+    expect(t.playingMaps?.tempo.usPerQuarterAt(2400)).toBe(500000);
     expect(engine.loads).toHaveLength(2); // the edited song, from the paused musical position with the new tempo map
     expect(t.getPosition().tick).toBeCloseTo(at, 6);
     expect(engine.seconds).toBeCloseTo(2 + ((at - 1920) / 480) * 0.5, 6);
@@ -461,6 +467,23 @@ describe('pause / seek while a reload is in progress (P11)', () => {
     engine.advance(1.0); // tick 960
     return { engine, t, p };
   }
+
+  it('ADR-083: pressing play / pause again while the first load is in flight cancels the start (one load, not playing)', async () => {
+    const engine = new SlowEngine();
+    const t = new Transport(engine, 0);
+    await t.setProject(song());
+    const first = t.togglePlay();
+    await tick();
+    const second = t.togglePlay(); // Space again while loading
+    engine.release!();
+    await Promise.all([first, second]);
+    for (let i = 0; i < 5; i++) await tick();
+    expect(engine.loads).toHaveLength(1);
+    expect(t.getState().status).not.toBe('playing');
+    expect(engine.playing).toBe(false);
+    await t.togglePlay().then(undefined, () => undefined); // a third press plays (already loaded)
+    expect(t.getState().status).toBe('playing');
+  });
 
   it('an edit committed during the first load (transport not yet playing) is loaded too', async () => {
     const engine = new SlowEngine();

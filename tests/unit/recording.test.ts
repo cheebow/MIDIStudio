@@ -97,6 +97,14 @@ describe('live recording', () => {
     expect(notes(applyCommand(p, merged.command).project).map((n) => n[1])).toEqual([60, 67, 64]);
   });
 
+  it('ADR-083: a note held across the loop end and stopped before any other input runs to the loop end', () => {
+    const tempo = new TempoMap(480, []);
+    const take = new LiveTake({ tempo, loop: { startTick: 0, endTick: 1920 } });
+    take.add({ type: 'note-on', pitch: 64, velocity: 100, songSeconds: 1.5625 }); // tick 1500
+    const r = take.finish(0.3125); // stopped at tick 300 of the next pass
+    expect(r.takes[0].events[0]).toMatchObject({ pitch: 64, tick: 1500, durationTicks: 420 });
+  });
+
   it('I11: overdub keeps existing notes, replace removes notes in the recorded range; one undo step', () => {
     let p = createEmptyProject();
     p = applyCommand(p, addEvents(p, p.tracks[0].id, [

@@ -113,3 +113,21 @@ test('the piano roll keyboard lights the keys being played (PC keyboard mode)', 
   await page.keyboard.up('KeyZ');
   await expect.poll(async () => (await keyColour()).g).toBe(idle.g);
 });
+
+test('ADR-083: a focused checkbox (LOOP) does not switch off shortcuts or the PC keyboard; Space does not toggle it', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  const loop = page.getByRole('checkbox', { name: 'LOOP' });
+  const metronome = page.getByRole('checkbox', { name: 'メトロノーム' });
+  await loop.click();
+  await expect(loop).toBeChecked();
+  await loop.focus(); // Chromium / Firefox focus on click; Safari does not
+  await expect(loop).toBeFocused();
+  await page.keyboard.press('k'); // single-key shortcut still works
+  await expect(metronome).toBeChecked();
+  await page.keyboard.press('Space'); // play / pause, not a click on the checkbox
+  await expect(loop).toBeChecked();
+  await page.keyboard.press('Space');
+  await page.keyboard.press('Alt+k');
+  await expect(page.getByTestId('input-mode')).toContainText('PC 鍵盤');
+});

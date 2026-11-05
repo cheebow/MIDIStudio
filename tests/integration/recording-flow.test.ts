@@ -63,6 +63,39 @@ describe('recording through the real input path (fake engine)', () => {
     expect(Math.abs(n[2] - 240)).toBeLessThanOrEqual(2);
   });
 
+  it('ADR-083: a MIDI key held across an input-mode switch is released where it was played', async () => {
+    const { store, engine, transport, input } = setup();
+    await transport.setProject(store.project);
+    const rec = new Recorder(store, transport, input, () => {}, () => null);
+    input.setMode('piano-performance');
+    await rec.start();
+    input.midiMessage({ type: 'note-on', channel: 0, pitch: 60, velocity: 90 }, 'kb', performance.now());
+    engine.advance(0.5);
+    input.setMode('drum-performance'); // ⌥R while the key is down
+    input.midiMessage({ type: 'note-off', channel: 0, pitch: 60, releaseVelocity: 0 }, 'kb', performance.now());
+    expect(transport.activePreviewCount).toBe(0);
+    rec.stop();
+    const [n] = notesOf(store, 0);
+    expect(n[1]).toBe(60);
+    expect(Math.abs(n[2] - 480)).toBeLessThanOrEqual(2);
+  });
+
+  it('ADR-083: the Tab sustain is lifted when leaving the PC-keyboard mode or losing focus', async () => {
+    const { store, engine, transport, input } = setup();
+    await transport.setProject(store.project);
+    const cc64 = () => engine.sent.filter((s) => (s.message[0] & 0xf0) === 0xb0 && s.message[1] === 64).map((s) => s.message[2]);
+    input.setMode('piano-performance');
+    input.setSustain(true);
+    input.setMode('edit-shortcuts'); // Esc while Tab is held
+    expect(input.sustain).toBe(false);
+    expect(cc64()).toEqual([127, 0]);
+    input.setMode('piano-performance');
+    input.setSustain(true);
+    input.releaseAll(); // window blur
+    expect(input.sustain).toBe(false);
+    expect(cc64()).toEqual([127, 0, 127, 0]);
+  });
+
   it('refuses ambiguous or missing record targets', () => {
     const { store } = setup();
     const none = { ...store.project, tracks: store.project.tracks.map((t) => ({ ...t, recordArm: false })) };

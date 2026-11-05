@@ -26,4 +26,20 @@ describe('WAV rendering (ADR-052)', () => {
     for (let i = 44; i < bytes.length; i += 2) peak = Math.max(peak, Math.abs(view.getInt16(i, true)));
     expect(peak).toBeGreaterThan(1000);
   });
+
+  it.skipIf(!existsSync(SF2))('ADR-083: keeps the silence before the first note (like live playback)', () => {
+    const soundFont = readFileSync(SF2);
+    const smf = build(1, 480, [program(0, 0, 0), on(1920, 0, 60), off(480, 0, 60)]); // first note at 2.0 s
+    const wav = renderSongToWav({ smf, soundFont: soundFont.buffer.slice(soundFont.byteOffset, soundFont.byteOffset + soundFont.byteLength), sampleRate: 22050, tailSeconds: 0.5 })!;
+    const view = new DataView(wav);
+    let first = -1;
+    for (let i = 44; i < wav.byteLength; i += 2) {
+      if (Math.abs(view.getInt16(i, true)) > 200) {
+        first = (i - 44) / 4 / 22050;
+        break;
+      }
+    }
+    expect(first).toBeGreaterThan(1.95);
+    expect(first).toBeLessThan(2.1);
+  });
 });

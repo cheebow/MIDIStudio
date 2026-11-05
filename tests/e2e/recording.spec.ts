@@ -34,6 +34,18 @@ test('I08 / I03: step input with letter keys only (no numpad): chord, rest, drum
   expect(drums.map((e) => (e.kind === 'channel' ? [e.tick, e.data[0]] : []))).toEqual([[480, 36], [480, 42], [720, 38]]);
 });
 
+test('ADR-083: Backspace in step input undoes the last step even while the piano roll or the drum grid has focus', async ({ page }) => {
+  await page.goto('/');
+  await setInputMode(page, 'step-piano');
+  await page.getByTestId('piano-roll-grid').focus();
+  await page.keyboard.press('KeyZ');
+  await page.keyboard.press('KeyX');
+  await expect(page.getByTestId('step-cursor')).toContainText('001.02.000');
+  await page.keyboard.press('Backspace'); // the last note goes and the cursor steps back
+  await expect(page.getByTestId('step-cursor')).toContainText('001.01.240');
+  expect(noteOns(await exportedSmf(page))).toEqual([[0, 60]]);
+});
+
 test('ADR-076: step length keys — ⇧← / ⇧→ halve / double, . dotted (⌥. in the drum mode), ⌥T triplet', async ({ page }) => {
   await page.goto('/');
   await setInputMode(page, 'step-piano');

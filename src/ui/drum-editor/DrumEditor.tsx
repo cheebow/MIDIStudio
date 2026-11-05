@@ -393,7 +393,8 @@ export function DrumEditor() {
         const key = `dup-${++dragCounter}`;
         store.run(r.command, { select: r.ids, mergeKey: key });
         if (d.dLane !== 0) {
-          const copies = r.ids.map((id, i) => ({ id, changes: { pitch: pitchAfter(notes.find((n) => n.id === ids[i])!) } }));
+          // copies come back in time order, not selection order: map each to its own original (ADR-083)
+          const copies = r.ids.map((id, i) => ({ id, changes: { pitch: pitchAfter(notes.find((n) => n.id === r.sourceIds[i])!) } }));
           store.run(updateEvents(store.project, copies, '複製'), { mergeKey: key });
         }
         return;
@@ -502,6 +503,8 @@ export function DrumEditor() {
                 onPointerUp={onPointerUp}
                 onPointerCancel={() => setDrag(null)}
                 onKeyDown={(e) => {
+                  // in step input Backspace undoes the last step (global shortcut), not "delete selection" (ADR-083)
+                  if (e.key === 'Backspace' && (input.mode === 'step-piano' || input.mode === 'step-drums')) return;
                   if (e.key === 'Delete' || e.key === 'Backspace') {
                     e.preventDefault();
                     e.stopPropagation();

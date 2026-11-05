@@ -75,6 +75,8 @@ export class InputController {
 
   setMode(mode: InputMode): void {
     this.router.setMode(mode);
+    // The Tab pedal belongs to the PC-keyboard mode: leaving it lifts the pedal (ADR-083)
+    if (this.sustainOn && mode !== 'piano-performance') this.setSustain(false);
     this.update({ mode, pianoHeld: new Set(), drumHeld: new Set() });
   }
 
@@ -96,6 +98,7 @@ export class InputController {
 
   releaseAll(): void {
     this.router.releaseAll();
+    if (this.sustainOn) this.setSustain(false); // focus loss: the Tab keyup never arrives
     for (const key of [...this.routed.keys()]) if (key.startsWith('screen-pad:')) this.padUp(Number(key.split(':')[2]));
   }
 
@@ -149,9 +152,14 @@ export class InputController {
       case 'note-on':
         this.dispatch({ type: 'note-on', pitch: m.pitch, velocity: m.velocity, ...base });
         break;
-      case 'note-off':
-        this.dispatch({ type: 'note-off', pitch: m.pitch, releaseVelocity: m.releaseVelocity, ...base });
+      case 'note-off': {
+        // A key pressed before an input-mode switch (⌥R / ⌥K) is released to where it was played,
+        // or its preview would never stop and the recorder would lose its end (ADR-083).
+        const other = target === 'piano' ? 'drum' : 'piano';
+        const playedTo = !this.routed.has(`${sourceId}:${target}:${m.pitch}`) && this.routed.has(`${sourceId}:${other}:${m.pitch}`) ? other : target;
+        this.dispatch({ type: 'note-off', pitch: m.pitch, releaseVelocity: m.releaseVelocity, ...base, target: playedTo });
         break;
+      }
       case 'cc':
         this.dispatch({ type: 'cc', controller: m.controller, value: m.value, ...base });
         break;

@@ -24,6 +24,9 @@ export function renderSongToWav(opts: RenderOptions): ArrayBuffer | null {
   const synth = new SpessaSynthProcessor(opts.sampleRate, { eventsEnabled: false, effectsEnabled: true, initialTime: 0 });
   synth.soundBankManager.addSoundBank(SoundBankLoader.fromArrayBuffer(opts.soundFont), 'main');
   const seq = new SpessaSynthSequencer(synth);
+  // Core defaults to jumping to the first Note On; live playback turns that off (SpessaAdapter) and
+  // so must the render, or a leading rest / pickup is cut and parts rendered alone drift (ADR-083).
+  seq.skipToFirstNoteOn = false;
   const midi = BasicMIDI.fromArrayBuffer(opts.smf.slice().buffer as ArrayBuffer, 'song.mid');
   seq.loadNewSongList([midi]);
   seq.loopCount = 0;
