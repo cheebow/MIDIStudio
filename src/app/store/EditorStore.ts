@@ -68,27 +68,47 @@ export class EditorStore {
     if (!cmd) return;
     const r = execute(this.state.project, this.state.history, cmd, { mergeKey: opts.mergeKey });
     if (r.project === this.state.project) return;
+    this.forgetFlagEdits(this.state.project, r.project);
     let selection = pruneSelection(this.state.selection, r.project);
     if (opts.select) selection = { ...selection, eventIds: new Set(opts.select) };
     this.set({ project: r.project, history: r.history, selection, dirty: true, lastAction: cmd.label, revision: this.state.revision + 1 });
   }
 
   /**
-   * Mute / solo / arm are not undo steps (setTrackFlags), but an undo / redo patch restores whole
-   * track objects captured before the flag change. Keep the current flags of the tracks that still
-   * exist so Undo never silently unmutes a track (ADR-082).
+   * Mute / solo set with setTrackFlags since the edit that last changed them. They are not undo
+   * steps, but an undo / redo patch restores whole track objects captured before the flag change.
+   */
+  private flagEdits = new Map<string, Partial<Pick<MidiProject['tracks'][number], 'mute' | 'solo'>>>();
+
+  /**
+   * Keeps the flags the user set (setTrackFlags) on the tracks an undo / redo restores, so Undo never
+   * silently unmutes a track (ADR-082). Flags that an edit itself set (a track merge) are left to
+   * the patch, so undoing that edit restores them (ADR-086).
    */
   private keepTrackFlags(project: MidiProject): MidiProject {
-    if (project.tracks === this.state.project.tracks) return project;
-    const now = new Map(this.state.project.tracks.map((t) => [t.id, t]));
+    if (project.tracks === this.state.project.tracks || this.flagEdits.size === 0) return project;
     let changed = false;
     const tracks = project.tracks.map((t) => {
-      const c = now.get(t.id);
-      if (!c || (c.mute === t.mute && c.solo === t.solo)) return t;
+      const f = this.flagEdits.get(t.id);
+      if (!f || ((f.mute === undefined || f.mute === t.mute) && (f.solo === undefined || f.solo === t.solo))) return t;
       changed = true;
-      return { ...t, mute: c.mute, solo: c.solo };
+      return { ...t, ...f };
     });
     return changed ? { ...project, tracks } : project;
+  }
+
+  /** an edit that sets a track's mute / solo itself takes over from the earlier setTrackFlags */
+  private forgetFlagEdits(before: MidiProject, after: MidiProject) {
+    if (this.flagEdits.size === 0 || before.tracks === after.tracks) return;
+    const old = new Map(before.tracks.map((t) => [t.id, t]));
+    for (const t of after.tracks) {
+      const o = old.get(t.id);
+      const f = this.flagEdits.get(t.id);
+      if (!o || !f) continue;
+      if (o.mute !== t.mute) delete f.mute;
+      if (o.solo !== t.solo) delete f.solo;
+      if (f.mute === undefined && f.solo === undefined) this.flagEdits.delete(t.id);
+    }
   }
 
   undo(): void {
@@ -105,6 +125,7 @@ export class EditorStore {
 
   /** Replaces the whole project (new / open / import). Clears history and selection. */
   load(project: MidiProject, opts: { dirty?: boolean } = {}): void {
+    this.flagEdits.clear();
     this.set({ project, history: createHistory(), selection: EMPTY_SELECTION, dirty: opts.dirty ?? false, lastAction: null, revision: this.state.revision + 1 });
   }
 
@@ -154,6 +175,7 @@ export class EditorStore {
   /** Mute / solo: saved with the project (so the song becomes unsaved) but not undo steps. */
   setTrackFlags(trackId: string, flags: Partial<Pick<MidiProject['tracks'][number], 'mute' | 'solo'>>): void {
     const tracks = this.state.project.tracks.map((t) => (t.id === trackId ? { ...t, ...flags } : t));
+    this.flagEdits.set(trackId, { ...this.flagEdits.get(trackId), ...flags });
     this.set({ project: { ...this.state.project, tracks }, dirty: true, revision: this.state.revision + 1 });
   }
 

@@ -94,9 +94,11 @@ export function chaseAt(project: MidiProject, tick: number): ChaseResult {
       } else if (c === 121) {
         // Reset All Controllers (RP-015): modulation, expression (to 127), the pedals, pitch bend
         // and the RPN / NRPN selection. Volume, pan, effect sends, bank and program stay (ADR-084).
-        for (const r of RESET_BY_CC121) s.controllers.delete(r);
+        // Values set before the reset are chased as their reset value (0, centre), not dropped: a
+        // preview synth that was given the old value is told the new one (ADR-086).
+        for (const r of RESET_BY_CC121) if (s.controllers.has(r)) s.controllers.set(r, 0);
         s.controllers.set(11, 127);
-        s.pitchBend = undefined;
+        if (s.pitchBend !== undefined) s.pitchBend = 0;
         selected.set(key, null);
       } else if (!SKIP_CC.has(c)) s.controllers.set(c, e.value);
     }

@@ -19,6 +19,15 @@ export function TrackInspector() {
   const { project } = useEditorState();
   const [pbRange, setPbRange] = useState(2);
   const [colorSession, setColorSession] = useState(0);
+  // One colour pick is one undo step. The native "change" event fires when the picker closes with a
+  // colour (React's onChange is the live "input" event), so the next pick starts a new step even
+  // when the input kept its focus (ADR-086).
+  const endColorSessionOnCommit = (el: HTMLInputElement | null) => {
+    if (!el) return;
+    const next = () => setColorSession((n) => n + 1);
+    el.addEventListener('change', next);
+    return () => el.removeEventListener('change', next);
+  };
   const tick = Math.max(0, Math.round(usePlaybackPosition(transport).tick));
   const sig = useSignatureMap(project);
   const track: MidiTrack | undefined = selectedTrack(project);
@@ -50,7 +59,7 @@ export function TrackInspector() {
       <label>
         {t('色')}
         {/* dragging in the picker fires many changes: one undo step per time the picker is used (ADR-084) */}
-        <input type="color" value={track.color.slice(0, 7)} onFocus={() => setColorSession((n) => n + 1)} onChange={(e) => store.run(updateTrack(store.project, track.id, { color: e.target.value }, 'トラックの色を変更'), { mergeKey: `color-${track.id}-${colorSession}` })} />
+        <input type="color" value={track.color.slice(0, 7)} onFocus={() => setColorSession((n) => n + 1)} ref={endColorSessionOnCommit} onChange={(e) => store.run(updateTrack(store.project, track.id, { color: e.target.value }, 'トラックの色を変更'), { mergeKey: `color-${track.id}-${colorSession}` })} />
       </label>
       <div className="inspector-row">
         <label>

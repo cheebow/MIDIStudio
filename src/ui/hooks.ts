@@ -99,12 +99,21 @@ export class PlayheadFollow {
   private held = false;
   private wasPlaying = false;
 
-  update(pos: TransportPosition, x: number, viewW: number, el: HTMLElement | null, sig: Parameters<typeof barPageScrollLeft>[0], pxPerTick: number, enabled: boolean): void {
+  /**
+   * `el` is the scroll area and `leadPx` the margin drawn before tick 0: the playhead's x is taken
+   * from the live scrollLeft, not from React state, which lags one frame behind a programmatic
+   * scroll (a revealed view would otherwise count as "playhead in view" and drop the hold).
+   */
+  update(pos: TransportPosition, el: HTMLElement | null, viewW: number, leadPx: number, sig: Parameters<typeof barPageScrollLeft>[0], pxPerTick: number, enabled: boolean): void {
+    if (!el) return;
+    // the first frame of a newly shown editor is neither a seek nor the start of playback
+    const first = this.lastTick < 0;
     const jumped = Math.abs(pos.tick - this.lastTick) > 0.5;
-    if ((jumped && !pos.playing) || (pos.playing && !this.wasPlaying)) this.held = false;
+    if (!first && ((jumped && !pos.playing) || (pos.playing && !this.wasPlaying))) this.held = false;
     if (jumped && !this.held) this.armedUntil = performance.now() + 1500;
     this.lastTick = pos.tick;
     this.wasPlaying = pos.playing;
+    const x = pos.tick * pxPerTick - el.scrollLeft + leadPx;
     const outside = x > viewW - 20 || x < 0;
     if (!outside) {
       this.armedUntil = 0;
@@ -112,7 +121,7 @@ export class PlayheadFollow {
     }
     if (this.held) return;
     const armed = this.armedUntil > performance.now();
-    if (enabled && el && outside && (pos.playing || armed)) el.scrollLeft = barPageScrollLeft(sig, pos.tick, pxPerTick);
+    if (enabled && outside && (pos.playing || armed)) el.scrollLeft = barPageScrollLeft(sig, pos.tick, pxPerTick);
   }
 
   hold(): void {

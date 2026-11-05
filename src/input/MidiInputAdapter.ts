@@ -142,7 +142,7 @@ export class MidiInputAdapter {
             const msg = parseMidiMessage(e.data);
             if (!msg) return;
             // Note-offs always pass: a key held while the filter changed must still be released
-            // (a note-off with no matching note-on is ignored downstream, ADR-084).
+            // (InputController ignores a note-off with no matching note-on, ADR-084 / 086).
             if (this._channelFilter !== null && msg.channel !== this._channelFilter && msg.type !== 'note-off') return;
             this.handlers.onMessage(msg, input.id, e.timeStamp);
           }

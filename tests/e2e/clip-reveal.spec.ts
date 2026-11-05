@@ -26,9 +26,23 @@ test('double-clicking a clip scrolls the piano roll / drum editor to the bar whe
   await page.mouse.dblclick(box.x + bar + 10, box.y + 50 + 24);
   await expect.poll(() => roll.evaluate((el) => el.scrollLeft)).toBe(leftEdge(0));
 
+  // move the playhead far away (bar 21): the newly opened drum editor must not page there
+  const seek = page.getByTestId('seek-bar');
+  const sb = (await seek.boundingBox())!;
+  const endTick = Number(await seek.getAttribute('data-end-tick'));
+  await page.mouse.click(sb.x + (sb.width * (BAR * 20 + 700)) / endTick, sb.y + sb.height / 2);
+  await expect(page.getByTestId('transport-position')).toHaveText(/^021\./);
+  // the seek also paged the track view; bring it back (after the 1.5 s follow window) to reach the clip
+  await page.waitForTimeout(1700);
+  await page.locator('.arrangement-scroll').evaluate((el) => (el.scrollLeft = 0));
+  await expect.poll(() => page.locator('.arrangement-scroll').evaluate((el) => el.scrollLeft)).toBe(0);
+  // the track view hit-tests with its React scroll state, which follows the scroll event a frame later
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   // the drum clip starts at bar 5: the drum editor opens there
   await page.mouse.dblclick(box.x + bar * 5 + 10, box.y + 50 + 48 + 24);
   const drum = page.locator('.drum-scroll');
   await expect(drum).toBeVisible();
   await expect.poll(() => drum.evaluate((el) => el.scrollLeft)).toBe(leftEdge(BAR * 4));
+  await page.waitForTimeout(500); // a few frames: following does not take it back to the playhead
+  expect(await drum.evaluate((el) => el.scrollLeft)).toBe(leftEdge(BAR * 4));
 });

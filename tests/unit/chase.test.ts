@@ -49,7 +49,7 @@ describe('EventChase (P03)', () => {
     expect(chaseAt(project, 1).channels.get('1:0')?.program).toBe(5);
     const later = chaseAt(project, 2000).channels.get('0:0')!;
     expect(later.controllers.get(7)).toBe(50); // ADR-084: volume is not reset by CC121
-    expect(later.pitchBend).toBeUndefined();
+    expect(later.pitchBend).toBe(0); // ADR-086: chased as centre, so a preview synth that had the bend is reset
     expect(later.program).toBe(49);
   });
 
@@ -57,7 +57,8 @@ describe('EventChase (P03)', () => {
     const r = openMidiFile(build(1, 480, [cc(0, 0, 1, 90), cc(0, 0, 11, 40), cc(0, 0, 64, 127), cc(0, 0, 10, 20), cc(0, 0, 91, 70), cc(0, 0, 101, 0), cc(0, 0, 100, 0), cc(10, 0, 121, 0), cc(10, 0, 6, 24), on(0, 0, 60), off(10, 0, 60)]));
     if (!r.ok) throw new Error();
     const s = chaseAt(r.project, 100).channels.get('0:0')!;
-    expect([...s.controllers.entries()].sort((a, b) => a[0] - b[0])).toEqual([[10, 20], [11, 127], [91, 70]]);
+    // ADR-086: values set before the reset are chased as their reset value (a preview synth is told it)
+    expect([...s.controllers.entries()].sort((a, b) => a[0] - b[0])).toEqual([[1, 0], [10, 20], [11, 127], [64, 0], [91, 70]]);
     expect(s.parameters.size).toBe(0); // the data entry after the reset has no RPN selected
   });
 });

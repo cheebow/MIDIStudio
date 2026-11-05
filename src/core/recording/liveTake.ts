@@ -85,6 +85,20 @@ export class LiveTake {
     this.push({ kind: 'note', tick: on.tick, pitch, velocity: on.velocity, durationTicks: Math.max(1, end - on.tick), releaseVelocity, ...(on.channel !== undefined ? { channelOverride: on.channel } : {}) }, on.pass);
   }
 
+  /**
+   * A finished note of the same key that still sounds at `tick` ends there: two notes of one key
+   * must not overlap (the first one's Note Off would cut the second). A count-in pickup keeps its
+   * held length and can reach past the downbeat (ADR-084 / 086).
+   */
+  private trimOverlap(pitch: number, channel: number | undefined, tick: number) {
+    const events = this.takes[this.pass].events;
+    for (let i = events.length - 1; i >= 0; i--) {
+      const e = events[i];
+      if (e.kind !== 'note' || e.pitch !== pitch || e.channelOverride !== channel) continue;
+      if (e.tick < tick && e.tick + e.durationTicks > tick) events[i] = { ...e, durationTicks: tick - e.tick };
+    }
+  }
+
   add(input: RecordInput): void {
     const tick = this.toTick(input.songSeconds);
     const loop = this.opts.loop;
@@ -103,6 +117,7 @@ export class LiveTake {
       case 'note-on':
         if (!this.inPunch(tick)) return;
         this.closeNote(`${input.channel ?? -1}:${input.pitch}`, tick, 64); // re-trigger without note-off
+        this.trimOverlap(input.pitch, input.channel, tick);
         this.open.set(`${input.channel ?? -1}:${input.pitch}`, { tick, velocity: Math.max(1, Math.min(127, input.velocity)), channel: input.channel, pass: this.pass });
         return;
       case 'note-off':
@@ -135,13 +150,16 @@ export class LiveTake {
     return out;
   }
 
-  /** Stop: held notes are closed at the stop position (REQ: "recording ended" warning). */
-  finish(stopSeconds: number): TakeResult {
+  /**
+   * Stop: held notes are closed at the stop position (REQ: "recording ended" warning). `stopPass`
+   * is the loop pass at the stop when the caller counts passes itself (ADR-086).
+   */
+  finish(stopSeconds: number, stopPass?: number): TakeResult {
     const stopTick = this.toTick(stopSeconds);
     const held = this.open.size;
     // Stopped after a loop wrap with no input since: the held notes ran to the loop end, not to a
     // stop position that now lies before them (they would shrink to 1 tick, ADR-083).
-    const wrapped = this.opts.loop !== undefined && this.lastTick >= 0 && stopTick + this.opts.tempo.ppq / 8 < this.lastTick;
+    const wrapped = this.opts.loop !== undefined && (stopPass !== undefined ? stopPass > this.pass : this.lastTick >= 0 && stopTick + this.opts.tempo.ppq / 8 < this.lastTick);
     for (const key of [...this.open.keys()]) this.closeNote(key, wrapped ? this.opts.loop!.endTick : Math.max(stopTick, this.open.get(key)!.tick + 1), 64);
     const range = { startTick: Number.isFinite(this.minTick) ? this.minTick : stopTick, endTick: Math.max(this.maxTick, stopTick) };
     return { takes: this.takes.filter((t) => t.events.length > 0), closedAtStop: held, range };

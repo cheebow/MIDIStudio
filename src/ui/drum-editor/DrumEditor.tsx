@@ -255,7 +255,7 @@ export function DrumEditor() {
       }
     }
     if (input.mode === 'step-piano' || input.mode === 'step-drums') drawStepCursor(ctx, Math.round(step.cursor * pxPerTick - view.x) + 0.5, view.h);
-    follow.update(pos, x, gridW, scrollRef.current, sig, pxPerTick, settings.followPlayback);
+    follow.update(pos, scrollRef.current, gridW, leadPx, sig, pxPerTick, settings.followPlayback);
   }, [transport, view, gridW, totalH, pxPerTick, settings.followPlayback, step, input, recorder, track?.id, laneOf, sig, follow, notes]);
 
   if (!track) return <p className="placeholder">{t('トラックがありません。')}</p>;

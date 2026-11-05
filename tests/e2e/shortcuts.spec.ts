@@ -142,6 +142,25 @@ test('ADR-084: letter shortcuts work with a non-Latin layout (Cyrillic key value
   await expect(loop).toBeChecked({ checked: !before });
 });
 
+test('ADR-086: punctuation on a letter position (AZERTY "," on M) is not taken for that letter', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  const mute = page.getByRole('button', { name: /をミュート$/ }).first();
+  await expect(mute).toHaveAttribute('aria-pressed', 'false');
+  await page.evaluate(() => {
+    for (const type of ['keydown', 'keyup']) document.body.dispatchEvent(new KeyboardEvent(type, { key: ',', code: 'KeyM', bubbles: true }));
+  });
+  // the real M key still mutes, so the check above is not passing by accident
+  await page.evaluate(() => {
+    for (const type of ['keydown', 'keyup']) document.body.dispatchEvent(new KeyboardEvent(type, { key: 'm', code: 'KeyM', bubbles: true }));
+  });
+  await expect(mute).toHaveAttribute('aria-pressed', 'true');
+  await page.evaluate(() => {
+    for (const type of ['keydown', 'keyup']) document.body.dispatchEvent(new KeyboardEvent(type, { key: ',', code: 'KeyM', bubbles: true }));
+  });
+  await expect(mute).toHaveAttribute('aria-pressed', 'true');
+});
+
 test('ADR-083: a focused checkbox (LOOP) does not switch off shortcuts or the PC keyboard; Space does not toggle it', async ({ page }) => {
   await page.goto('/');
   await page.locator('body').click({ position: { x: 5, y: 5 } });

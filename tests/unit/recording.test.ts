@@ -244,3 +244,31 @@ describe('live preview while recording', () => {
     expect(take.finish(2).takes[0].events).toHaveLength(2);
   });
 });
+
+describe('LiveTake: second review (ADR-086)', () => {
+  const tempo = new TempoMap(480, [{ tick: 0, usPerQuarter: 500000 }]); // 1 tick = 1/960 s
+  it('a note held across the loop end and still held at a stop later in the next pass runs to the loop end', () => {
+    const take = new LiveTake({ tempo, loop: { startTick: 0, endTick: 1920 } });
+    take.add({ type: 'note-on', pitch: 60, velocity: 100, songSeconds: 1000 / 960, pass: 0 });
+    const r = take.finish(1500 / 960, 1); // stopped at tick 1500 of pass 1, no input since the wrap
+    const n = r.takes.flatMap((t) => t.events).find((e) => e.kind === 'note');
+    expect(n && n.kind === 'note' && n.durationTicks).toBe(920);
+  });
+
+  it('a finished note of the same key ends where the key is played again (no overlap)', () => {
+    // a count-in pickup is placed with its held length; the same key is played again before that end
+    const take = new LiveTake({ tempo });
+    take.add({ type: 'note-on', pitch: 60, velocity: 100, songSeconds: 0 });
+    take.add({ type: 'note-off', pitch: 60, releaseVelocity: 64, songSeconds: 336 / 960 });
+    take.add({ type: 'note-on', pitch: 60, velocity: 100, songSeconds: 48 / 960 });
+    take.add({ type: 'note-off', pitch: 60, releaseVelocity: 64, songSeconds: 500 / 960 });
+    take.add({ type: 'note-on', pitch: 64, velocity: 100, songSeconds: 100 / 960 }); // other keys are untouched
+    take.add({ type: 'note-off', pitch: 64, releaseVelocity: 64, songSeconds: 600 / 960 });
+    const notes = take.finish(1).takes[0].events.map((e) => (e.kind === 'note' ? [e.tick, e.pitch, e.durationTicks] : null));
+    expect(notes).toEqual([
+      [0, 60, 48],
+      [48, 60, 452],
+      [100, 64, 500],
+    ]);
+  });
+});
