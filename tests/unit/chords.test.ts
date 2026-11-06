@@ -338,7 +338,7 @@ describe('chord estimate', () => {
     expect(trackRole(notes([...block(0, BAR, [60, 64, 67]), ...block(BAR, BAR, [62, 65, 69])]))).toBe('chord');
   });
 
-  it('U-CHD-21 a chord shorter than a beat between two others joins a neighbour (MEGA.MID)', () => {
+  it('U-CHD-21 a chord shorter than a beat between two others joins a neighbour (a real song)', () => {
     // C | Dm for half a beat, then G7 struck on the "and" of beat 1
     const halfDm: N[] = [...block(0, BAR, [60, 64, 67]), ...block(BAR, Q / 2, [62, 65, 69]), ...block(BAR + Q / 2, BAR - Q / 2, [55, 59, 62, 65])];
     const s = analyzeChords(open(conductor(), trackEvents(0, halfDm)));
@@ -351,8 +351,8 @@ describe('chord estimate', () => {
     expect(sb.map((x) => x.tick)).toEqual([0, BAR]);
   });
 
-  it('U-CHD-22 a chord pushed on 3& goes on over a partial voicing of it on beat 4 (GROOVIN6 bar 21)', () => {
-    // the notes of GROOVIN6 bars 20.4-22.1 (PPQ 48, scaled x10), bar 21 placed at bar 2
+  it('U-CHD-22 a chord pushed on 3& goes on over a partial voicing of it on beat 4 (a real song, bar 21)', () => {
+    // the notes of a real song, bars 20.4-22.1 (PPQ 48, scaled x10), bar 21 placed at bar 2
     const at = (t48: number, d48: number, pitch: number): N => [BAR + t48 * 10, d48 * 10, pitch];
     const clavi: N[] = [
       at(0, 21, 66), at(0, 21, 62), at(0, 21, 69), at(48, 14, 62), at(48, 27, 66), at(48, 26, 69), at(88, 4, 62), at(88, 7, 69), at(88, 8, 66),
@@ -369,7 +369,7 @@ describe('chord estimate', () => {
     expect(chordAt(s, BAR + 170 * 10)?.name).toBe('F#m7');
   });
 
-  it('U-CHD-23 notes played on a sound-effect program (121-128: seashore, bird...) are not harmony (SEASHORE)', () => {
+  it('U-CHD-23 notes played on a sound-effect program (121-128: seashore, bird...) are not harmony (a real song)', () => {
     // channel 1 plays C E G on Seashore in bar 1, then on Nylon Guitar from bar 3 (program changes in
     // another track); a Bird on channel 2 sings F A over bar 3
     const ch1: N[] = [...block(0, BAR, [60, 64, 67]), ...block(BAR * 2, BAR, [60, 64, 67])];
@@ -379,7 +379,7 @@ describe('chord estimate', () => {
     expect(s[0].tick).toBe(BAR * 2);
   });
 
-  it('U-CHD-24 the same chord struck again on a bar line is named again there (RMIND_GS bars 33 / 35)', () => {
+  it('U-CHD-24 the same chord struck again on a bar line is named again there (a real song, bars 33 / 35)', () => {
     // the piano strikes Ebmaj7 in bars 1 and 2: Ebmaj7 | Ebmaj7; held over the bar line it stays one
     const piano: N[] = [...block(0, BAR, [51, 58, 62, 67]), ...block(BAR, BAR, [51, 58, 62, 67])];
     const s = analyzeChords(open(conductor(), trackEvents(0, piano)));
@@ -400,7 +400,7 @@ describe('chord estimate', () => {
     expect(chordAt(u, BAR)?.tick).toBe(3 * Q + Q / 2);
   });
 
-  it('U-CHD-25 no harmony, no chord: bass only, melody only, bass + melody (RMIND_GS bars 5-8)', () => {
+  it('U-CHD-25 no harmony, no chord: bass only, melody only, bass + melody (a real song, bars 5-8)', () => {
     const riff: N[] = [[0, Q, 34], [Q, Q / 2, 41], [Q + Q / 2, Q / 2, 46], [2 * Q, Q, 39], [3 * Q, Q, 41], [BAR, Q, 34], [BAR + Q, Q, 38], [BAR + 2 * Q, Q, 41], [BAR + 3 * Q, Q, 46]];
     const melody: N[] = [[0, Q, 70], [Q, Q, 74], [2 * Q, Q, 77], [3 * Q, Q, 75], [BAR, 2 * Q, 74], [BAR + 2 * Q, 2 * Q, 72]];
     expect(analyzeChords(open(conductor(), trackEvents(1, riff)))).toEqual([]);
