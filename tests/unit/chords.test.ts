@@ -151,6 +151,14 @@ describe('chord estimate', () => {
     expect(chordName(10, 'maj', null, 0)).toBe('Bb');
     expect(chordName(10, 'maj', null, 3)).toBe('A#');
     expect(chordName(0, 'maj7', 4)).toBe('Cmaj7/E');
+    // a sharp key spells borrowed chords with flats (bVII Bb, bIII Eb, bVI Eb in G major) and keeps
+    // its own tones sharp (D# in E major); #1 / #4 stay sharp (C#m7(b5) in G, F#dim7 in F)
+    expect(chordName(10, 'maj', null, 1)).toBe('Bb');
+    expect(chordName(3, 'maj', null, 1)).toBe('Eb');
+    expect(chordName(3, 'sus4', null, 4)).toBe('D#sus4');
+    expect(chordName(1, 'm7b5', null, 1)).toBe('C#m7(b5)');
+    expect(chordName(6, 'dim7', null, -1)).toBe('F#dim7');
+    expect(chordName(0, 'maj', 10, 1)).toBe('C/Bb');
     // no key signature: the bass is spelled on the root's side
     expect(chordName(4, 'maj', 8)).toBe('E/G#');
     expect(chordName(3, 'maj', 10)).toBe('Eb/Bb');
@@ -406,5 +414,18 @@ describe('chord estimate', () => {
     expect(s[0].tick).toBe(0);
     expect(s[0].endTick).toBeLessThanOrEqual(BAR * 2);
     expect(s[0].endTick).toBeGreaterThanOrEqual(BAR);
+  });
+
+  it('U-CHD-26 channel 10 made a normal part by GS plays harmony; a bar-line strike played a little early still counts', () => {
+    // GS "Use for Rhythm Part" = 0 (normal part) on channel 10 (part 10 is address block 0)
+    const PART10_NORMAL = [0x41, 0x10, 0x42, 0x12, 0x40, 0x10, 0x15, 0x00, 0x1b, 0xf7];
+    const triad = block(0, BAR, [60, 64, 67]);
+    expect(analyzeChords(open(conductor(), trackEvents(9, triad)))).toEqual([]);
+    expect(names(analyzeChords(open(conductor([sysex(0, GS_RESET), sysex(0, PART10_NORMAL)]), trackEvents(9, triad))))).toEqual(['C']);
+    // the piano strikes Ebmaj7 again 20 ticks (< 1/8 beat) before bar 2: named again at the bar line
+    const early: N[] = [...block(0, BAR - 20, [51, 58, 62, 67]), ...block(BAR - 20, BAR + 20, [51, 58, 62, 67])];
+    const s = analyzeChords(open(conductor(), trackEvents(0, early)));
+    expect(names(s)).toEqual(['Ebmaj7', 'Ebmaj7']);
+    expect(s[1].tick).toBe(BAR);
   });
 });

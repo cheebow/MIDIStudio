@@ -10,6 +10,24 @@ import { t } from '../../i18n';
 
 /** Channels set as rhythm parts by "Use for Rhythm Part" (value > 0) anywhere in the song. */
 export function gsRhythmChannels(project: MidiProject): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const [key, value] of gsRhythmSettings(project)) if (value > 0) out.set(key, value);
+  return out;
+}
+
+/** The last "Use for Rhythm Part" value set per port:channel (`${port}:${channel}`), 0 included. */
+function gsRhythmSettings(project: MidiProject): Map<string, number> {
+  const out = new Map<string, number>(); // `${port}:${channel}` -> 0 (normal part) or the drum map number
+  for (const f of gsRhythmChanges(project)) out.set(f.key, f.value);
+  return out;
+}
+
+/**
+ * Every "Use for Rhythm Part" setting in playback order: per port:channel (`${port}:${channel}`),
+ * 0 makes the part a normal (melodic) part (channel 10 set to 0 plays notes, not drums), 1 / 2 a
+ * rhythm part with that drum map.
+ */
+export function gsRhythmChanges(project: MidiProject): { tick: number; key: string; value: number }[] {
   // Settings from several tracks apply in playback order (tick, track, order), so the latest one
   // in time wins, not the one on the last track (ADR-084).
   const found: { tick: number; ti: number; order: number; key: string; value: number }[] = [];
@@ -22,12 +40,7 @@ export function gsRhythmChannels(project: MidiProject): Map<string, number> {
     }
   });
   found.sort((a, b) => a.tick - b.tick || a.ti - b.ti || a.order - b.order);
-  const out = new Map<string, number>(); // `${port}:${channel}` -> map number
-  for (const f of found) {
-    if (f.value > 0) out.set(f.key, f.value);
-    else out.delete(f.key);
-  }
-  return out;
+  return found.map(({ tick, key, value }) => ({ tick, key, value }));
 }
 
 /** Marks tracks on GS rhythm-part channels as drum tracks (display only; no event is changed). */

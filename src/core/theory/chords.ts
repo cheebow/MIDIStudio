@@ -8,7 +8,7 @@
 // tones) and notes sounding at the start of the beat count more. The result is an estimate and can
 // be wrong (inversions, tensions, sparse textures).
 import type { MidiProject, MidiTrack, NoteEvent } from '../model/types';
-import { gsRhythmChannels } from '../gs/gsProject';
+import { gsRhythmChanges } from '../gs/gsProject';
 import { looseNoteIds } from '../model/looseNotes';
 import { TimeSignatureMap } from '../timing/timeSignatureMap';
 import { NOTE_FLAT, NOTE_SHARP } from '../list/noteNames';
@@ -153,14 +153,38 @@ function programTimeline(project: MidiProject): Map<string, { ticks: number[]; p
  * Pitched notes of a track that are heard (no drum channel, no rhythm part, no loose note, no
  * sound effect: a seashore or a bird is not part of the harmony, ADR-090).
  */
-function pitchedNotes(project: MidiProject, track: MidiTrack, rhythm: Map<string, number>, programs: ReturnType<typeof programTimeline>): NoteEvent[] {
-  if (track.displayMode === 'drum') return [];
+/** GS rhythm-part settings per port:channel, in time order. */
+type RhythmTimeline = Map<string, { ticks: number[]; values: number[] }>;
+function rhythmTimeline(project: MidiProject): RhythmTimeline {
+  const out: RhythmTimeline = new Map();
+  for (const c of gsRhythmChanges(project)) {
+    const tl = out.get(c.key) ?? { ticks: [], values: [] };
+    tl.ticks.push(c.tick);
+    tl.values.push(c.value);
+    out.set(c.key, tl);
+  }
+  return out;
+}
+
+function pitchedNotes(project: MidiProject, track: MidiTrack, rhythm: RhythmTimeline, programs: ReturnType<typeof programTimeline>): NoteEvent[] {
+  // the GS "Use for Rhythm Part" setting in effect at a tick (undefined: never set until then)
+  const settingAt = (ch: number, tick: number) => {
+    const tl = rhythm.get(`${track.port}:${ch}`);
+    const i = tl ? lastAtOrBefore(tl.ticks, tick) : -1;
+    return tl && i >= 0 ? tl.values[i] : undefined;
+  };
+  // drums: a rhythm part at that time, or channel 10 unless GS made it a normal part by then. A track
+  // shown as drums plays drums unless GS made its channel a normal part.
+  const drum = (ch: number, tick: number) => {
+    const set = settingAt(ch, tick);
+    return set !== undefined ? set > 0 : ch === 9 || track.displayMode === 'drum';
+  };
   const loose = looseNoteIds(project, track);
   return track.events.filter((e): e is NoteEvent => {
     if (e.kind !== 'note' || loose.has(e.id)) return false;
     const ch = e.channelOverride ?? track.channel;
     const key = `${track.port}:${ch}`;
-    if (ch === 9 || rhythm.has(key)) return false;
+    if (drum(ch, e.tick)) return false;
     const timeline = programs.get(key);
     const i = timeline ? lastAtOrBefore(timeline.ticks, e.tick) : -1;
     return !(timeline && i >= 0 && timeline.programs[i] >= SFX_PROGRAM_FROM);
@@ -351,20 +375,31 @@ function scoreOf(scores: readonly Scored[], root: number, quality: ChordQuality)
   return scores.find((s) => s.root === root && s.t.quality === quality)?.score ?? -Infinity;
 }
 
-/** Root / bass spelling: flats under a flat key, sharps under a sharp key, the usual mix in C / Am. */
-const NOTE_PLAIN = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+/**
+ * Root / bass spelling in a key (sharps > 0, flats < 0): a tone of the key's scale as the key writes
+ * it (D# in E major, Eb in Bb major); a black key outside the scale as the usual borrowed / chromatic
+ * chords are written, from the major tonic: b3, b6, b7 flat (Bb and Eb in G major: bVII, bIII), #1
+ * and #4 sharp (C#m7(b5) in G major). In C major / A minor this is C# Eb F# Ab Bb.
+ */
+const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11];
+const FLAT_DEGREES = new Set([3, 8, 10]);
 export function pcName(pc: number, sharpsFlats: number): string {
-  return (sharpsFlats < 0 ? NOTE_FLAT : sharpsFlats > 0 ? NOTE_SHARP : NOTE_PLAIN)[((pc % 12) + 12) % 12];
+  const p = ((pc % 12) + 12) % 12;
+  const tonic = (((sharpsFlats * 7) % 12) + 12) % 12;
+  const degree = (p - tonic + 12) % 12;
+  if (MAJOR_SCALE.includes(degree)) return (sharpsFlats < 0 ? NOTE_FLAT : NOTE_SHARP)[p];
+  return (FLAT_DEGREES.has(degree) ? NOTE_FLAT : NOTE_SHARP)[p];
 }
 
-/** Without a key signature the bass follows the root's side: E/G# (not E/Ab), F/Bb is unchanged. */
+/** Without a key the bass follows the root's side: E/G# (not E/Ab), Eb/Bb (not Eb/A#). */
 const SHARP_SIDE_ROOTS = new Set([1, 2, 4, 6, 9, 11]); // C# D E F# A B
 const FLAT_SIDE_ROOTS = new Set([3, 5, 8, 10]); // Eb F Ab Bb
 
 export function chordName(root: number, quality: ChordQuality, bass: number | null, sharpsFlats = 0): string {
   const t = TEMPLATES.find((x) => x.quality === quality);
-  const bassSide = sharpsFlats !== 0 ? sharpsFlats : SHARP_SIDE_ROOTS.has(root) ? 1 : FLAT_SIDE_ROOTS.has(root) ? -1 : 0;
-  return `${pcName(root, sharpsFlats)}${t?.suffix ?? ''}${bass !== null && bass !== root ? `/${pcName(bass, bassSide)}` : ''}`;
+  const bassName = (pc: number) =>
+    sharpsFlats !== 0 ? pcName(pc, sharpsFlats) : SHARP_SIDE_ROOTS.has(root) ? NOTE_SHARP[pc] : FLAT_SIDE_ROOTS.has(root) ? NOTE_FLAT[pc] : pcName(pc, 0);
+  return `${pcName(root, sharpsFlats)}${t?.suffix ?? ''}${bass !== null && bass !== root ? `/${bassName(bass)}` : ''}`;
 }
 
 interface Candidate {
@@ -451,11 +486,12 @@ function pick(beat: Beat, prev: Scored | null): Scored | null {
     // only a 9th / 11th added on top (Em7 -> Em7(11), C -> Cadd9) is a colour of the same chord
     const tensionOnly = held && extends_ && top.t.intervals.every((iv) => p.t.intervals.includes(iv) || iv === 2 || iv === 5);
     const margin = extends_ ? CHORD_TUNING.extensionHysteresis : CHORD_TUNING.hysteresis;
-    if (within || tensionOnly || keep >= best.score - margin || best.score < CHORD_TUNING.minScore) best = { ...prev, score: keep };
-  } else if (best.score < CHORD_TUNING.minScore) {
-    return null;
+    // a weak beat keeps the previous chord, but only one it can hold (a 9th / 11th chord whose root
+    // left the bass, unscored here, is not kept)
+    const canKeep = held && keep > -Infinity;
+    if (canKeep && (within || tensionOnly || keep >= best.score - margin || best.score < CHORD_TUNING.minScore)) return { ...prev, score: keep };
   }
-  return best;
+  return best.score < CHORD_TUNING.minScore ? null : best;
 }
 
 /** Krumhansl-Kessler key profiles (major / minor), index 0 = tonic. */
@@ -513,7 +549,7 @@ export function estimateKey(notes: readonly { note: Pick<NoteEvent, 'pitch' | 'd
 
 /** Estimated chords of the song, one segment per run of the same chord. Beats without notes have none. */
 export function analyzeChords(project: MidiProject): ChordSegment[] {
-  const rhythm = gsRhythmChannels(project);
+  const rhythm = rhythmTimeline(project);
   const programs = programTimeline(project);
   const heard = audible(project);
   const sources: Source[] = [];
@@ -547,10 +583,10 @@ export function analyzeChords(project: MidiProject): ChordSegment[] {
     for (const src of sources) {
       if (src.role !== 'chord') continue;
       const { tick, durationTicks } = src.note;
-      const i = lastAtOrBefore(barTicks, tick);
-      if (i < 0) continue;
-      const window = sig.ticksPerBar(barTicks[i]) / sig.signatureAt(barTicks[i]).numerator / 8;
-      if (tick - barTicks[i] > window || durationTicks < window) continue;
+      // a strike within 1/8 beat of the bar line, on either side (a played part hits it a little early or late)
+      const window = sig.ticksPerBar(tick) / sig.signatureAt(tick).numerator / 8;
+      const i = lastAtOrBefore(barTicks, tick + window);
+      if (i < 0 || Math.abs(tick - barTicks[i]) > window || durationTicks < window) continue;
       struck.get(barTicks[i])!.add(src.note.pitch % 12);
       // the last strike near the bar line (strings on the beat, the piano 4 ticks late: the chord is struck at 4)
       last.set(barTicks[i], Math.max(last.get(barTicks[i]) ?? tick, tick));
@@ -587,8 +623,8 @@ export function analyzeChords(project: MidiProject): ChordSegment[] {
   }
   // choose, keeping the previous chord while it still fits about as well (no flicker)
   let prev: Scored | null = null;
-  const undecided: Beat[] = [];
-  for (const beat of beats) {
+  const undecided: number[] = []; // indices into beats
+  for (const [bi, beat] of beats.entries()) {
     if (!beat.scores) {
       prev = null; // silence ends the chord
       continue;
@@ -598,7 +634,7 @@ export function analyzeChords(project: MidiProject): ChordSegment[] {
       // already belongs to the next chord: the chord was pushed and the beat itself is empty)
       const p = prev;
       if (p && beat.present.every((pc) => fits(p, pc))) beat.chosen = p;
-      else undecided.push(beat);
+      else undecided.push(bi);
       continue;
     }
     const best = pick(beat, prev);
@@ -608,8 +644,8 @@ export function analyzeChords(project: MidiProject): ChordSegment[] {
     // before the push (it is set to the anticipated chord below)
     if (!pushes.has(beat.tick)) prev = best;
   }
-  for (const beat of undecided) {
-    const i = beats.indexOf(beat);
+  for (const i of undecided) {
+    const beat = beats[i];
     const before = beats[i - 1]?.endTick === beat.tick ? beats[i - 1].chosen : null;
     const after = beats[i + 1]?.tick === beat.endTick ? beats[i + 1].chosen : null;
     beat.chosen = after && beat.present.every((pc) => fits(after, pc)) ? after : before;
@@ -676,13 +712,33 @@ export function analyzeChords(project: MidiProject): ChordSegment[] {
     const hasHarmony = (beat: Beat, all: readonly Source[]): boolean => {
       const blip = (beat.endTick - beat.tick) / 8;
       const notes = all.filter((x) => x.note.durationTicks >= blip);
-      const instants = [beat.tick, ...notes.map((x) => x.note.tick).filter((t) => t > beat.tick)];
-      for (const t of instants) {
-        const on = notes.filter((x) => x.note.tick <= t && t < x.note.tick + x.note.durationTicks);
-        if (new Set(on.map((x) => x.note.pitch % 12)).size >= 3) return true;
-        const perTrack = new Map<string, Set<number>>();
-        for (const x of on) if (x.role !== 'bass') perTrack.set(x.track, (perTrack.get(x.track) ?? new Set()).add(x.note.pitch % 12));
-        if ([...perTrack.values()].some((pcs) => pcs.size >= 2)) return true;
+      // sweep the note starts and ends in time order (ends first at the same tick), counting the
+      // pitch classes sounding (all parts) and per part (bass left out); check after each start
+      const events: { t: number; d: 1 | -1; x: Source }[] = [];
+      for (const x of notes) {
+        events.push({ t: Math.max(x.note.tick, beat.tick), d: 1, x });
+        events.push({ t: x.note.tick + x.note.durationTicks, d: -1, x });
+      }
+      events.sort((a, b) => a.t - b.t || a.d - b.d);
+      const all12 = new Array<number>(12).fill(0);
+      let distinct = 0;
+      const part = new Map<string, number[]>();
+      const partDistinct = new Map<string, number>();
+      for (let k = 0; k < events.length; k++) {
+        const { t, d, x } = events[k];
+        if (t >= beat.endTick) break;
+        const pc = x.note.pitch % 12;
+        all12[pc] += d;
+        if (d === 1 ? all12[pc] === 1 : all12[pc] === 0) distinct += d;
+        if (x.role !== 'bass') {
+          const counts = part.get(x.track) ?? new Array<number>(12).fill(0);
+          part.set(x.track, counts);
+          counts[pc] += d;
+          if (d === 1 ? counts[pc] === 1 : counts[pc] === 0) partDistinct.set(x.track, (partDistinct.get(x.track) ?? 0) + d);
+        }
+        // check once all the events at this tick are in
+        if (events[k + 1]?.t === t) continue;
+        if (distinct >= 3 || [...partDistinct.values()].some((n) => n >= 2)) return true;
       }
       const c = beat.chosen;
       if (!c || c.t.intervals.length < 3) return false;
@@ -767,8 +823,11 @@ export function analyzeChords(project: MidiProject): ChordSegment[] {
   // the bar line.
   const tiedOver = (from: number, bar: number) =>
     sources.some((x) => x.role === 'chord' && x.note.tick >= from && x.note.tick < bar && x.note.tick + x.note.durationTicks >= bar + beatLen(bar) / 8);
+  const beatStarts = beats.map((b) => b.tick);
   const atBar = (seg: ChordSegment, bar: number): ChordSegment => {
-    const beat = beats[Math.max(0, beats.findIndex((b) => b.tick <= bar && bar < b.endTick))];
+    const bi = lastAtOrBefore(beatStarts, bar);
+    const beat = bi >= 0 && bar < beats[bi].endTick ? beats[bi] : undefined;
+    if (!beat) return { ...seg, tick: bar }; // no beat there: keep the name (never another beat's bass)
     const t = TEMPLATES.find((x) => x.quality === seg.quality)!;
     const bass = beat.bassPc !== null && beat.bassPc !== seg.root && t.intervals.includes((beat.bassPc - seg.root + 12) % 12) ? beat.bassPc : null;
     return { ...seg, tick: bar, bass, name: chordName(seg.root, seg.quality, bass, sharpsFlatsAt(bar)) };
@@ -790,6 +849,12 @@ export function analyzeChords(project: MidiProject): ChordSegment[] {
 
 /** The chord at a tick (segments sorted, not overlapping), or null. */
 export function chordAt(segments: readonly ChordSegment[], tick: number): ChordSegment | null {
+  const i = chordIndexAtOrBefore(segments, tick);
+  return i >= 0 && tick < segments[i].endTick ? segments[i] : null;
+}
+
+/** Index of the last segment starting at or before `tick` (segments sorted), or -1. */
+export function chordIndexAtOrBefore(segments: readonly ChordSegment[], tick: number): number {
   let lo = 0;
   let hi = segments.length - 1;
   let ans = -1;
@@ -800,7 +865,5 @@ export function chordAt(segments: readonly ChordSegment[], tick: number): ChordS
       lo = mid + 1;
     } else hi = mid - 1;
   }
-  if (ans < 0) return null;
-  const s = segments[ans];
-  return tick < s.endTick ? s : null;
+  return ans;
 }

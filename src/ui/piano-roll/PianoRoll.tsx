@@ -70,6 +70,9 @@ export function PianoRoll() {
   const gridLen = grid.num / grid.den;
   const sig = useSignatureMap(project);
   const themeVersion = useThemeVersion();
+  const accentRef = useRef<{ version: number; color: string } | null>(null);
+  // the names for E2E (data-chords), built once per analysis rather than on every render (scrolling re-renders)
+  const chordNames = useMemo(() => (settings.showChords ? chords.map((c) => c.name).join(' ') : undefined), [settings.showChords, chords]);
   /** one bar of margin before bar 1 (ADR-045 追記): view.x = scrollLeft − lead, so tick 0 is drawn `leadPx` from the left */
   const leadPx = Math.round(sig.ticksPerBar(0) * pxPerTick);
   const view = useMemo(() => ({ ...size, ...scroll, x: scroll.x - leadPx }), [size, scroll, leadPx]);
@@ -200,7 +203,7 @@ export function PianoRoll() {
     if (settings.showChords) {
       ctx.fillStyle = th.panel;
       ctx.fillRect(0, RULER_H, w, CHORD_H);
-      drawChordStrip(ctx, chords, (tk) => tk * pxPerTick - view.x, t0, t1, RULER_H, CHORD_H, { text: th.text, line: th.gridStrong, current: th.accent });
+      drawChordStrip(ctx, chords, (tk) => tk * pxPerTick - view.x, t0, t1, RULER_H, CHORD_H, { text: th.text, line: th.gridStrong });
       ctx.fillStyle = th.border;
       ctx.fillRect(0, TOP - 1, w, 1);
     }
@@ -319,7 +322,9 @@ export function PianoRoll() {
     if (settings.showChords && pos.playing) {
       const c = chordAt(chords, pos.tick);
       if (c) {
-        ctx.fillStyle = readTheme(canvas).accent;
+        // the accent colour is read once per theme, not on every frame
+        if (accentRef.current?.version !== themeVersion) accentRef.current = { version: themeVersion, color: readTheme(canvas).accent };
+        ctx.fillStyle = accentRef.current.color;
         ctx.globalAlpha = 0.22;
         ctx.fillRect(c.tick * pxPerTick - view.x, RULER_H, (c.endTick - c.tick) * pxPerTick, CHORD_H - 1);
         ctx.globalAlpha = 1;
@@ -344,7 +349,7 @@ export function PianoRoll() {
     }
     if (input.mode === 'step-piano' || input.mode === 'step-drums') drawStepCursor(ctx, Math.round(step.cursor * pxPerTick - view.x) + 0.5, view.h);
     follow.update(pos, scrollRef.current, w, leadPx, sig, pxPerTick, settings.followPlayback);
-  }, [transport, view, pxPerTick, settings.followPlayback, settings.showChords, chords, TOP, step, input, recorder, track?.id, sig, follow, notes]);
+  }, [transport, view, pxPerTick, settings.followPlayback, settings.showChords, chords, TOP, themeVersion, step, input, recorder, track?.id, sig, follow, notes]);
 
   // Ctrl / ⌘ + wheel (and trackpad pinch, which Chrome reports as wheel + ctrlKey) zooms the roll.
   // React registers wheel listeners as passive, so preventDefault there would not stop the page
@@ -613,7 +618,7 @@ export function PianoRoll() {
                 tabIndex={0}
                 aria-label={t('ピアノロール: {name}。{tool}。矢印キーで移動・移調、Delete で削除', { name: track.name, tool: tool === 'draw' ? t('描画ツール') : t('選択ツール') })}
                 data-testid="piano-roll-grid"
-                data-chords={settings.showChords ? chords.map((c) => c.name).join(' ') : undefined}
+                data-chords={chordNames}
                 onPointerDown={onPointerDown}
                 onContextMenu={onContextMenu}
                 onPointerMove={onPointerMove}
