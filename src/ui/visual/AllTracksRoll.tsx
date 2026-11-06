@@ -5,11 +5,12 @@ import { t } from '../../i18n';
 import type { MidiProject } from '../../core/model/types';
 import { buildMonitorData, notesIn } from '../../core/visual/monitorData';
 import { useServices } from '../../app/store/context';
-import { fitCanvas } from '../canvas';
+import { fitCanvas, isBlackKey, pitchName } from '../canvas';
 import { useSignatureMap } from '../hooks';
 
 const PLAYHEAD_AT = 0.22; // playhead position from the left edge
 const BARS_VISIBLE = 6;
+const KEYS_W = 40; // keyboard on the left (sounding keys light up in the track colour)
 
 export function AllTracksRoll({ project }: { project: MidiProject }) {
   const { transport } = useServices();
@@ -23,16 +24,22 @@ export function AllTracksRoll({ project }: { project: MidiProject }) {
     if (!canvas) return;
     let raf = 0;
     const draw = () => {
-      const w = canvas.clientWidth;
+      const cw = canvas.clientWidth;
       const h = canvas.clientHeight;
-      const ctx = fitCanvas(canvas, w, h, { cssSized: true });
+      const ctx = fitCanvas(canvas, cw, h, { cssSized: true });
+      const w = Math.max(1, cw - KEYS_W); // width of the note area, right of the keyboard
       if (ctx) {
         const cs = getComputedStyle(canvas);
         const bg = cs.getPropertyValue('--tm-bg').trim() || '#000';
         const dim = cs.getPropertyValue('--tm-dim').trim() || '#335';
         const head = cs.getPropertyValue('--tm-now').trim() || '#fe5';
         ctx.fillStyle = bg;
-        ctx.fillRect(0, 0, w, h);
+        ctx.fillRect(0, 0, cw, h);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(KEYS_W, 0, w, h);
+        ctx.clip();
+        ctx.translate(KEYS_W, 0);
         const tick = Math.max(0, transport.getPosition().tick);
         const barTicks = sig.ticksPerBar(tick);
         const pxPerTick = w / (barTicks * BARS_VISIBLE);
@@ -67,7 +74,8 @@ export function AllTracksRoll({ project }: { project: MidiProject }) {
         }
         ctx.globalAlpha = 1;
         ctx.lineWidth = 1;
-        // notes
+        // notes; the keyboard lights the keys of sounding notes (the track drawn last wins)
+        const lit = new Map<number, string>();
         for (const tk of data.tracks) {
           const silent = tk.track.mute || (anySolo && !tk.track.solo);
           for (const n of notesIn(tk, t0, t1)) {
@@ -79,6 +87,7 @@ export function AllTracksRoll({ project }: { project: MidiProject }) {
             ctx.fillStyle = tk.track.color;
             ctx.fillRect(nx, ny + 0.5, nw, Math.max(1.5, rowH - 1));
             if (now && !silent) {
+              lit.set(n.pitch, tk.track.color);
               ctx.strokeStyle = '#fff';
               ctx.lineWidth = 1.5;
               ctx.strokeRect(nx + 0.5, ny + 0.5, nw - 1, Math.max(1.5, rowH - 1));
@@ -96,6 +105,10 @@ export function AllTracksRoll({ project }: { project: MidiProject }) {
         ctx.lineTo(px, h);
         ctx.stroke();
         ctx.lineWidth = 1;
+        ctx.restore();
+        drawKeys(ctx, lo, hi, rowH, h, lit, dim);
+        const litText = [...lit.keys()].sort((p, q) => p - q).join(',');
+        if (canvas.dataset.lit !== litText) canvas.dataset.lit = litText; // for tests; written only on change
       }
       raf = requestAnimationFrame(draw);
     };
@@ -116,4 +129,38 @@ export function AllTracksRoll({ project }: { project: MidiProject }) {
       <canvas ref={ref} className="visual-canvas" data-testid="visual-roll" aria-label={t('全トラックのピアノロール（再生に追従）')} />
     </div>
   );
+}
+
+/** Keyboard column at the left edge: one row per pitch, C labels when rows are tall enough. */
+function drawKeys(ctx: CanvasRenderingContext2D, lo: number, hi: number, rowH: number, h: number, lit: ReadonlyMap<number, string>, line: string): void {
+  ctx.fillStyle = '#f4f4f4';
+  ctx.fillRect(0, 0, KEYS_W, h);
+  ctx.font = `${Math.min(10, Math.floor(rowH))}px ui-monospace, monospace`;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'right';
+  for (let p = lo; p <= hi; p++) {
+    const y = (hi - p) * rowH;
+    const black = isBlackKey(p);
+    const color = lit.get(p);
+    if (black) {
+      ctx.fillStyle = color ?? '#222';
+      ctx.fillRect(0, y, KEYS_W * 0.6, rowH);
+    } else if (color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(0, y, KEYS_W, rowH);
+    }
+    // boundaries between neighbouring white keys (B-C, E-F)
+    if (p % 12 === 0 || p % 12 === 5) {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(0, Math.round(y + rowH) - 0.5, KEYS_W, 1);
+    }
+    if (p % 12 === 0 && rowH >= 7) {
+      ctx.fillStyle = color ? '#fff' : '#555';
+      ctx.fillText(pitchName(p), KEYS_W - 3, y + rowH / 2);
+    }
+  }
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = line;
+  ctx.fillRect(KEYS_W - 1, 0, 1, h);
 }
