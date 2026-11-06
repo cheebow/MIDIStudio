@@ -338,7 +338,7 @@ describe('chord estimate', () => {
     expect(trackRole(notes([...block(0, BAR, [60, 64, 67]), ...block(BAR, BAR, [62, 65, 69])]))).toBe('chord');
   });
 
-  it('U-CHD-21 a chord shorter than a beat between two others joins a neighbour (MEGA.MID)', () => {
+  it('U-CHD-21 a chord shorter than a beat between two others joins a neighbour (a real song)', () => {
     // C | Dm for half a beat, then G7 struck on the "and" of beat 1
     const halfDm: N[] = [...block(0, BAR, [60, 64, 67]), ...block(BAR, Q / 2, [62, 65, 69]), ...block(BAR + Q / 2, BAR - Q / 2, [55, 59, 62, 65])];
     const s = analyzeChords(open(conductor(), trackEvents(0, halfDm)));
@@ -351,8 +351,8 @@ describe('chord estimate', () => {
     expect(sb.map((x) => x.tick)).toEqual([0, BAR]);
   });
 
-  it('U-CHD-22 a chord pushed on 3& goes on over a partial voicing of it on beat 4 (GROOVIN6 bar 21)', () => {
-    // the notes of GROOVIN6 bars 20.4-22.1 (PPQ 48, scaled x10), bar 21 placed at bar 2
+  it('U-CHD-22 a chord pushed on 3& goes on over a partial voicing of it on beat 4 (a real song, bar 21)', () => {
+    // the notes of a real song, bars 20.4-22.1 (PPQ 48, scaled x10), bar 21 placed at bar 2
     const at = (t48: number, d48: number, pitch: number): N => [BAR + t48 * 10, d48 * 10, pitch];
     const clavi: N[] = [
       at(0, 21, 66), at(0, 21, 62), at(0, 21, 69), at(48, 14, 62), at(48, 27, 66), at(48, 26, 69), at(88, 4, 62), at(88, 7, 69), at(88, 8, 66),
@@ -369,7 +369,7 @@ describe('chord estimate', () => {
     expect(chordAt(s, BAR + 170 * 10)?.name).toBe('F#m7');
   });
 
-  it('U-CHD-23 notes played on a sound-effect program (121-128: seashore, bird...) are not harmony (SEASHORE)', () => {
+  it('U-CHD-23 notes played on a sound-effect program (121-128: seashore, bird...) are not harmony (a real song)', () => {
     // channel 1 plays C E G on Seashore in bar 1, then on Nylon Guitar from bar 3 (program changes in
     // another track); a Bird on channel 2 sings F A over bar 3
     const ch1: N[] = [...block(0, BAR, [60, 64, 67]), ...block(BAR * 2, BAR, [60, 64, 67])];
@@ -379,7 +379,7 @@ describe('chord estimate', () => {
     expect(s[0].tick).toBe(BAR * 2);
   });
 
-  it('U-CHD-24 the same chord struck again on a bar line is named again there (RMIND_GS bars 33 / 35)', () => {
+  it('U-CHD-24 the same chord struck again on a bar line is named again there (a real song, bars 33 / 35)', () => {
     // the piano strikes Ebmaj7 in bars 1 and 2: Ebmaj7 | Ebmaj7; held over the bar line it stays one
     const piano: N[] = [...block(0, BAR, [51, 58, 62, 67]), ...block(BAR, BAR, [51, 58, 62, 67])];
     const s = analyzeChords(open(conductor(), trackEvents(0, piano)));
@@ -400,7 +400,7 @@ describe('chord estimate', () => {
     expect(chordAt(u, BAR)?.tick).toBe(3 * Q + Q / 2);
   });
 
-  it('U-CHD-25 no harmony, no chord: bass only, melody only, bass + melody (RMIND_GS bars 5-8)', () => {
+  it('U-CHD-25 no harmony, no chord: bass only, melody only, bass + melody (a real song, bars 5-8)', () => {
     const riff: N[] = [[0, Q, 34], [Q, Q / 2, 41], [Q + Q / 2, Q / 2, 46], [2 * Q, Q, 39], [3 * Q, Q, 41], [BAR, Q, 34], [BAR + Q, Q, 38], [BAR + 2 * Q, Q, 41], [BAR + 3 * Q, Q, 46]];
     const melody: N[] = [[0, Q, 70], [Q, Q, 74], [2 * Q, Q, 77], [3 * Q, Q, 75], [BAR, 2 * Q, 74], [BAR + 2 * Q, 2 * Q, 72]];
     expect(analyzeChords(open(conductor(), trackEvents(1, riff)))).toEqual([]);
@@ -427,5 +427,56 @@ describe('chord estimate', () => {
     const s = analyzeChords(open(conductor(), trackEvents(0, early)));
     expect(names(s)).toEqual(['Ebmaj7', 'Ebmaj7']);
     expect(s[1].tick).toBe(BAR);
+  });
+
+  it('U-CHD-27 a chord built up note by note (held arpeggio, slow strum) is one chord from its first note (ADR-093)', () => {
+    // the user's case: up-and-down 8ths held to the end of the bar over Fmaj7 xx3210 | Em7 022030 | Am7 x02010 | Dm7 xx0211
+    const held = (bar: number, pitches: number[]): N[] => {
+      const seq = [...pitches, ...[...pitches].reverse().slice(1, -1)];
+      const out: N[] = [];
+      for (let j = 0; j < 8; j++) {
+        const p = seq[j % seq.length];
+        const on = bar * BAR + j * (Q / 2);
+        const again = [...Array(8).keys()].find((m) => m > j && seq[m % seq.length] === p);
+        out.push([on, (again !== undefined ? bar * BAR + again * (Q / 2) : (bar + 1) * BAR) - on, p]);
+      }
+      return out;
+    };
+    const guitar = [...held(0, [53, 57, 60, 64]), ...held(1, [40, 47, 52, 55, 62, 64]), ...held(2, [45, 52, 55, 60, 64]), ...held(3, [50, 57, 60, 65])];
+    const s = analyzeChords(open(conductor(), trackEvents(0, guitar)));
+    expect(names(s)).toEqual(['Fmaj7', 'Em7', 'Am7', 'Dm7']);
+    expect(s.map((c) => c.tick)).toEqual([0, BAR, BAR * 2, BAR * 3]);
+  });
+
+  it('U-CHD-27 stays two chords: a new bass under held notes, a released note (line cliché), a chord held over a bar before a tone is added', () => {
+    // C E G held all bar, A2 in the bass from beat 3: C → Am7 is a real change
+    const newBass = analyzeChords(open(conductor(), trackEvents(0, block(0, BAR, [60, 64, 67])), trackEvents(1, [[2 * Q, 2 * Q, 45]])));
+    expect(names(newBass)).toEqual(['C', 'Am7']);
+    // line cliché: C E G, then the top C moves down to B on beat 3 (the C is let go)
+    const cliche = analyzeChords(open(conductor(), trackEvents(0, [...block(0, BAR, [52, 55]), [0, 2 * Q, 60], [2 * Q, 2 * Q, 59], [0, BAR, 48]])));
+    expect(names(cliche)).toEqual(['C', 'Cmaj7']);
+    // C held for two bars, then B added: the colour came later, two chords
+    const late = analyzeChords(open(conductor(), trackEvents(0, [...block(0, BAR * 3, [48, 52, 55, 60]), [BAR * 2, BAR, 59]])));
+    expect(names(late)).toEqual(['C', 'Cmaj7']);
+  });
+
+  it('U-CHD-27 review cases: a 7th added late in the bar, a build-up over a bar line, a slow build, many re-strikes', () => {
+    // I → I7: C E G struck on 1 and held, Bb added on beat 4 (leading on): two chords
+    const late7 = analyzeChords(open(conductor(), trackEvents(0, [...block(0, BAR, [48, 52, 55]), [3 * Q, Q, 58]])));
+    expect(names(late7)).toEqual(['C', 'C7']);
+    // the next bar's chord struck on beat 4 and held over the bar line: not merged by this rule (no
+    // Fmaj7 back into bar 1 from a build-up that crosses the bar line)
+    const cross = analyzeChords(open(conductor(), trackEvents(0, [...block(0, 3 * Q, [48, 52, 55]), ...block(3 * Q, Q * 5, [53, 57]), [BAR, BAR, 60], [BAR + Q, BAR - Q, 64]])));
+    expect(cross[0].name).toBe('C');
+    expect(cross[0].tick).toBe(0);
+    // C G for three beats, then E: the C5 is not a step of a build-up (nothing added near the change)
+    const slow = analyzeChords(open(conductor(), trackEvents(0, [...block(0, BAR, [48, 55]), [3 * Q, Q, 64]])));
+    expect(names(slow)[0]).not.toBe('C');
+    // F and A struck again and again (8ths) for two beats, each held until struck again, then C and E
+    // added and held: the chain of re-strikes still counts as sounding, so the bar is Fmaj7 from beat 1
+    const restrikes: N[] = [[0, 240, 53], [240, 240, 53], [480, 240, 53], [720, BAR - 720, 53], [120, 240, 57], [360, 240, 57], [600, 240, 57], [840, BAR - 840, 57], [2 * Q, 2 * Q, 60], [2 * Q + Q / 2, 2 * Q - Q / 2, 64]];
+    const chained = analyzeChords(open(conductor(), trackEvents(0, restrikes)));
+    expect(names(chained)).toEqual(['Fmaj7']);
+    expect(chained[0].tick).toBe(0);
   });
 });
