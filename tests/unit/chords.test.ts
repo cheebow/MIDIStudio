@@ -459,4 +459,24 @@ describe('chord estimate', () => {
     const late = analyzeChords(open(conductor(), trackEvents(0, [...block(0, BAR * 3, [48, 52, 55, 60]), [BAR * 2, BAR, 59]])));
     expect(names(late)).toEqual(['C', 'Cmaj7']);
   });
+
+  it('U-CHD-27 review cases: a 7th added late in the bar, a build-up over a bar line, a slow build, many re-strikes', () => {
+    // I → I7: C E G struck on 1 and held, Bb added on beat 4 (leading on): two chords
+    const late7 = analyzeChords(open(conductor(), trackEvents(0, [...block(0, BAR, [48, 52, 55]), [3 * Q, Q, 58]])));
+    expect(names(late7)).toEqual(['C', 'C7']);
+    // the next bar's chord struck on beat 4 and held over the bar line: not merged by this rule (no
+    // Fmaj7 back into bar 1 from a build-up that crosses the bar line)
+    const cross = analyzeChords(open(conductor(), trackEvents(0, [...block(0, 3 * Q, [48, 52, 55]), ...block(3 * Q, Q * 5, [53, 57]), [BAR, BAR, 60], [BAR + Q, BAR - Q, 64]])));
+    expect(cross[0].name).toBe('C');
+    expect(cross[0].tick).toBe(0);
+    // C G for three beats, then E: the C5 is not a step of a build-up (nothing added near the change)
+    const slow = analyzeChords(open(conductor(), trackEvents(0, [...block(0, BAR, [48, 55]), [3 * Q, Q, 64]])));
+    expect(names(slow)[0]).not.toBe('C');
+    // F and A struck again and again (8ths) for two beats, each held until struck again, then C and E
+    // added and held: the chain of re-strikes still counts as sounding, so the bar is Fmaj7 from beat 1
+    const restrikes: N[] = [[0, 240, 53], [240, 240, 53], [480, 240, 53], [720, BAR - 720, 53], [120, 240, 57], [360, 240, 57], [600, 240, 57], [840, BAR - 840, 57], [2 * Q, 2 * Q, 60], [2 * Q + Q / 2, 2 * Q - Q / 2, 64]];
+    const chained = analyzeChords(open(conductor(), trackEvents(0, restrikes)));
+    expect(names(chained)).toEqual(['Fmaj7']);
+    expect(chained[0].tick).toBe(0);
+  });
 });

@@ -399,6 +399,11 @@ export function chordSuffix(quality: ChordQuality): string {
   return TEMPLATES.find((x) => x.quality === quality)?.suffix ?? '';
 }
 
+/** Is the pitch class a tone of the chord (root + quality)? */
+function isTone(root: number, quality: ChordQuality, pc: number): boolean {
+  return TEMPLATES.find((x) => x.quality === quality)!.intervals.includes((pc - root + 12) % 12);
+}
+
 /** Without a key the bass follows the root's side: E/G# (not E/Ab), Eb/Bb (not Eb/A#). */
 const SHARP_SIDE_ROOTS = new Set([1, 2, 4, 6, 9, 11]); // C# D E F# A B
 const FLAT_SIDE_ROOTS = new Set([3, 5, 8, 10]); // Eb F Ab Bb
@@ -825,39 +830,75 @@ export function analyzeChords(project: MidiProject): ChordSegment[] {
   }
   // a chord built up note by note (an arpeggio held to the end of the chord, a slow strum: F A, then
   // + C E) is one chord from its first note: F → Fmaj7 is Fmaj7, E5 → Em → Em7 is Em7 (ADR-093). A
-  // segment goes into the chord after it when, within a bar,
-  //   - every note sounding in it is a tone of that chord,
-  //   - every one of them goes on sounding into it (notes are only added, none is let go: a line
-  //     cliché C → Cmaj7 releases the C and stays two chords), and
-  //   - nothing lower than its lowest note starts there (the bass stays: C → Am7 with a new A in the
-  //     bass stays two chords).
-  // A chord held for more than a bar before a tone is added (C for two bars, then + B) stays two, and
-  // so does a colour over a chord that comes back (C → C6 → C).
-  for (let i = kept.length - 2; i >= 0; i--) {
-    const seg = kept[i];
-    const next = kept[i + 1];
-    if (next.tick !== seg.endTick || (next.root === seg.root && next.quality === seg.quality)) continue;
-    if (next.tick - seg.tick >= sig.ticksPerBar(seg.tick)) continue;
-    // C → C6 → C: a colour for a moment over a chord that comes back, not a chord being built up
-    const after = kept[i + 2];
-    if (after && after.tick === next.endTick && after.root === seg.root && after.quality === seg.quality) continue;
-    const blip = beatLen(seg.tick) / 8;
-    const inSeg = sources.filter((x) => x.note.tick < seg.endTick - blip && x.note.tick + x.note.durationTicks > seg.tick + blip);
-    if (inSeg.length === 0) continue;
-    const tones = TEMPLATES.find((x) => x.quality === next.quality)!.intervals.map((iv) => (next.root + iv) % 12);
-    if (!inSeg.every((x) => tones.includes(x.note.pitch % 12))) continue;
-    // still sounding after the boundary, or struck again right away (an up-and-down arpeggio repeats
-    // a tone: that is not letting it go)
-    const goesOn = (x: Source): boolean => {
-      const end = x.note.tick + x.note.durationTicks;
-      if (end >= next.tick + blip) return true;
-      return sources.some((y) => y !== x && y.note.pitch === x.note.pitch && Math.abs(y.note.tick - end) <= blip && y.note.tick + y.note.durationTicks >= next.tick + blip);
+  // segment goes into the chord after it when
+  //   - it is a step of a build-up: a note was added in it within a beat of the next chord, and the
+  //     whole build-up (up to where the full chord arrives) stays inside one bar. A chord held for
+  //     longer before a tone is added (C struck on 1, + Bb on 4: C → C7) or over a bar line (the next
+  //     bar's chord struck on 4 and held: an anticipation, named by the rules above) stays two;
+  //   - every note sounding in it is a tone of that chord;
+  //   - every one of them goes on sounding into it, or is struck again right away (an up-and-down
+  //     arpeggio repeats a tone), possibly several times: notes are only added, none is let go (a line
+  //     cliché C → Cmaj7 releases the C and stays two);
+  //   - nothing lower than its lowest note starts before the bar ends (the bass stays: C → Am7 with a
+  //     new A in the bass stays two);
+  //   - the chord after that is not the segment's own chord again (C → C6 → C is a colour).
+  {
+    const barStart = (tick: number) => Math.round(sig.barBeatToTick(sig.tickToBarBeat(tick).bar));
+    // the notes touching a bar, collected once per bar that has a candidate
+    const inBar = new Map<number, Source[]>();
+    const notesOfBar = (bar: number): Source[] => {
+      let list = inBar.get(bar);
+      if (!list) {
+        const end = bar + sig.ticksPerBar(bar);
+        list = sources.filter((x) => x.note.tick < end && x.note.tick + x.note.durationTicks > bar);
+        inBar.set(bar, list);
+      }
+      return list;
     };
-    if (!inSeg.every(goesOn)) continue;
-    const low = Math.min(...inSeg.map((x) => x.note.pitch));
-    if (sources.some((x) => x.note.tick >= next.tick && x.note.tick < next.endTick && x.note.pitch < low)) continue;
-    next.tick = seg.tick;
-    kept.splice(i, 1);
+    /** where the full chord of a merged segment arrived (its own start before any merge) */
+    const fullAt = new Map<ChordSegment, number>();
+    for (let i = kept.length - 2; i >= 0; i--) {
+      const seg = kept[i];
+      const next = kept[i + 1];
+      if (next.tick !== seg.endTick || (next.root === seg.root && next.quality === seg.quality)) continue;
+      const beat = beatLen(seg.tick);
+      const full = fullAt.get(next) ?? next.tick;
+      const bar = barStart(seg.tick);
+      if (barStart(full) !== bar) continue;
+      const after = kept[i + 2];
+      if (after && after.tick === next.endTick && after.root === seg.root && after.quality === seg.quality) continue;
+      const blip = beat / 8;
+      const notes = notesOfBar(bar);
+      const inSeg = notes.filter((x) => x.note.tick < seg.endTick - blip && x.note.tick + x.note.durationTicks > seg.tick + blip);
+      if (inSeg.length === 0 || !inSeg.every((x) => isTone(next.root, next.quality, x.note.pitch % 12))) continue;
+      // still building: the last note added in it starts within a beat of the next chord
+      const lastAdded = Math.max(...inSeg.filter((x) => x.note.tick >= seg.tick - blip).map((x) => x.note.tick), -Infinity);
+      if (lastAdded < next.tick - beat - blip) continue;
+      // still sounding past the boundary, following the chain of strikes of the same pitch
+      const goesOn = (x: Source): boolean => {
+        let cur = x;
+        for (let guard = 0; guard < 64; guard++) {
+          const end = cur.note.tick + cur.note.durationTicks;
+          if (end >= next.tick + blip) return true;
+          const again = notes.find((y) => y !== cur && y.note.pitch === cur.note.pitch && Math.abs(y.note.tick - end) <= blip && y.note.tick > cur.note.tick);
+          if (!again) return false;
+          cur = again;
+        }
+        return false;
+      };
+      if (!inSeg.every(goesOn)) continue;
+      const low = Math.min(...inSeg.map((x) => x.note.pitch));
+      const barEnd = bar + sig.ticksPerBar(bar);
+      if (notes.some((x) => x.note.tick >= next.tick && x.note.tick < barEnd && x.note.pitch < low)) continue;
+      // the merged chord starts here, over the bass of the build-up (its lowest note, which stays), and
+      // is spelled for this position (a key change may fall in between)
+      const bassPc = low % 12;
+      next.tick = seg.tick;
+      next.bass = bassPc !== next.root && isTone(next.root, next.quality, bassPc) ? bassPc : null;
+      next.name = chordName(next.root, next.quality, next.bass, sharpsFlatsAt(seg.tick));
+      fullAt.set(next, full);
+      kept.splice(i, 1);
+    }
   }
   // a chord struck again by a chord part on a bar line is named again there (Ebmaj7 | Ebmaj7: the
   // chord chart of the bar). When it began less than about a beat before the bar line (strings
@@ -872,8 +913,7 @@ export function analyzeChords(project: MidiProject): ChordSegment[] {
     const bi = lastAtOrBefore(beatStarts, bar);
     const beat = bi >= 0 && bar < beats[bi].endTick ? beats[bi] : undefined;
     if (!beat) return { ...seg, tick: bar }; // no beat there: keep the name (never another beat's bass)
-    const t = TEMPLATES.find((x) => x.quality === seg.quality)!;
-    const bass = beat.bassPc !== null && beat.bassPc !== seg.root && t.intervals.includes((beat.bassPc - seg.root + 12) % 12) ? beat.bassPc : null;
+    const bass = beat.bassPc !== null && beat.bassPc !== seg.root && isTone(seg.root, seg.quality, beat.bassPc) ? beat.bassPc : null;
     return { ...seg, tick: bar, bass, name: chordName(seg.root, seg.quality, bass, sharpsFlatsAt(bar)) };
   };
   for (const { bar, at } of strikes) {
