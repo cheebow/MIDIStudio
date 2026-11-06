@@ -12,7 +12,7 @@ import { looseNoteCount, withoutLooseNotes } from '../core/model/looseNotes';
 import { createStarterProject } from '../core/model/defaults';
 import type { MidiProject } from '../core/model/types';
 import { SMF_LIMITS, type ImportIssue } from '../core/smf/types';
-import { addEvents, addTrack, channelInsertIndex, deleteClips, deleteEvents, duplicateEvents, duplicateTrack, moveEvents, removeTrack, mergeClips, splitClip, updateEvents } from '../core/editing/operations';
+import { addEvents, addTrack, channelInsertIndex, freeChannel, deleteClips, deleteEvents, duplicateEvents, duplicateTrack, moveEvents, removeTrack, mergeClips, splitClip, updateEvents } from '../core/editing/operations';
 import { copyClips, copyEvents, duplicateClips, pasteClips, tracksRelativeTo, pasteEvents } from '../core/editing/clipboard';
 import type { Command } from '../core/editing/history';
 import type { Selection } from '../core/editing/selection';
@@ -28,6 +28,8 @@ import { SAMPLE_SONGS, sampleUrl } from './samples';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { buildMenus } from './menus';
 import { AppDialogs, type DialogKind } from './dialogs/AppDialogs';
+import { chordCandidatesAt } from '../core/guitar/chordContext';
+import { sharedChords } from '../ui/hooks';
 import { errorText } from './errorText';
 import { TransportBar } from './TransportBar';
 import { InputModeSwitch } from './InputModeSwitch';
@@ -125,8 +127,10 @@ export default function App() {
   const lang = useLocale(); // the shell is keyed on it: a language change re-mounts the UI with the new texts
 
   // Transport follows committed content changes only (view settings do not reload the engine).
+  // It plays what the views show, a transform preview included (ADR-077 / 092); store.project is
+  // the song without the preview.
   useEffect(() => {
-    void transport.setProject(store.project);
+    void transport.setProject(store.getState().project);
   }, [state.revision, store, transport]);
 
   useEffect(() => {
@@ -176,9 +180,10 @@ export default function App() {
     // Serializing a large song takes tens of ms on the main thread (docs/PERFORMANCE.md), so it
     // runs when the browser is idle; the timeout keeps it from being postponed forever.
     let idle: number | null = null;
+    if (store.getState().previewBase) return; // a transform preview (ADR-077 / 092) is not content
     const save = () => {
       idle = null;
-      const p = store.project;
+      const p = store.committedProject;
       db.saveAutosave({ id: p.id, title: p.title, savedAt: new Date().toISOString(), json: serializeProject(p) }).catch((e: unknown) => {
         setError(e instanceof StorageError ? t('自動保存できませんでした: {message}', { message: t(e.message) }) : String(e));
       });
@@ -197,7 +202,7 @@ export default function App() {
   useEffect(() => {
     const flush = () => {
       if (!store.getState().dirty) return;
-      const p = store.project;
+      const p = store.committedProject;
       void db.saveAutosave({ id: p.id, title: p.title, savedAt: new Date().toISOString(), json: serializeProject(p) }).catch(() => undefined);
     };
     const onVisibility = () => document.visibilityState === 'hidden' && flush();
@@ -485,6 +490,17 @@ export default function App() {
     quantizeDialog: () => setDialog('quantize'),
     humanizeDialog: () => setDialog('humanize'),
     velocityDialog: () => setDialog('velocity'),
+    performDialog: (kind) => setDialog({ perform: kind }),
+    guitarVoicing: ({ trackId, tick, returnFocus }) => {
+      // the analysis is read here, at the right-click, and only while the chord names are shown (ADR-091)
+      const p = store.project;
+      const candidates = p.settings.showChords ? chordCandidatesAt(sharedChords(p), tick) : [];
+      setDialog({ guitar: { trackId, tick: Math.max(0, Math.round(tick)), candidates, returnFocus } });
+    },
+    guitarProgression: ({ trackId, tick, returnFocus }) => {
+      const p = store.project;
+      setDialog({ progression: { trackId, tick: Math.max(0, Math.round(tick)), loop: { startTick: p.loop.startTick, endTick: p.loop.endTick }, chords: p.settings.showChords ? sharedChords(p) : [], returnFocus } });
+    },
     transpose: (d: number) => tryRun(() => store.run(moveEvents(store.project, store.getState().selection.eventIds, 0, d, '移調'))),
     noteLength: () =>
       tryRun(() =>
@@ -516,8 +532,7 @@ export default function App() {
         for (const id of targets) store.run(splitClip(store.project, id, tick), { mergeKey });
       }),
     addTrack: () => {
-      const used = new Set(store.project.tracks.filter((t) => t.port === 'A').map((t) => t.channel));
-      const channel = [...Array(16).keys()].find((c) => c !== 9 && !used.has(c)) ?? 0;
+      const channel = freeChannel(store.project) ?? 0;
       const r = addTrack(store.project, { name: `Track ${store.project.tracks.length + 1}`, channel }, channelInsertIndex(store.project, 'A', channel));
       // a new track starts with a piano Program Change (one undo step together with the track)
       const after = { ...store.project, ...r.command.patch };
@@ -533,7 +548,7 @@ export default function App() {
     openHelp: () => setDialog('help'),
   });
 
-  const services: AppServices = { store, transport, adapter, input, step, recorder, audioReady: audioPhase === 'ready', reportError: setError };
+  const services: AppServices = { store, transport, adapter, input, step, recorder, audioReady: audioPhase === 'ready', ensureAudio, reportError: setError };
   const setMode = (m: InputMode) => input.setMode(m);
   const MODE_LABEL: Record<InputMode, string> = { 'edit-shortcuts': t('編集（ショートカット）'), 'piano-performance': t('PC 鍵盤'), 'drum-performance': t('ドラムパッド'), 'step-piano': t('ステップ（鍵盤）'), 'step-drums': t('ステップ（ドラム）') };
   const stepMode = inputState.mode === 'step-piano' || inputState.mode === 'step-drums';

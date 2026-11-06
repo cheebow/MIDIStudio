@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { EditorStore } from '../../src/app/store/EditorStore';
 import { createEmptyProject } from '../../src/core/model/defaults';
-import { addEvents, addTrack } from '../../src/core/editing/operations';
+import { addEvents, addTrack, updateEvents, type NewEvent } from '../../src/core/editing/operations';
 import { mergeTracks } from '../../src/core/editing/trackMerge';
+import type { MidiProject } from '../../src/core/model/types';
 
 describe('EditorStore (shared editing state, CLAUDE.md rule 5)', () => {
   it('edits are undoable and mark the song unsaved; view settings are neither', () => {
@@ -97,5 +98,138 @@ describe('new project defaults', () => {
       [true, false],
       [false, true],
     ]);
+  });
+});
+
+describe('EditorStore preview (ADR-077)', () => {
+  const noteAt = (tick: number): NewEvent => ({ kind: 'note', tick, pitch: 60, velocity: 100, durationTicks: 100, releaseVelocity: 64 });
+  const setup = () => {
+    const s = new EditorStore(createEmptyProject());
+    const r = addEvents(s.project, s.project.tracks[0].id, [noteAt(0)])!;
+    s.run(r.command);
+    s.markSaved();
+    return { s, id: r.ids[0] };
+  };
+  /** the velocity the views show (the preview included) */
+  const velocityOf = (s: EditorStore, id: string) => (s.getState().project.tracks[0].events.find((e) => e.id === id) as { velocity: number }).velocity;
+  const setVelocity = (v: number) => (base: MidiProject, id: string) => updateEvents(base, [{ id, changes: { velocity: v } }], 'test');
+
+  it('shows the transform in `project` without touching history, dirty or the committed project', () => {
+    const { s, id } = setup();
+    const committed = s.project;
+    s.preview((b) => setVelocity(50)(b, id));
+    expect(velocityOf(s, id)).toBe(50);
+    expect(s.committedProject).toBe(committed);
+    expect(s.getState().previewBase).toBe(committed);
+    expect(s.getState().dirty).toBe(false);
+    expect(s.getState().history.past.length).toBe(1);
+    // a second preview is computed from the same base, not on top of the first
+    s.preview((b) => {
+      expect(b).toBe(committed);
+      return setVelocity(70)(b, id);
+    });
+    expect(velocityOf(s, id)).toBe(70);
+    s.cancelPreview();
+    expect(s.getState().project).toBe(committed);
+    expect(s.getState().previewBase).toBeNull();
+    expect(velocityOf(s, id)).toBe(100);
+  });
+
+  it('commitPreview applies one undo step built from the committed project and selects the result', () => {
+    const { s, id } = setup();
+    s.preview((b) => setVelocity(50)(b, id));
+    s.commitPreview((b) => ({ command: setVelocity(60)(b, id), select: [id] }));
+    expect(velocityOf(s, id)).toBe(60);
+    expect(s.getState().previewBase).toBeNull();
+    expect(s.getState().dirty).toBe(true);
+    expect(s.getState().history.past.length).toBe(2);
+    expect([...s.getState().selection.eventIds]).toEqual([id]);
+    s.undo();
+    expect(velocityOf(s, id)).toBe(100);
+    s.redo();
+    expect(velocityOf(s, id)).toBe(60);
+  });
+
+  it('any other change drops the preview first, so a stale preview never overwrites it', () => {
+    const { s, id } = setup();
+    s.preview((b) => setVelocity(50)(b, id));
+    s.run(updateEvents(s.committedProject, [{ id, changes: { pitch: 62 } }], 'other'));
+    expect(s.getState().previewBase).toBeNull();
+    const n = s.getState().project.tracks[0].events.find((e) => e.id === id) as { pitch: number; velocity: number };
+    expect(n).toMatchObject({ pitch: 62, velocity: 100 });
+    s.preview((b) => setVelocity(50)(b, id));
+    s.undo();
+    expect(s.getState().previewBase).toBeNull();
+    expect(velocityOf(s, id)).toBe(100);
+    s.preview((b) => setVelocity(50)(b, id));
+    s.updateSettings({ snapTicks: 1 });
+    expect(s.getState().previewBase).toBeNull();
+    expect(velocityOf(s, id)).toBe(100);
+    expect(s.project.settings.snapTicks).toBe(1);
+    s.preview((b) => setVelocity(50)(b, id));
+    s.load(createEmptyProject());
+    expect(s.getState().previewBase).toBeNull();
+  });
+
+  it('store.project is the real song during a preview: an edit built from it (recording, step input) never saves the preview', () => {
+    const { s, id } = setup();
+    const committed = s.project;
+    s.preview((b) => setVelocity(50)(b, id));
+    expect(s.project).toBe(committed);
+    expect(velocityOf(s, id)).toBe(50);
+    // what the recorder does: build a command from store.project, run it
+    const rec = addEvents(s.project, s.project.tracks[0].id, [noteAt(480)])!;
+    s.run(rec.command);
+    expect(s.getState().previewBase).toBeNull();
+    expect(velocityOf(s, id)).toBe(100);
+    expect(s.getState().project.tracks[0].events.filter((e) => e.kind === 'note').length).toBe(2);
+    // the preview of the dialog is rebuilt on the new song, once
+    s.preview((b) => setVelocity(50)(b, id));
+    s.commitPreview((b) => ({ command: setVelocity(50)(b, id) }));
+    expect(velocityOf(s, id)).toBe(50);
+    s.undo();
+    expect(velocityOf(s, id)).toBe(100);
+  });
+
+  it('dropping a preview tells the listeners and moves the revision (a failed apply, a settings change)', () => {
+    const { s, id } = setup();
+    let calls = 0;
+    s.subscribe(() => calls++);
+    s.preview((b) => setVelocity(50)(b, id));
+    const rev = s.getState().revision;
+    calls = 0;
+    expect(() =>
+      s.commitPreview(() => {
+        throw new Error('boom');
+      }),
+    ).toThrow('boom');
+    expect(s.getState().previewBase).toBeNull();
+    expect(velocityOf(s, id)).toBe(100);
+    expect(calls).toBeGreaterThan(0);
+    expect(s.getState().revision).toBeGreaterThan(rev);
+    // a settings change during a preview: the Transport (following the revision) reloads the real song
+    s.preview((b) => setVelocity(50)(b, id));
+    const rev2 = s.getState().revision;
+    s.updateSettings({ snapTicks: 2 });
+    expect(s.getState().previewBase).toBeNull();
+    expect(s.getState().revision).toBeGreaterThan(rev2);
+    // a command that changes nothing still ends the preview visibly
+    s.preview((b) => setVelocity(50)(b, id));
+    calls = 0;
+    s.run(updateEvents(s.project, [{ id, changes: { velocity: 100 } }], 'same'));
+    expect(velocityOf(s, id)).toBe(100);
+    expect(calls).toBeGreaterThan(0);
+  });
+
+  it('a null command previews the base; cancel without a preview is a no-op', () => {
+    const { s } = setup();
+    const before = s.getState();
+    s.cancelPreview();
+    expect(s.getState()).toBe(before);
+    s.preview(() => null);
+    expect(s.project).toBe(before.project);
+    expect(s.getState().previewBase).toBe(before.project);
+    s.cancelPreview();
+    expect(s.project).toBe(before.project);
   });
 });

@@ -11,20 +11,40 @@ import { SysExInspector } from '../../ui/inspector/SysExInspector';
 import { QuantizeDialog } from '../../ui/editing/QuantizeDialog';
 import { HumanizeDialog } from '../../ui/editing/HumanizeDialog';
 import { VelocityDialog } from '../../ui/editing/VelocityDialog';
+import { StrumDialog } from '../../ui/perform/StrumDialog';
+import { ArpeggioDialog } from '../../ui/perform/ArpeggioDialog';
+import { LegatoDialog } from '../../ui/perform/LegatoDialog';
+import { VelocityShaperDialog } from '../../ui/perform/VelocityShaperDialog';
+import { GuitarVoicingDialog, type GuitarVoicingRequest } from '../../ui/editing/GuitarVoicingDialog';
+import { GuitarProgressionDialog, type GuitarProgressionRequest } from '../../ui/editing/GuitarProgressionDialog';
 import { ExportWavDialog } from '../../ui/export/ExportWavDialog';
-import { useEditorState, useServices } from '../store/context';
+import { useEditorState, useServices, type PerformKind } from '../store/context';
 import { AboutDialog } from './HelpDialogs';
 import { HelpDialog } from '../help/HelpDialog';
 import { tutorialChapters } from '../help/tutorial';
 import { t } from '../../i18n';
 
-export type DialogKind = null | 'issues' | 'recent' | 'shortcuts' | 'about' | 'compat' | 'diagnostics' | 'keys' | 'record' | 'midi' | 'sysex' | 'quantize' | 'humanize' | 'velocity' | 'wav' | 'help' | 'tutorial' | { confirm: string; onYes: () => void };
+export type DialogKind = null | 'issues' | 'recent' | 'shortcuts' | 'about' | 'compat' | 'diagnostics' | 'keys' | 'record' | 'midi' | 'sysex' | 'quantize' | 'humanize' | 'velocity' | 'wav' | 'help' | 'tutorial' | { confirm: string; onYes: () => void } | { guitar: GuitarVoicingRequest } | { progression: GuitarProgressionRequest } | { perform: PerformKind };
 
 export function AppDialogs({ dialog, setDialog, issues, recent, openRecent, midi, onMidiChange, features, soundFont }: { dialog: DialogKind; setDialog: (d: DialogKind) => void; issues: ImportIssue[]; recent: ProjectSummary[]; openRecent: (id: string) => void; midi: MidiInputAdapter; onMidiChange: () => void; features: BrowserFeatures; soundFont: ArrayBuffer | null }) {
   const { store, input, adapter } = useServices();
   const { project } = useEditorState();
   const close = () => setDialog(null);
   if (!dialog) return null;
+  if (typeof dialog === 'object' && 'perform' in dialog) {
+    switch (dialog.perform) {
+      case 'strum':
+        return <StrumDialog onClose={close} />;
+      case 'arpeggio':
+        return <ArpeggioDialog onClose={close} />;
+      case 'legato':
+        return <LegatoDialog onClose={close} />;
+      case 'velocity-shaper':
+        return <VelocityShaperDialog onClose={close} />;
+    }
+  }
+  if (typeof dialog === 'object' && 'progression' in dialog) return <GuitarProgressionDialog request={dialog.progression} onClose={close} />;
+  if (typeof dialog === 'object' && 'guitar' in dialog) return <GuitarVoicingDialog request={dialog.guitar} onClose={close} />;
   if (typeof dialog === 'object') {
     return (
       <Dialog title={t('確認')} onClose={close}>

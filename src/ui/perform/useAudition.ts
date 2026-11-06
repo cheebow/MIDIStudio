@@ -1,0 +1,45 @@
+// "試聴" for the performance dialogs: plays the song (with the preview) from the start of the
+// target notes and stops at their end, then returns to where the playhead was. The Transport stays
+// the only clock; a frame loop just polls its position (as usePlaybackPosition does).
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useServices } from '../../app/store/context';
+
+export function useAudition(): { playing: boolean; start: (startTick: number, endTick: number) => Promise<void>; stop: () => void } {
+  const { transport, ensureAudio } = useServices();
+  const [playing, setPlaying] = useState(false);
+  const frame = useRef<number | null>(null);
+  const before = useRef<{ tick: number; status: string } | null>(null);
+  const stop = useCallback(() => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    const b = before.current;
+    before.current = null;
+    if (!b) return;
+    if (b.status === 'stopped') transport.stop();
+    else if (transport.getState().status === 'playing') transport.pause();
+    transport.seek(b.tick);
+    setPlaying(false);
+  }, [transport]);
+  const start = useCallback(
+    async (startTick: number, endTick: number) => {
+      if (before.current) stop();
+      before.current = { tick: transport.getPosition().tick, status: transport.getState().status };
+      await ensureAudio();
+      await transport.play(startTick);
+      setPlaying(true);
+      const tick = () => {
+        transport.poll();
+        const p = transport.getPosition();
+        if (transport.getState().status !== 'playing' || p.tick >= endTick || p.tick < startTick - 1) {
+          stop();
+          return;
+        }
+        frame.current = requestAnimationFrame(tick);
+      };
+      frame.current = requestAnimationFrame(tick);
+    },
+    [transport, ensureAudio, stop],
+  );
+  useEffect(() => stop, [stop]);
+  return { playing, start, stop };
+}

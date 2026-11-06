@@ -127,6 +127,10 @@ export function buildMenus(d: MenuDeps): Menu[] {
             { label: t('ノート長をグリッド（{grid}）に揃える', { grid: gridLabel(settings.grid) }), action: actions.noteLength, disabled: noSel, reason: noSelReason() },
             { label: t('ヒューマナイズ…'), action: actions.humanizeDialog, disabled: !selectedTrack, reason: t('トラックがありません') },
             { label: t('ベロシティ…'), action: actions.velocityDialog, disabled: !selectedTrack, reason: t('トラックがありません') },
+            { label: t('ストラム…'), action: () => actions.performDialog('strum'), disabled: !selectedTrack, reason: t('トラックがありません') },
+            { label: t('アルペジオ…'), action: () => actions.performDialog('arpeggio'), disabled: !selectedTrack, reason: t('トラックがありません') },
+            { label: t('レガート調整…'), action: () => actions.performDialog('legato'), disabled: !selectedTrack, reason: t('トラックがありません') },
+            { label: t('ベロシティ・シェイパー…'), action: () => actions.performDialog('velocity-shaper'), disabled: !selectedTrack, reason: t('トラックがありません') },
           ],
         },
         {

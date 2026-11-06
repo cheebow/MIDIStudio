@@ -22,7 +22,7 @@ const NO_CHORDS: ChordSegment[] = [];
  * same tracks / clips / conductor / PPQ give the same result, so the song is analysed once per change.
  */
 let lastChords: { tracks: unknown; clips: unknown; conductor: unknown; ppq: number; segments: ChordSegment[] } | null = null;
-function sharedChords(project: MidiProject): ChordSegment[] {
+export function sharedChords(project: MidiProject): ChordSegment[] {
   const c = lastChords;
   if (c && c.tracks === project.tracks && c.clips === project.clips && c.conductor === project.conductor && c.ppq === project.ppq) return c.segments;
   const segments = analyzeChords(project);
