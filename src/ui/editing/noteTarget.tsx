@@ -3,13 +3,12 @@
 // reads the committed project, so a preview (ADR-077) never feeds its own notes back in.
 import { useMemo, useState } from 'react';
 import { selectedTrack } from '../../core/model/selectedTrack';
-import { useEditorState } from '../../app/store/context';
+import { useCommittedProject, useEditorState } from '../../app/store/context';
 import { t } from '../../i18n';
 
 export function useNoteTarget() {
-  const state = useEditorState();
-  const project = state.previewBase ?? state.project;
-  const selection = state.selection;
+  const project = useCommittedProject();
+  const selection = useEditorState().selection;
   const track = selectedTrack(project);
   const selectedNotes = useMemo(() => {
     const ids: string[] = [];

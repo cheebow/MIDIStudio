@@ -3,7 +3,7 @@
 import { useCallback, type ReactNode } from 'react';
 import type { MidiProject } from '../../core/model/types';
 import type { TransformResult } from '../../core/editing/perform/types';
-import { useEditorState, useServices } from '../../app/store/context';
+import { useCommittedProject, useServices } from '../../app/store/context';
 import { t } from '../../i18n';
 import { Dialog } from '../Dialog';
 import { useNoteTarget } from '../editing/noteTarget';
@@ -21,9 +21,8 @@ export function PerformDialog({ title, testId, compute, chords = true, children,
   onClose: () => void;
 }) {
   const { reportError, audioReady } = useServices();
-  const state = useEditorState();
   // the song without the preview: the target notes and their range are read from it
-  const committed = state.previewBase ?? state.project;
+  const committed = useCommittedProject();
   const { ids, fieldset } = useNoteTarget();
   const bound = useCallback((base: MidiProject) => compute(base, ids), [compute, ids]);
   const { result, error, apply, cancel } = usePerformPreview(bound);

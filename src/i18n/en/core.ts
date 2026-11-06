@@ -295,4 +295,5 @@ export const EN_CORE: Record<string, string> = {
   '長さは 1 Tick 以上にしてください': 'The length must be at least 1 tick',
   'ギターのフォームは 1〜6 音です': 'A guitar form has 1 to 6 notes',
   '挿入するノートがありません': 'There are no notes to insert',
+  'ポート A の空いているチャンネルがないため、新規トラックを作れません。既存のトラックを選んでください': 'No channel of port A is free, so a new track cannot be made. Choose an existing track.',
 };

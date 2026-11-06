@@ -4,14 +4,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MidiProject } from '../../core/model/types';
 import { EMPTY_RESULT, type TransformResult } from '../../core/editing/perform/types';
-import { useEditorState, useServices } from '../../app/store/context';
+import { useCommittedProject, useServices } from '../../app/store/context';
 
 export function usePerformPreview(compute: (base: MidiProject) => TransformResult): { result: TransformResult; error: string | null; apply: () => boolean; cancel: () => void } {
   const { store } = useServices();
-  const state = useEditorState();
   // the committed project: stays the same object while this dialog previews, changes when
   // something else edited the song (then the preview is rebuilt on top of the new content)
-  const base = state.previewBase ?? state.project;
+  const base = useCommittedProject();
   const computed = useMemo((): { result: TransformResult; error: string | null } => {
     try {
       return { result: compute(base), error: null };

@@ -12,7 +12,7 @@ import { looseNoteCount, withoutLooseNotes } from '../core/model/looseNotes';
 import { createStarterProject } from '../core/model/defaults';
 import type { MidiProject } from '../core/model/types';
 import { SMF_LIMITS, type ImportIssue } from '../core/smf/types';
-import { addEvents, addTrack, channelInsertIndex, deleteClips, deleteEvents, duplicateEvents, duplicateTrack, moveEvents, removeTrack, mergeClips, splitClip, updateEvents } from '../core/editing/operations';
+import { addEvents, addTrack, channelInsertIndex, freeChannel, deleteClips, deleteEvents, duplicateEvents, duplicateTrack, moveEvents, removeTrack, mergeClips, splitClip, updateEvents } from '../core/editing/operations';
 import { copyClips, copyEvents, duplicateClips, pasteClips, tracksRelativeTo, pasteEvents } from '../core/editing/clipboard';
 import type { Command } from '../core/editing/history';
 import type { Selection } from '../core/editing/selection';
@@ -127,8 +127,10 @@ export default function App() {
   const lang = useLocale(); // the shell is keyed on it: a language change re-mounts the UI with the new texts
 
   // Transport follows committed content changes only (view settings do not reload the engine).
+  // It plays what the views show, a transform preview included (ADR-077 / 092); store.project is
+  // the song without the preview.
   useEffect(() => {
-    void transport.setProject(store.project);
+    void transport.setProject(store.getState().project);
   }, [state.revision, store, transport]);
 
   useEffect(() => {
@@ -530,8 +532,7 @@ export default function App() {
         for (const id of targets) store.run(splitClip(store.project, id, tick), { mergeKey });
       }),
     addTrack: () => {
-      const used = new Set(store.project.tracks.filter((t) => t.port === 'A').map((t) => t.channel));
-      const channel = [...Array(16).keys()].find((c) => c !== 9 && !used.has(c)) ?? 0;
+      const channel = freeChannel(store.project) ?? 0;
       const r = addTrack(store.project, { name: `Track ${store.project.tracks.length + 1}`, channel }, channelInsertIndex(store.project, 'A', channel));
       // a new track starts with a piano Program Change (one undo step together with the track)
       const after = { ...store.project, ...r.command.patch };

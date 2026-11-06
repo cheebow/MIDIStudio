@@ -264,6 +264,9 @@ test('E-GTR-06: a typed progression goes in as one undo step; a chord without fo
   // the open forms are chosen first
   await expect(page.getByTestId('gp-form').first()).toHaveAttribute('data-frets', 'x32010');
   await expect(page.getByTestId('gp-insert')).toHaveText('挿入（2 コード）');
+  // typed rows use only the start of the range: a cleared end does not block them (review fix)
+  await page.getByTestId('gp-end').fill('');
+  await expect(page.getByTestId('gp-insert')).toBeEnabled();
   await page.getByTestId('gp-insert').click();
   await expect(page.getByTestId('guitar-progression-dialog')).toBeHidden();
   const smf = await exportedSmf(page);

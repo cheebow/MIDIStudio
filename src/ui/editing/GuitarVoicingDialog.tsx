@@ -14,7 +14,8 @@ import { CHORD_QUALITIES, chordSuffix, pcName, type ChordQuality } from '../../c
 import { formatChordSymbol, parseChordSymbol, type ChordSymbol } from '../../core/guitar/chordSymbol';
 import { formLabel, formsFor, fretsToPitches, pitchNames } from '../../core/guitar/voicing';
 import { GUITAR_QUALITIES, type PositionLabel } from '../../core/guitar/voicingCatalog';
-import { buildVoicingCommand, overlappingNotes, validateInsert } from '../../core/guitar/insertVoicing';
+import { buildVoicingCommand, NO_FREE_CHANNEL, overlappingNotes, validateInsert } from '../../core/guitar/insertVoicing';
+import { freeChannel } from '../../core/editing/operations';
 import type { ChordCandidate } from '../../core/guitar/chordContext';
 import { GuitarDiagram } from './GuitarDiagram';
 
@@ -134,7 +135,9 @@ export function GuitarVoicingDialog({ request, onClose }: { request: GuitarVoici
           ? t(lengthProblem)
           : target !== NEW_TRACK && !targetTrackId
             ? t('挿入先のトラックを選んでください')
-            : null);
+            : target === NEW_TRACK && freeChannel(project) === null
+              ? t(NO_FREE_CHANNEL)
+              : null);
 
   const insert = () => {
     if (reason || !form || tick === null) return;

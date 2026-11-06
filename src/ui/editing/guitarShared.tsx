@@ -2,7 +2,8 @@
 // close) and the target-track select (a melodic track or a new guitar track created on insert).
 import { useEffect, useRef } from 'react';
 import { useEditorState, useServices } from '../../app/store/context';
-import { freeChannel, GUITAR_PROGRAM } from '../../core/guitar/insertVoicing';
+import { GUITAR_PROGRAM } from '../../core/guitar/insertVoicing';
+import { freeChannel } from '../../core/editing/operations';
 import { t } from '../../i18n';
 
 export const NEW_TRACK = '__new__';
@@ -34,9 +35,12 @@ export function useVoicingPreview(targetTrackId: string | null, returnFocus?: HT
   const play = (pitches: readonly number[]) => {
     stop();
     const velocity = project.inputPresets.defaultVelocity;
+    // a new track previews on the channel it would get; none free: no new track, so nothing to preview
+    const channel = targetTrackId ? null : freeChannel(project);
+    if (!targetTrackId && channel === null) return;
     for (const p of pitches) {
       if (targetTrackId) transport.auditionNote(targetTrackId, p, velocity, PREVIEW_SOURCE);
-      else transport.auditionProgram('A', freeChannel(project), GUITAR_PROGRAM, p, velocity, PREVIEW_SOURCE);
+      else transport.auditionProgram('A', channel!, GUITAR_PROGRAM, p, velocity, PREVIEW_SOURCE);
     }
     timer.current = window.setTimeout(stop, PREVIEW_MS);
   };

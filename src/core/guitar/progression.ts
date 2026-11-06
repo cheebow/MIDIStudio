@@ -1,7 +1,8 @@
 // Chord progressions for the guitar-voicing progression dialog (ADR-091 追記). Rows come either from
 // the chord analysis (ADR-090) over a range, or from a typed progression in bar notation:
 //   "Cmaj7 | Am7 | Dm7 G7 | C"  — bars separated by "|" (or a new line), chords of one bar share it
-//   equally; without any "|", every chord is one bar. "%" (or "-") repeats the previous chord.
+//   equally; without any "|", every chord is one bar. "%" (or "-") repeats the previous chord, an
+//   empty bar between chords holds the previous one; bar lines before the first chord are ignored.
 // Bars are measured from the start tick with the time-signature map, so 3/4 and signature changes work.
 import type { ChordSegment } from '../theory/chords';
 import type { TimeSignatureMap } from '../timing/timeSignatureMap';
@@ -24,12 +25,11 @@ export function parseProgression(text: string, start: number, sig: TimeSignature
   const src = text.replace(/｜/g, '|').trim();
   if (src === '') return [];
   const barred = /[|\n]/.test(src);
-  const bars = barred
-    ? src
-        .split(/[|\n]/)
-        .map((b) => b.trim().split(/\s+/).filter(Boolean))
-        .filter((b, i, all) => b.length > 0 || (i > 0 && i < all.length - 1)) // "| C |" edges are not bars
-    : src.split(/\s+/).map((c) => [c]);
+  const bars = barred ? src.split(/[|\n]/).map((b) => b.trim().split(/\s+/).filter(Boolean)) : src.split(/\s+/).map((c) => [c]);
+  // empty bars before the first chord and after the last are only bar lines ("| | C | G |"): a held
+  // bar needs a chord to hold, so they never move the progression (ADR-092 review)
+  while (bars.length && bars[0].length === 0) bars.shift();
+  while (bars.length && bars[bars.length - 1].length === 0) bars.pop();
   const rows: ProgressionRow[] = [];
   let tick = Math.round(start);
   let prev: string | null = null;

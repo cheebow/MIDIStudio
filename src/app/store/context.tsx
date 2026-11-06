@@ -5,6 +5,7 @@ import type { SpessaAdapter } from '../../playback/SpessaAdapter';
 import type { InputController } from '../../input/InputController';
 import type { StepController } from '../recording/StepController';
 import type { Recorder } from '../recording/Recorder';
+import type { MidiProject } from '../../core/model/types';
 
 /** The performance-tool dialogs (ADR-092). */
 export type PerformKind = 'strum' | 'arpeggio' | 'legato' | 'velocity-shaper';
@@ -69,6 +70,12 @@ export function useEditActions(): EditActions {
   const a = useContext(EditActionsContext);
   if (!a) throw new Error('EditActionsContext missing');
   return a;
+}
+
+/** The song without a transform preview (ADR-077 / 092): what the tool dialogs compute from. */
+export function useCommittedProject(): MidiProject {
+  const s = useEditorState();
+  return s.previewBase ?? s.project;
 }
 
 export const ServicesContext = createContext<AppServices | null>(null);

@@ -749,6 +749,15 @@ export function sortTracksByChannel(project: MidiProject, label = 'トラック�
 }
 
 /** Index where a new track with this port / channel belongs in channel order (after equal ones). */
+/**
+ * First channel of `port` no track uses, skipping channel 10 (drums), or null when every one is taken
+ * (shared by トラックを追加 and the new guitar track, ADR-092 review).
+ */
+export function freeChannel(project: MidiProject, port = 'A'): number | null {
+  const used = new Set(project.tracks.filter((t) => t.port === port).map((t) => t.channel));
+  return [...Array(16).keys()].find((c) => c !== 9 && !used.has(c)) ?? null;
+}
+
 export function channelInsertIndex(project: MidiProject, port: string, channel: number): number {
   const key = portIndex(port) * 16 + channel;
   const i = project.tracks.findIndex((t) => portIndex(t.port) * 16 + t.channel > key);

@@ -6,7 +6,7 @@ import { formatChordSymbol, parseChordSymbol, type ChordSymbol } from '../../src
 import { GUITAR_FORMS, GUITAR_QUALITIES } from '../../src/core/guitar/voicingCatalog';
 import { formLabel, formsFor, fretsToPitches, pitchNames, MAX_FORMS, diagramBaseFret } from '../../src/core/guitar/voicing';
 import { chordCandidatesAt } from '../../src/core/guitar/chordContext';
-import { buildVoicingCommand, GUITAR_PROGRAM, overlappingNotes } from '../../src/core/guitar/insertVoicing';
+import { buildVoicingCommand, GUITAR_PROGRAM, NO_FREE_CHANNEL, overlappingNotes } from '../../src/core/guitar/insertVoicing';
 import { barsEnd, defaultProgressionRange, parseProgression, rowsFromChords } from '../../src/core/guitar/progression';
 import { createEmptyProject } from '../../src/core/model/defaults';
 import { createHistory, execute, redo, undo } from '../../src/core/editing/history';
@@ -14,7 +14,7 @@ import { analyzeChords, chordName, type ChordSegment } from '../../src/core/theo
 import { exportSmfBytes } from '../../src/core/project-io/exportSmf';
 import { openMidiFile } from '../../src/core/project-io/midiFile';
 import { TimeSignatureMap } from '../../src/core/timing/timeSignatureMap';
-import { addEvents } from '../../src/core/editing/operations';
+import { addEvents, addTrack, freeChannel } from '../../src/core/editing/operations';
 import type { MidiProject, NoteEvent } from '../../src/core/model/types';
 import { looseNoteIds } from '../../src/core/model/looseNotes';
 
@@ -355,5 +355,46 @@ describe('U-GTR-09: progressions', () => {
     expect(notes.filter((n) => n.tick === 0).map((n) => n.pitch).sort((a, b) => a - b)).toEqual([48, 52, 55, 60, 64]);
     expect(notes.filter((n) => n.tick === 1920).map((n) => n.pitch).sort((a, b) => a - b)).toEqual([43, 47, 50, 55, 59, 65]);
     expect(notesOf(undo(s1.project, s1.history).project, tr)).toEqual([]);
+  });
+});
+
+describe('U-GTR-10: review fixes (ADR-092 review)', () => {
+  const cmaj7 = fretsToPitches([-1, 3, 2, 0, 0, 0]);
+  it('a new guitar track inserted far into the song gets a clip around the chord, not from bar 1', () => {
+    const p0 = createEmptyProject();
+    const bar33 = 1920 * 32;
+    const r = buildVoicingCommand(p0, { target: { newTrack: { name: 'ギター' } }, chords: [{ tick: bar33, length: 1920, pitches: cmaj7 }], velocity: 100 });
+    const p = { ...p0, ...r.command.patch };
+    const clips = p.clips.filter((c) => c.trackId === r.trackId);
+    expect(clips.map((c) => [c.startTick, c.endTick])).toEqual([[bar33, bar33 + 1920]]);
+    expect(clips[0].eventIds.sort()).toEqual([...r.ids].sort());
+    // the Program Change is still at tick 0, and it is one undo step
+    expect(p.tracks.find((t) => t.id === r.trackId)!.events.find((e) => e.kind === 'program')).toMatchObject({ tick: 0, program: GUITAR_PROGRAM });
+    const s1 = execute(p0, createHistory(), r.command);
+    expect(undo(s1.project, s1.history).project.tracks.length).toBe(p0.tracks.length);
+  });
+  it('no free port-A channel: a new track is refused instead of sharing one (which would change that track\'s sound)', () => {
+    let p = createEmptyProject();
+    for (let ch = 1; ch < 16; ch++) if (ch !== 9) p = { ...p, ...addTrack(p, { name: `T${ch}`, channel: ch }).command.patch };
+    expect(freeChannel(p)).toBeNull();
+    expect(() => buildVoicingCommand(p, { target: { newTrack: { name: 'ギター' } }, chords: [{ tick: 0, length: 480, pitches: cmaj7 }], velocity: 100 })).toThrow(NO_FREE_CHANNEL);
+    // an existing track still works
+    expect(() => buildVoicingCommand(p, { target: { trackId: p.tracks[0].id }, chords: [{ tick: 0, length: 480, pitches: cmaj7 }], velocity: 100 })).not.toThrow();
+  });
+  it('bar lines before the first chord never move the progression', () => {
+    const sig44 = new TimeSignatureMap(480, [{ tick: 0, numerator: 4, denominator: 4 }]);
+    expect(parseProgression('| | C | G', 0, sig44).map((r) => [r.tick, r.text])).toEqual([
+      [0, 'C'],
+      [1920, 'G'],
+    ]);
+    expect(parseProgression('C | G | | |', 0, sig44).map((r) => [r.tick, r.length])).toEqual([
+      [0, 1920],
+      [1920, 1920],
+    ]);
+    // an empty bar between chords still holds the previous one
+    expect(parseProgression('C | | G', 0, sig44).map((r) => [r.tick, r.length, r.text])).toEqual([
+      [0, 3840, 'C'],
+      [3840, 1920, 'G'],
+    ]);
   });
 });

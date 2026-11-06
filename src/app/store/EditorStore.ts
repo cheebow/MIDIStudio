@@ -65,13 +65,19 @@ export class EditorStore {
     for (const l of this.listeners) l();
   }
 
+  /**
+   * The real (committed) project: what every edit, the recorder and saving work on. While a dialog
+   * previews a transform, the views and the Transport show `getState().project` (the preview) and
+   * this still returns the song without it, so a command built from it never carries the preview
+   * into the history (ADR-092 review).
+   */
   get project(): MidiProject {
-    return this.state.project;
+    return this.state.previewBase ?? this.state.project;
   }
 
-  /** The project without any preview applied (what gets saved). */
+  /** Same as `project` (kept for the callers that say "committed" explicitly). */
   get committedProject(): MidiProject {
-    return this.state.previewBase ?? this.state.project;
+    return this.project;
   }
 
   // ---------------------------------------------------------------- preview (ADR-077)
@@ -101,9 +107,13 @@ export class EditorStore {
     this.run(r.command, { select: r.select });
   }
 
-  /** Any other change of the project ends a preview first, so a stale preview never overwrites it. */
+  /**
+   * Any other change of the project ends a preview first, so a stale preview never overwrites it.
+   * Listeners are told and the revision moves, so the views and the Transport (which follows the
+   * revision) go back to the real song even when nothing else changes afterwards (ADR-092 review).
+   */
   private dropPreview(): void {
-    if (this.state.previewBase) this.state = { ...this.state, project: this.state.previewBase, previewBase: null };
+    if (this.state.previewBase) this.set({ project: this.state.previewBase, previewBase: null, revision: this.state.revision + 1 });
   }
 
   /** Applies an editing command as one undo step (or merged into the previous one by mergeKey). */

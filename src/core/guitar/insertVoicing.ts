@@ -1,12 +1,15 @@
 // Inserting a chosen guitar form (ADR-091) through the ordinary edit commands: notes go in with
 // addEvents (they join the clip they land in, or get one: ADR-060), and a new guitar track is created
 // in the same undo step as its Program Change and the notes. Nothing existing is replaced or deleted.
-import { addEvents, addTrack, channelInsertIndex, EditError } from '../editing/operations';
+import { addEvents, addTrack, channelInsertIndex, EditError, freeChannel } from '../editing/operations';
 import type { Command } from '../editing/history';
 import type { MidiProject } from '../model/types';
 
 /** GM Acoustic Guitar (steel), 0-based. */
 export const GUITAR_PROGRAM = 25;
+
+/** Shown when no port-A channel is free for a new guitar track. */
+export const NO_FREE_CHANNEL = 'ポート A の空いているチャンネルがないため、新規トラックを作れません。既存のトラックを選んでください';
 
 export type VoicingTarget = { trackId: string } | { newTrack: { name: string } };
 
@@ -21,12 +24,6 @@ export interface VoicingInsert {
   /** one chord (the voicing dialog) or a progression (ADR-091 追記) */
   chords: readonly VoicingChord[];
   velocity: number;
-}
-
-/** First port-A channel no track uses, skipping channel 10 (drums); 0 when all are taken. */
-export function freeChannel(project: MidiProject): number {
-  const used = new Set(project.tracks.filter((t) => t.port === 'A').map((t) => t.channel));
-  return [...Array(16).keys()].find((c) => c !== 9 && !used.has(c)) ?? 0;
 }
 
 export function validateInsert(tick: number, length: number): string | null {
@@ -50,12 +47,19 @@ export function buildVoicingCommand(project: MidiProject, req: VoicingInsert): {
     if (!r) throw new EditError('挿入するノートがありません');
     return { command: r.command, trackId: req.target.trackId, ids: r.ids };
   }
+  // a channel of its own: sharing one would turn that track's sound into a guitar for the whole song
   const channel = freeChannel(project);
+  if (channel === null) throw new EditError(NO_FREE_CHANNEL);
   const t = addTrack(project, { name: req.target.newTrack.name, channel }, channelInsertIndex(project, 'A', channel), label);
-  const after = { ...project, ...t.command.patch };
-  const r = addEvents(after, t.trackId, [{ kind: 'program', tick: 0, program: GUITAR_PROGRAM }, ...notes], { label });
+  let after = { ...project, ...t.command.patch };
+  // the Program Change first, on its own (it makes no clip), then the notes: added together, the
+  // clip made around them would reach back to bar 1 from a chord far into the song (ADR-092 review)
+  const pc = addEvents(after, t.trackId, [{ kind: 'program', tick: 0, program: GUITAR_PROGRAM }], { label });
+  if (!pc) throw new EditError('挿入するノートがありません');
+  after = { ...after, ...pc.command.patch };
+  const r = addEvents(after, t.trackId, notes, { label });
   if (!r) throw new EditError('挿入するノートがありません');
-  return { command: { label, patch: { ...t.command.patch, ...r.command.patch } }, trackId: t.trackId, ids: r.ids.slice(1) };
+  return { command: { label, patch: { ...t.command.patch, ...pc.command.patch, ...r.command.patch } }, trackId: t.trackId, ids: r.ids };
 }
 
 /** Notes of the track already sounding somewhere in [tick, tick + length): the dialog warns, nothing is replaced. */

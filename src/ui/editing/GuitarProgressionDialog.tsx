@@ -10,7 +10,8 @@ import { Dialog } from '../Dialog';
 import { useSignatureMap } from '../hooks';
 import { parseChordSymbol } from '../../core/guitar/chordSymbol';
 import { formLabel, formsFor, fretsToPitches, pitchNames } from '../../core/guitar/voicing';
-import { buildVoicingCommand } from '../../core/guitar/insertVoicing';
+import { buildVoicingCommand, NO_FREE_CHANNEL } from '../../core/guitar/insertVoicing';
+import { freeChannel } from '../../core/editing/operations';
 import { barsEnd, defaultProgressionRange, parseProgression, rowsFromChords, type ProgressionRow } from '../../core/guitar/progression';
 import type { ChordSegment } from '../../core/theory/chords';
 import { GuitarDiagram } from './GuitarDiagram';
@@ -113,7 +114,11 @@ export function GuitarProgressionDialog({ request, onClose }: { request: GuitarP
     setTextError(null);
   };
 
-  const reason = rangeError ?? (rows.length === 0 ? t('コード進行がありません') : ok.length === 0 ? t('入れられるコードがありません') : null);
+  // the range only matters for rows read from the chord detection (typed rows use just its start)
+  const rangeProblem = source === 'analysis' ? rangeError : start === null ? rangeError : null;
+  const reason =
+    rangeProblem ??
+    (rows.length === 0 ? t('コード進行がありません') : ok.length === 0 ? t('入れられるコードがありません') : target === NEW_TRACK && freeChannel(project) === null ? t(NO_FREE_CHANNEL) : null);
 
   const insert = () => {
     if (reason) return;
@@ -170,7 +175,7 @@ export function GuitarProgressionDialog({ request, onClose }: { request: GuitarP
             </button>
           )}
         </div>
-        {rangeError && <p className="note gv-warn">{rangeError}</p>}
+        {rangeProblem && <p className="note gv-warn">{rangeProblem}</p>}
         {!analysed && <p className="note">{t('コード名の推定がありません（表示 › コード名（推定）が OFF か、和音がありません）。コード進行を手で入力してください。')}</p>}
         <details className="gp-manual" open={!analysed}>
           <summary>{t('手で入力')}</summary>
