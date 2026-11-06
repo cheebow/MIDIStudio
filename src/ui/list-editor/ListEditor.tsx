@@ -23,7 +23,7 @@ import { eventChannel } from '../../core/events/order';
 import { isClassic48Lossless } from '../../core/timing/classic48';
 import { useEditActions, useEditorState, useServices } from '../../app/store/context';
 import { isSecondaryClick, useContextMenu } from '../menu/ContextMenu';
-import { noteMenuItems } from '../menu/editMenus';
+import { assistMenuItems, noteMenuItems } from '../menu/editMenus';
 import type { MenuItem } from '../menu/MenuBar';
 import { useSignatureMap } from '../hooks';
 import { selectedTrack } from '../../core/model/selectedTrack';
@@ -595,6 +595,7 @@ export function ListEditor() {
         { label: t('削除'), shortcut: 'Delete', action: () => store.run(deleteConductorEvent(store.project, r.id)) },
         { label: t('再生位置をここに移動'), action: () => transport.seek(r.tick) },
         { label: t('コンダクタートラックを開く'), action: () => store.updateSettings({ activePanel: 'tempo' }) },
+        ...assistAt(r.tick),
       ];
     }
     return [
@@ -607,7 +608,18 @@ export function ListEditor() {
       { separator: true, label: '' },
       { label: t('選択行の一括変更…'), disabled: selection.eventIds.size === 0, action: () => setBatchOpen(true) },
       { label: t('再生位置をここに移動'), action: () => transport.seek(r.tick) },
+      ...assistAt(r.tick),
     ];
+  }
+
+  /** 入力支援 at a tick of this track (ADR-091): a row gives its own tick, the empty area the insert position */
+  function assistAt(tick: number): MenuItem[] {
+    return track ? assistMenuItems(editActions, { trackId: track.id, tick, returnFocus: gridRef.current }) : [];
+  }
+
+  /** right-click below the rows (or on an empty track): insert at the cursor / step / play position */
+  function emptyMenu(): MenuItem[] {
+    return [{ label: t('挿入'), shortcut: 'Insert', items: insertMenuItems() }, ...pasteMenuItems(), ...assistAt(insertTick())];
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -771,7 +783,11 @@ export function ListEditor() {
               </div>
             ))}
           </div>
-          <div className="list-scroll" ref={scrollRef} onScroll={(e) => {
+          <div className="list-scroll" ref={scrollRef} onContextMenu={(e) => {
+            if ((e.target as HTMLElement).closest('.list-row')) return; // a row opens its own menu
+            gridRef.current?.focus();
+            ctxMenu.open(e, emptyMenu());
+          }} onScroll={(e) => {
             const { scrollTop, clientHeight } = e.currentTarget;
             setScroll({ top: scrollTop, h: clientHeight });
           }}>

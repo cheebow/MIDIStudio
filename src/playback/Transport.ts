@@ -448,6 +448,25 @@ export class Transport {
     this.engine.send([0x90 | ch, pitch, Math.max(1, Math.min(127, velocity))], port);
   }
 
+  /**
+   * Preview with a given program on a port / channel no track owns yet (the guitar-voicing dialog's
+   * "new guitar track", ADR-091). Only the preview synth hears the Program Change; a later audition on
+   * that channel sends the song's state again first. Released by releaseAllPreviews(sourceId).
+   */
+  auditionProgram(port: string, channel: number, program: number, pitch: number, velocity: number, sourceId: string): void {
+    if (!this.engine.ready) return;
+    const p = portIndex(port);
+    const ch = channel & 0x0f;
+    this.engine.send([0xb0 | ch, 0, 0], p);
+    this.engine.send([0xb0 | ch, 32, 0], p);
+    this.engine.send([0xc0 | ch, program & 0x7f], p);
+    const key = `${sourceId}:program:${pitch}`;
+    const prev = this.previewNotes.get(key);
+    if (prev) this.engine.send([0x80 | prev[1], prev[2], 0], prev[0]);
+    this.previewNotes.set(key, [p, ch, pitch]);
+    this.engine.send([0x90 | ch, pitch, Math.max(1, Math.min(127, velocity))], p);
+  }
+
   releaseAuditionNote(trackId: string, pitch: number, sourceId = 'default'): void {
     const key = `${sourceId}:${trackId}:${pitch}`;
     const held = this.previewNotes.get(key);

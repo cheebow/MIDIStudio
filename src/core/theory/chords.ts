@@ -391,6 +391,14 @@ export function pcName(pc: number, sharpsFlats: number): string {
   return (FLAT_DEGREES.has(degree) ? NOTE_FLAT : NOTE_SHARP)[p];
 }
 
+/** Every chord quality the analysis can name, in template order (ADR-091: the guitar-voicing dialog lists them). */
+export const CHORD_QUALITIES: readonly ChordQuality[] = TEMPLATES.map((x) => x.quality);
+
+/** The suffix written after the root for a quality ('' for major, 'm7(b5)' for m7b5...). */
+export function chordSuffix(quality: ChordQuality): string {
+  return TEMPLATES.find((x) => x.quality === quality)?.suffix ?? '';
+}
+
 /** Without a key the bass follows the root's side: E/G# (not E/Ab), Eb/Bb (not Eb/A#). */
 const SHARP_SIDE_ROOTS = new Set([1, 2, 4, 6, 9, 11]); // C# D E F# A B
 const FLAT_SIDE_ROOTS = new Set([3, 5, 8, 10]); // Eb F Ab Bb

@@ -1,7 +1,7 @@
 // Menu bar (UI_DESIGN 2). Unavailable items are disabled with the reason as a tooltip. An item
 // with `items` is a submenu (ADR-041): it opens on hover / click / →, and closes with ← or when
 // another item of the parent menu is hovered. Keyboard: ↑↓ move, Enter activates, Esc closes.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { t } from '../../i18n';
 
 export interface MenuItem {
@@ -114,6 +114,14 @@ export function MenuList({ items, onClose, onLeft, sub = false, autoFocusFirst =
   useEffect(() => {
     if (autoFocusFirst) listRef.current?.querySelector<HTMLButtonElement>(ITEM_BUTTONS)?.focus();
   }, [autoFocusFirst]);
+  // A submenu opened near the bottom of the window is pulled up so its last items stay reachable
+  // (the input-assist submenu of a right-click low in the piano roll ran off the screen, ADR-092).
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!sub || !el || el.style.position !== 'fixed') return;
+    const r = el.getBoundingClientRect();
+    if (r.bottom > window.innerHeight - 8) el.style.top = `${Math.max(8, window.innerHeight - 8 - r.height)}px`;
+  }, [sub]);
   const hover = (k: number | null) => {
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
     hoverTimer.current = setTimeout(() => {

@@ -1,6 +1,6 @@
 // The single editing state shared by every editor (CLAUDE.md rule 5): one MidiProject, one
 // history, one selection. React components subscribe with useEditor().
-import { createHistory, execute, redo, undo, canRedo, canUndo, type Command, type History } from '../../core/editing/history';
+import { applyCommand, createHistory, execute, redo, undo, canRedo, canUndo, type Command, type History } from '../../core/editing/history';
 import { EMPTY_SELECTION, pruneSelection, type Selection } from '../../core/editing/selection';
 import type { ClipboardData } from '../../core/editing/clipboard';
 import type { MidiProject, ProjectViewSettings } from '../../core/model/types';
@@ -25,6 +25,11 @@ export interface EditorState {
    * Not saved; the editor of `trackId` scrolls to `tick` and clears it with takeReveal().
    */
   reveal: { trackId: string; tick: number } | null;
+  /**
+   * While a dialog previews a transform (ADR-077), `project` shows the result and this holds the
+   * real (committed) project. null = no preview. Autosave and the dialogs read `committedProject`.
+   */
+  previewBase: MidiProject | null;
 }
 
 type Listener = () => void;
@@ -44,6 +49,7 @@ export class EditorStore {
       clipboard: null,
       revision: 0,
       reveal: null,
+      previewBase: null,
     };
   }
 
@@ -63,9 +69,47 @@ export class EditorStore {
     return this.state.project;
   }
 
+  /** The project without any preview applied (what gets saved). */
+  get committedProject(): MidiProject {
+    return this.state.previewBase ?? this.state.project;
+  }
+
+  // ---------------------------------------------------------------- preview (ADR-077)
+
+  /**
+   * Shows `build(base)` applied to the committed project in every view and the transport, without
+   * touching the history, the unsaved flag or the selection. Calling it again replaces the preview
+   * (always computed from the same base, so nothing accumulates). A null command shows the base.
+   */
+  preview(build: (base: MidiProject) => Command | null): void {
+    const base = this.committedProject;
+    const cmd = build(base);
+    const project = cmd ? applyCommand(base, cmd).project : base;
+    this.set({ project, previewBase: base, revision: this.state.revision + 1 });
+  }
+
+  /** Removes the preview; the committed project shows again. No-op without a preview. */
+  cancelPreview(): void {
+    if (!this.state.previewBase) return;
+    this.set({ project: this.state.previewBase, previewBase: null, revision: this.state.revision + 1 });
+  }
+
+  /** Drops the preview and applies `build(base)` as one undo step (selecting `select` if given). */
+  commitPreview(build: (base: MidiProject) => { command: Command | null; select?: Iterable<string> }): void {
+    this.dropPreview();
+    const r = build(this.state.project);
+    this.run(r.command, { select: r.select });
+  }
+
+  /** Any other change of the project ends a preview first, so a stale preview never overwrites it. */
+  private dropPreview(): void {
+    if (this.state.previewBase) this.state = { ...this.state, project: this.state.previewBase, previewBase: null };
+  }
+
   /** Applies an editing command as one undo step (or merged into the previous one by mergeKey). */
   run(cmd: Command | null | undefined, opts: { mergeKey?: string; select?: Iterable<string> } = {}): void {
     if (!cmd) return;
+    this.dropPreview();
     const r = execute(this.state.project, this.state.history, cmd, { mergeKey: opts.mergeKey });
     if (r.project === this.state.project) return;
     this.forgetFlagEdits(this.state.project, r.project);
@@ -113,12 +157,14 @@ export class EditorStore {
 
   undo(): void {
     if (!canUndo(this.state.history)) return;
+    this.dropPreview();
     const r = undo(this.state.project, this.state.history);
     this.set({ project: this.keepTrackFlags(r.project), history: r.history, selection: pruneSelection(this.state.selection, r.project), dirty: true, lastAction: r.label ? t('元に戻す: {label}', { label: t(r.label) }) : null, revision: this.state.revision + 1 });
   }
 
   redo(): void {
     if (!canRedo(this.state.history)) return;
+    this.dropPreview();
     const r = redo(this.state.project, this.state.history);
     this.set({ project: this.keepTrackFlags(r.project), history: r.history, selection: pruneSelection(this.state.selection, r.project), dirty: true, lastAction: r.label ? t('やり直し: {label}', { label: t(r.label) }) : null, revision: this.state.revision + 1 });
   }
@@ -126,7 +172,7 @@ export class EditorStore {
   /** Replaces the whole project (new / open / import). Clears history and selection. */
   load(project: MidiProject, opts: { dirty?: boolean } = {}): void {
     this.flagEdits.clear();
-    this.set({ project, history: createHistory(), selection: EMPTY_SELECTION, dirty: opts.dirty ?? false, lastAction: null, revision: this.state.revision + 1 });
+    this.set({ project, previewBase: null, history: createHistory(), selection: EMPTY_SELECTION, dirty: opts.dirty ?? false, lastAction: null, revision: this.state.revision + 1 });
   }
 
   markSaved(): void {
@@ -167,6 +213,7 @@ export class EditorStore {
    * not undo steps and do not mark the song as edited.
    */
   updateSettings(patch: Partial<ProjectViewSettings>): void {
+    this.dropPreview();
     const prev = this.state.project;
     const settings = { ...prev.settings, ...patch };
     this.set({ project: { ...prev, settings } });
@@ -174,6 +221,7 @@ export class EditorStore {
 
   /** Mute / solo: saved with the project (so the song becomes unsaved) but not undo steps. */
   setTrackFlags(trackId: string, flags: Partial<Pick<MidiProject['tracks'][number], 'mute' | 'solo'>>): void {
+    this.dropPreview();
     const tracks = this.state.project.tracks.map((t) => (t.id === trackId ? { ...t, ...flags } : t));
     this.flagEdits.set(trackId, { ...this.flagEdits.get(trackId), ...flags });
     this.set({ project: { ...this.state.project, tracks }, dirty: true, revision: this.state.revision + 1 });
@@ -181,11 +229,13 @@ export class EditorStore {
 
   /** Key maps / velocities: saved with the project (unsaved flag), not undo steps. */
   setInputPresets(inputPresets: MidiProject['inputPresets']): void {
+    this.dropPreview();
     this.set({ project: { ...this.state.project, inputPresets }, dirty: true });
   }
 
   /** Loop range: saved with the project, not an undo step. */
   setLoop(loop: MidiProject['loop']): void {
+    this.dropPreview();
     this.set({ project: { ...this.state.project, loop }, dirty: true, revision: this.state.revision + 1 });
   }
 }

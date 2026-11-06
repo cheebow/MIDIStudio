@@ -8,7 +8,7 @@ import type { MidiTrack, NoteEvent } from '../../core/model/types';
 import { useEditActions, useEditorState, useServices } from '../../app/store/context';
 import { t } from '../../i18n';
 import { isSecondaryClick, useContextMenu } from '../menu/ContextMenu';
-import { emptyMenuItems, noteMenuItems } from '../menu/editMenus';
+import { assistMenuItems, emptyMenuItems, noteMenuItems } from '../menu/editMenus';
 import { barPageScrollLeft, conductorMarks, drawChordStrip, drawLoopRuler, drawPlayhead, drawRulerConductorMarks, drawStepCursor, fitCanvas, isBlackKey, pitchName, readTheme } from '../canvas';
 import { ControllerLane } from './ControllerLane';
 import { NoteInfoBar } from '../editing/NoteInfoBar';
@@ -415,11 +415,13 @@ export function PianoRoll() {
     const tick = snap(toTick(x));
     if (y < TOP) return ctxMenu.open(e, [{ label: t('再生位置をここに移動'), action: () => transport.seek(tick) }]);
     const n = hit(x, y)?.note;
+    // the guitar voicing goes in at the clicked time (snapped), on a note too (ADR-091)
+    const assist = assistMenuItems(editActions, { trackId: track.id, tick, returnFocus: e.currentTarget });
     if (n) {
       // right-click on an unselected note selects just that note
       if (!store.getState().selection.eventIds.has(n.id)) store.selectEvents([n.id]);
-      ctxMenu.open(e, noteMenuItems(editActions, {}));
-    } else ctxMenu.open(e, emptyMenuItems(editActions, store, transport, track.id, tick, reportError));
+      ctxMenu.open(e, [...noteMenuItems(editActions, {}), ...assist]);
+    } else ctxMenu.open(e, [...emptyMenuItems(editActions, store, transport, track.id, tick, reportError), ...assist]);
   }
 
   function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
