@@ -428,4 +428,35 @@ describe('chord estimate', () => {
     expect(names(s)).toEqual(['Ebmaj7', 'Ebmaj7']);
     expect(s[1].tick).toBe(BAR);
   });
+
+  it('U-CHD-27 a chord built up note by note (held arpeggio, slow strum) is one chord from its first note (ADR-093)', () => {
+    // the user's case: up-and-down 8ths held to the end of the bar over Fmaj7 xx3210 | Em7 022030 | Am7 x02010 | Dm7 xx0211
+    const held = (bar: number, pitches: number[]): N[] => {
+      const seq = [...pitches, ...[...pitches].reverse().slice(1, -1)];
+      const out: N[] = [];
+      for (let j = 0; j < 8; j++) {
+        const p = seq[j % seq.length];
+        const on = bar * BAR + j * (Q / 2);
+        const again = [...Array(8).keys()].find((m) => m > j && seq[m % seq.length] === p);
+        out.push([on, (again !== undefined ? bar * BAR + again * (Q / 2) : (bar + 1) * BAR) - on, p]);
+      }
+      return out;
+    };
+    const guitar = [...held(0, [53, 57, 60, 64]), ...held(1, [40, 47, 52, 55, 62, 64]), ...held(2, [45, 52, 55, 60, 64]), ...held(3, [50, 57, 60, 65])];
+    const s = analyzeChords(open(conductor(), trackEvents(0, guitar)));
+    expect(names(s)).toEqual(['Fmaj7', 'Em7', 'Am7', 'Dm7']);
+    expect(s.map((c) => c.tick)).toEqual([0, BAR, BAR * 2, BAR * 3]);
+  });
+
+  it('U-CHD-27 stays two chords: a new bass under held notes, a released note (line cliché), a chord held over a bar before a tone is added', () => {
+    // C E G held all bar, A2 in the bass from beat 3: C → Am7 is a real change
+    const newBass = analyzeChords(open(conductor(), trackEvents(0, block(0, BAR, [60, 64, 67])), trackEvents(1, [[2 * Q, 2 * Q, 45]])));
+    expect(names(newBass)).toEqual(['C', 'Am7']);
+    // line cliché: C E G, then the top C moves down to B on beat 3 (the C is let go)
+    const cliche = analyzeChords(open(conductor(), trackEvents(0, [...block(0, BAR, [52, 55]), [0, 2 * Q, 60], [2 * Q, 2 * Q, 59], [0, BAR, 48]])));
+    expect(names(cliche)).toEqual(['C', 'Cmaj7']);
+    // C held for two bars, then B added: the colour came later, two chords
+    const late = analyzeChords(open(conductor(), trackEvents(0, [...block(0, BAR * 3, [48, 52, 55, 60]), [BAR * 2, BAR, 59]])));
+    expect(names(late)).toEqual(['C', 'Cmaj7']);
+  });
 });

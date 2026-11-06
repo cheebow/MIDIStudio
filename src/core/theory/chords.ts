@@ -823,6 +823,42 @@ export function analyzeChords(project: MidiProject): ChordSegment[] {
     }
     kept.push(seg);
   }
+  // a chord built up note by note (an arpeggio held to the end of the chord, a slow strum: F A, then
+  // + C E) is one chord from its first note: F → Fmaj7 is Fmaj7, E5 → Em → Em7 is Em7 (ADR-093). A
+  // segment goes into the chord after it when, within a bar,
+  //   - every note sounding in it is a tone of that chord,
+  //   - every one of them goes on sounding into it (notes are only added, none is let go: a line
+  //     cliché C → Cmaj7 releases the C and stays two chords), and
+  //   - nothing lower than its lowest note starts there (the bass stays: C → Am7 with a new A in the
+  //     bass stays two chords).
+  // A chord held for more than a bar before a tone is added (C for two bars, then + B) stays two, and
+  // so does a colour over a chord that comes back (C → C6 → C).
+  for (let i = kept.length - 2; i >= 0; i--) {
+    const seg = kept[i];
+    const next = kept[i + 1];
+    if (next.tick !== seg.endTick || (next.root === seg.root && next.quality === seg.quality)) continue;
+    if (next.tick - seg.tick >= sig.ticksPerBar(seg.tick)) continue;
+    // C → C6 → C: a colour for a moment over a chord that comes back, not a chord being built up
+    const after = kept[i + 2];
+    if (after && after.tick === next.endTick && after.root === seg.root && after.quality === seg.quality) continue;
+    const blip = beatLen(seg.tick) / 8;
+    const inSeg = sources.filter((x) => x.note.tick < seg.endTick - blip && x.note.tick + x.note.durationTicks > seg.tick + blip);
+    if (inSeg.length === 0) continue;
+    const tones = TEMPLATES.find((x) => x.quality === next.quality)!.intervals.map((iv) => (next.root + iv) % 12);
+    if (!inSeg.every((x) => tones.includes(x.note.pitch % 12))) continue;
+    // still sounding after the boundary, or struck again right away (an up-and-down arpeggio repeats
+    // a tone: that is not letting it go)
+    const goesOn = (x: Source): boolean => {
+      const end = x.note.tick + x.note.durationTicks;
+      if (end >= next.tick + blip) return true;
+      return sources.some((y) => y !== x && y.note.pitch === x.note.pitch && Math.abs(y.note.tick - end) <= blip && y.note.tick + y.note.durationTicks >= next.tick + blip);
+    };
+    if (!inSeg.every(goesOn)) continue;
+    const low = Math.min(...inSeg.map((x) => x.note.pitch));
+    if (sources.some((x) => x.note.tick >= next.tick && x.note.tick < next.endTick && x.note.pitch < low)) continue;
+    next.tick = seg.tick;
+    kept.splice(i, 1);
+  }
   // a chord struck again by a chord part on a bar line is named again there (Ebmaj7 | Ebmaj7: the
   // chord chart of the bar). When it began less than about a beat before the bar line (strings
   // touching it on 4& and stopping at the bar line, the piano striking it on 1), the change is on the
