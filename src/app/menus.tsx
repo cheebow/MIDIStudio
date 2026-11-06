@@ -167,6 +167,7 @@ export function buildMenus(d: MenuDeps): Menu[] {
         sep,
         { label: t('再生に追従'), shortcut: 'F', checked: settings.followPlayback, action: () => store.updateSettings({ followPlayback: !settings.followPlayback }) },
         { label: t('ゴーストノート'), checked: settings.showGhostNotes, action: () => store.updateSettings({ showGhostNotes: !settings.showGhostNotes }) },
+        { label: t('コード名（推定）'), checked: settings.showChords, action: () => store.updateSettings({ showChords: !settings.showChords }) },
         sep,
         {
           label: t('テーマ'),

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { build, off, on } from '../fixtures/songs';
-import { importMidi, menu, setInputMode } from './helpers';
+import { importMidi, menu, ROLL_TOP, setInputMode } from './helpers';
 
 test('ADR-044: DAW-style single-key shortcuts work in the edit mode; the mode switch turns the same keys into an instrument', async ({ page }) => {
   await page.goto('/');
@@ -98,14 +98,14 @@ test('the piano roll keyboard lights the keys being played (PC keyboard mode)', 
   await page.goto('/');
   await page.locator('body').click({ position: { x: 5, y: 5 } });
   const keyColour = () =>
-    page.evaluate(() => {
+    page.evaluate((top) => {
       const c = document.querySelector('canvas.roll-keys') as HTMLCanvasElement;
       const sc = document.querySelector('.roll-scroll') as HTMLElement;
       const dpr = window.devicePixelRatio || 1;
-      const y = Math.round(((127 - 60) * 12 - sc.scrollTop + 20 + 6) * dpr); // C4 row centre
+      const y = Math.round(((127 - 60) * 12 - sc.scrollTop + top + 6) * dpr); // C4 row centre
       const [r, g, b] = c.getContext('2d')!.getImageData(Math.round(8 * dpr), y, 1, 1).data;
       return { r, g, b };
-    });
+    }, ROLL_TOP);
   const idle = await keyColour();
   await page.keyboard.press('Alt+k');
   await page.keyboard.down('KeyZ'); // C4

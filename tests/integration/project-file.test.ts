@@ -85,8 +85,16 @@ describe('.midstudio file', () => {
     const p = createEmptyProject();
     const json = JSON.parse(serializeProject(p));
     delete json.project.settings.metronome;
+    delete json.project.settings.showChords; // added by ADR-090
     const r = parseProjectFile(JSON.stringify(json));
     expect(r.ok && r.project.settings.metronome).toBe(false);
+    expect(r.ok && r.project.settings.showChords).toBe(true);
+    json.project.settings.showChords = 'yes';
+    const bad = parseProjectFile(JSON.stringify(json));
+    expect(bad.ok && bad.project.settings.showChords).toBe(true);
+    json.project.settings.showChords = false;
+    const off = parseProjectFile(JSON.stringify(json));
+    expect(off.ok && off.project.settings.showChords).toBe(false);
   });
 
   it('ADR-080: files saved with record-arm flags still open; the flags are dropped', () => {

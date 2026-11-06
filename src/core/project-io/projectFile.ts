@@ -249,6 +249,7 @@ function sanitizeSettings(raw: unknown, d: ProjectViewSettings, trackIds: Readon
     pianoRollScrollPitch: num(r.pianoRollScrollPitch, 0, 127, d.pianoRollScrollPitch),
     controllerLane: lane,
     showGhostNotes: bool(r.showGhostNotes, d.showGhostNotes),
+    showChords: bool(r.showChords, d.showChords),
     grid,
     snapEnabled: bool(r.snapEnabled, d.snapEnabled),
     tm,
