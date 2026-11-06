@@ -194,7 +194,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
       <>
         <ul>
           <li>Open it with <K>T</K> or the “Visual” button in the toolbar; <K>Esc</K> goes back.</li>
-          <li>Three views: the event list (Recomposer style; split panes, follow mode, units, staff), the piano roll (all tracks) and keyboards (one per track).</li>
+          <li>Three views: the event list (Recomposer style; split panes, follow mode, units, staff), the piano roll (all tracks; the keyboard on its left lights the sounding keys) and keyboards (one per track).</li>
           <li>Color scheme, text size and full screen are on the right of the toolbar.</li>
           <li>The right end of the top bar shows the (estimated) chord at the playhead. The piano-roll view shows it large at the top right. “Chords” in the toolbar shows / hides them.</li>
         </ul>

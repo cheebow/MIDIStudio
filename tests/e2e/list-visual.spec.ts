@@ -117,6 +117,8 @@ test('visual mode: switch between the RCM list, the all-tracks piano roll and th
   await expect(page.getByRole('region', { name: 'ビジュアルモード' })).toBeVisible();
   await page.getByTestId('visual-view-roll').click();
   await expect(page.getByTestId('visual-roll')).toBeVisible();
+  // the keyboard at the left of the roll lights the sounding piano chord
+  await expect(page.getByTestId('visual-roll')).toHaveAttribute('data-lit', /\b60,64,67\b/);
   await page.getByTestId('visual-view-keys').click();
   await expect(page.getByTestId('visual-keys')).toBeVisible();
   // at tick 0 the piano chord and the kick sound: the keyboards light them
