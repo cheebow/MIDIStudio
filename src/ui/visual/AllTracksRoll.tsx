@@ -6,13 +6,15 @@ import type { MidiProject } from '../../core/model/types';
 import { buildMonitorData, notesIn } from '../../core/visual/monitorData';
 import { useServices } from '../../app/store/context';
 import { fitCanvas, isBlackKey, pitchName } from '../canvas';
+import { chordAt, type ChordSegment } from '../../core/theory/chords';
 import { useSignatureMap } from '../hooks';
 
 const PLAYHEAD_AT = 0.22; // playhead position from the left edge
 const BARS_VISIBLE = 6;
+const CHORD_TOP = 22; // the current chord, large at the top right under the bar numbers (ADR-090)
 const KEYS_W = 40; // keyboard on the left (sounding keys light up in the track colour)
 
-export function AllTracksRoll({ project }: { project: MidiProject }) {
+export function AllTracksRoll({ project, chords }: { project: MidiProject; chords: readonly ChordSegment[] }) {
   const { transport } = useServices();
   const ref = useRef<HTMLCanvasElement>(null);
   const data = useMemo(() => buildMonitorData(project), [project]);
@@ -96,6 +98,30 @@ export function AllTracksRoll({ project }: { project: MidiProject }) {
           }
         }
         ctx.globalAlpha = 1;
+        if (chords.length) {
+          // chord names in a near-white grey on every theme (user request)
+          const text = cs.getPropertyValue('--tm-chord').trim() || '#e4e4e4';
+          // only the chord at the playhead, large at the top right (no strip: user request)
+          const current = chordAt(chords, tick);
+          if (current) {
+            const size = Math.round(Math.max(28, Math.min(64, h * 0.09)));
+            ctx.font = `bold ${size}px system-ui, sans-serif`;
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'top';
+            const tw = ctx.measureText(current.name).width;
+            const pad = Math.round(size * 0.3);
+            const bx = w - tw - pad * 2 - 12;
+            const by = CHORD_TOP;
+            ctx.fillStyle = bg;
+            ctx.globalAlpha = 0.8;
+            ctx.fillRect(bx, by, tw + pad * 2, size + pad * 2);
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = text;
+            ctx.fillText(current.name, w - 12 - pad, by + pad);
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+          }
+        }
         // playhead
         const px = Math.round(w * PLAYHEAD_AT) + 0.5;
         ctx.strokeStyle = head;
@@ -114,7 +140,7 @@ export function AllTracksRoll({ project }: { project: MidiProject }) {
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [data, sig, transport, anySolo]);
+  }, [data, sig, transport, anySolo, chords]);
 
   return (
     <div className="visual-roll">

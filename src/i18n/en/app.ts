@@ -60,6 +60,7 @@ export const EN_APP: Record<string, string> = {
   ピアノロールを縮小: 'Zoom out piano roll',
   再生に追従: 'Follow playback',
   ゴーストノート: 'Ghost notes',
+  'コード名（推定）': 'Chord names (estimated)',
   テーマ: 'Theme',
   '自動（OS に合わせる）': 'Auto (follow the OS)',
   ライト: 'Light',

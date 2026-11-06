@@ -4,10 +4,38 @@ import type { TransportPosition } from '../playback/Transport';
 import { barPageScrollLeft } from './canvas';
 import type { MidiProject } from '../core/model/types';
 import { TimeSignatureMap } from '../core/timing/timeSignatureMap';
+import { analyzeChords, type ChordSegment } from '../core/theory/chords';
 
 /** Bar / beat map of the project, rebuilt only when the PPQ or the conductor track changes. */
 export function useSignatureMap(project: MidiProject): TimeSignatureMap {
   return useMemo(() => new TimeSignatureMap(project.ppq, project.conductor.filter((c) => c.kind === 'time-signature')), [project.ppq, project.conductor]);
+}
+
+const NO_CHORDS: ChordSegment[] = [];
+
+/**
+ * Estimated chord names (ADR-090), recomputed only when the notes, mute / solo, clips or conductor
+ * change (not on zoom or scroll). Empty while the display is off.
+ */
+/**
+ * The last analysis, shared by every caller (the piano roll and visual mode both show chords): the
+ * same tracks / clips / conductor / PPQ give the same result, so the song is analysed once per change.
+ */
+let lastChords: { tracks: unknown; clips: unknown; conductor: unknown; ppq: number; segments: ChordSegment[] } | null = null;
+export function sharedChords(project: MidiProject): ChordSegment[] {
+  const c = lastChords;
+  if (c && c.tracks === project.tracks && c.clips === project.clips && c.conductor === project.conductor && c.ppq === project.ppq) return c.segments;
+  const segments = analyzeChords(project);
+  lastChords = { tracks: project.tracks, clips: project.clips, conductor: project.conductor, ppq: project.ppq, segments };
+  return segments;
+}
+
+export function useChordSegments(project: MidiProject, enabled: boolean): ChordSegment[] {
+  return useMemo(
+    () => (enabled ? sharedChords(project) : NO_CHORDS),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the analysis reads only these fields of the project
+    [enabled, project.tracks, project.clips, project.conductor, project.ppq],
+  );
 }
 
 /**

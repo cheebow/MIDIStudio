@@ -1,4 +1,5 @@
 import type { ConductorEvent } from '../core/model/types';
+import { chordIndexAtOrBefore, type ChordSegment } from '../core/theory/chords';
 import { noteName } from '../core/list/noteNames';
 import { bpmFromUs } from '../core/timing/tempoMap';
 import { DEFAULT_TEMPO_US } from '../core/model/defaults';
@@ -375,3 +376,41 @@ export function drawStepCursor(ctx: CanvasRenderingContext2D, x: number, height:
   ctx.setLineDash([]);
 }
 
+
+/**
+ * Chord names in a strip (ADR-090): a thin line at each change and the name clipped to its span.
+ * Only the segments between t0 and t1 are drawn. The current chord is tinted by the caller.
+ */
+export function drawChordStrip(
+  ctx: CanvasRenderingContext2D,
+  segments: readonly ChordSegment[],
+  x: (tick: number) => number,
+  t0: number,
+  t1: number,
+  y: number,
+  h: number,
+  colors: { text: string; line: string },
+  font = '11px system-ui, sans-serif',
+): void {
+  // from the segment holding t0 (segments are sorted and do not overlap)
+  const first = Math.max(0, chordIndexAtOrBefore(segments, t0));
+  ctx.save();
+  ctx.font = font;
+  ctx.textBaseline = 'middle';
+  for (let i = first; i < segments.length && segments[i].tick <= t1; i++) {
+    const s = segments[i];
+    if (s.endTick <= t0) continue;
+    const x0 = x(s.tick);
+    const x1 = x(s.endTick);
+    ctx.fillStyle = colors.line;
+    ctx.fillRect(Math.round(x0), y + 2, 1, h - 4);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0 + 1, y, Math.max(0, x1 - x0 - 2), h);
+    ctx.clip();
+    ctx.fillStyle = colors.text;
+    ctx.fillText(s.name, x0 + 4, y + h / 2);
+    ctx.restore();
+  }
+  ctx.restore();
+}

@@ -34,6 +34,34 @@ export function noteMenuItems(a: EditActions, opts: { transpose?: boolean; noteL
   ];
 }
 
+/**
+ * 入力支援 submenu (ADR-091 / 092) of the piano roll and the list editor: ギターボイシング ▸ (one chord /
+ * a progression) at the right-clicked track and tick (fixed now, so moving the playhead later does not
+ * move it), and the performance tools (strum, arpeggio, legato, velocity shaper) on the selected notes.
+ */
+export function assistMenuItems(a: EditActions, at: { trackId: string; tick: number; returnFocus?: HTMLElement | null }): MenuItem[] {
+  return [
+    sep,
+    {
+      label: t('入力支援'),
+      items: [
+        {
+          label: t('ギターボイシング'),
+          items: [
+            { label: t('コードを 1 つ入力…'), action: () => a.guitarVoicing(at) },
+            { label: t('コード進行を入力…'), action: () => a.guitarProgression(at) },
+          ],
+        },
+        // these act on the selection (or the whole track), as in 編集 › ノート (ADR-092)
+        { label: t('ストラム…'), action: () => a.performDialog('strum') },
+        { label: t('アルペジオ…'), action: () => a.performDialog('arpeggio') },
+        { label: t('レガート調整…'), action: () => a.performDialog('legato') },
+        { label: t('ベロシティ・シェイパー…'), action: () => a.performDialog('velocity-shaper') },
+      ],
+    },
+  ];
+}
+
 /** Menu for a right-click on an empty spot of a track's editor. */
 export function emptyMenuItems(a: EditActions, store: EditorStore, transport: Transport, trackId: string, tick: number, reportError: (m: string) => void): MenuItem[] {
   const clipboard = store.getState().clipboard;

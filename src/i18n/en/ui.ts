@@ -78,6 +78,8 @@ export const EN_UI: Record<string, string> = {
   追従方式: 'Follow mode',
   単位: 'Unit',
   配色: 'Theme',
+  コード: 'Chords',
+  'コード名（推定）の表示 / 非表示': 'Show / hide the (estimated) chord names',
   レコンポーザ風: 'Recomposer',
   'レトロ（青）': 'Retro (blue)',
   'レトロ（緑）': 'Retro (green)',

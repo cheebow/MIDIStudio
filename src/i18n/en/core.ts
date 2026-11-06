@@ -289,4 +289,11 @@ export const EN_CORE: Record<string, string> = {
   'MIDI 機器へのアクセスが許可されませんでした（{message}）。PC キーボードとマウスでの入力は使えます。': 'Access to MIDI devices was not granted ({message}). Input with the computer keyboard and mouse still works.',
   // gsProject.ts (dynamic label: the parameter name is filled in)
   '{name} を変更': 'Change {name}',
+  // guitar/insertVoicing.ts (ADR-091)
+  'ギターボイシングを挿入': 'Insert guitar voicing',
+  '挿入位置が正しくありません': 'The insert position is not valid',
+  '長さは 1 Tick 以上にしてください': 'The length must be at least 1 tick',
+  'ギターのフォームは 1〜6 音です': 'A guitar form has 1 to 6 notes',
+  '挿入するノートがありません': 'There are no notes to insert',
+  'ポート A の空いているチャンネルがないため、新規トラックを作れません。既存のトラックを選んでください': 'No channel of port A is free, so a new track cannot be made. Choose an existing track.',
 };
