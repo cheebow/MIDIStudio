@@ -8,6 +8,13 @@ import { EditError } from './operations';
 import { t } from '../../i18n';
 
 const hasChannelData = (t: MidiTrack) => t.events.some((e) => e.kind !== 'sysex' && e.kind !== 'meta');
+/**
+ * A port change kept as an event (FF 21 in the middle of an MTrk) applies to what follows it in that
+ * MTrk only: merged, it would move the other track's events to that port on export. Such tracks are
+ * left out of the automatic groups.
+ */
+const hasPortChange = (t: MidiTrack) => t.events.some((e) => e.kind === 'meta' && e.metaType === 0x21);
+const mergeable = (t: MidiTrack) => hasChannelData(t) && !hasPortChange(t);
 
 /** Merges `ids` into the first of them (which keeps its settings); returns the patched track list. */
 function mergeInto(tracks: MidiTrack[], ids: string[], name?: string): MidiTrack[] {
@@ -56,7 +63,7 @@ export function mergeTracks(project: MidiProject, ids: string[], name?: string, 
 export function drumTrackGroups(project: MidiProject): MidiTrack[][] {
   const groups = new Map<string, MidiTrack[]>();
   for (const t of project.tracks) {
-    if (t.displayMode !== 'drum' || !hasChannelData(t)) continue;
+    if (t.displayMode !== 'drum' || !mergeable(t)) continue;
     const key = `${t.port}:${t.channel}`;
     groups.set(key, [...(groups.get(key) ?? []), t]);
   }
@@ -80,7 +87,7 @@ const hasNotes = (t: MidiTrack) => t.events.some((e) => e.kind === 'note' || e.k
 function sameChannelGroups(project: MidiProject): MidiTrack[][] {
   const groups = new Map<string, MidiTrack[]>();
   for (const t of project.tracks) {
-    if (!hasChannelData(t)) continue;
+    if (!mergeable(t)) continue;
     const key = `${t.port}:${t.channel}`;
     groups.set(key, [...(groups.get(key) ?? []), t]);
   }

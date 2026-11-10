@@ -36,32 +36,32 @@ const MAX_TICK = SMF_LIMITS.maxTick;
 /** Validates value ranges of an event (throws EditError). */
 export function assertValidEvent(e: NewEvent | MidiEvent): void {
   const in7 = (v: number) => Number.isInteger(v) && v >= 0 && v <= 127;
-  if (!Number.isSafeInteger(e.tick) || e.tick < 0 || e.tick > MAX_TICK) throw new EditError(`invalid tick ${e.tick}`);
+  if (!Number.isSafeInteger(e.tick) || e.tick < 0 || e.tick > MAX_TICK) throw new EditError(t('位置が正しくありません。'));
   if ('channelOverride' in e && e.channelOverride !== undefined && !(Number.isInteger(e.channelOverride) && e.channelOverride >= 0 && e.channelOverride < 16)) {
-    throw new EditError(`invalid channel ${e.channelOverride}`);
+    throw new EditError(t('チャンネルは 1〜16 です。'));
   }
   switch (e.kind) {
     case 'note':
-      if (!in7(e.pitch) || !in7(e.velocity) || e.velocity === 0 || !in7(e.releaseVelocity)) throw new EditError('invalid note values');
-      if (!Number.isSafeInteger(e.durationTicks) || e.durationTicks < 1 || e.tick + e.durationTicks > MAX_TICK) throw new EditError(`invalid note duration ${e.durationTicks}`);
+      if (!in7(e.pitch) || !in7(e.velocity) || e.velocity === 0 || !in7(e.releaseVelocity)) throw new EditError(t('{what} の値が範囲外です。', { what: 'Note' }));
+      if (!Number.isSafeInteger(e.durationTicks) || e.durationTicks < 1 || e.tick + e.durationTicks > MAX_TICK) throw new EditError(t('{what} の値が範囲外です。', { what: 'Gate' }));
       break;
     case 'cc':
-      if (!in7(e.controller) || !in7(e.value)) throw new EditError('invalid CC values');
+      if (!in7(e.controller) || !in7(e.value)) throw new EditError(t('{what} の値が範囲外です。', { what: 'Control Change' }));
       break;
     case 'program':
-      if (!in7(e.program)) throw new EditError('invalid program');
+      if (!in7(e.program)) throw new EditError(t('{what} の値が範囲外です。', { what: 'Program Change' }));
       break;
     case 'pitch-bend':
-      if (!Number.isInteger(e.value) || e.value < -8192 || e.value > 8191) throw new EditError('invalid pitch bend');
+      if (!Number.isInteger(e.value) || e.value < -8192 || e.value > 8191) throw new EditError(t('{what} の値が範囲外です。', { what: 'Pitch Bend' }));
       break;
     case 'channel-pressure':
-      if (!in7(e.pressure)) throw new EditError('invalid pressure');
+      if (!in7(e.pressure)) throw new EditError(t('{what} の値が範囲外です。', { what: 'Channel Pressure' }));
       break;
     case 'poly-pressure':
-      if (!in7(e.pitch) || !in7(e.pressure)) throw new EditError('invalid poly pressure');
+      if (!in7(e.pitch) || !in7(e.pressure)) throw new EditError(t('{what} の値が範囲外です。', { what: 'Poly Pressure' }));
       break;
     case 'meta':
-      if (!Number.isInteger(e.metaType) || e.metaType < 0 || e.metaType > 127) throw new EditError('invalid meta type');
+      if (!Number.isInteger(e.metaType) || e.metaType < 0 || e.metaType > 127) throw new EditError(t('{what} の値が範囲外です。', { what: 'Meta' }));
       break;
     default:
       break;
@@ -116,25 +116,33 @@ export function addEvents(project: MidiProject, trackId: TrackId, events: readon
   if (opts.clipId) {
     patch.clips = project.clips.map((c) => (c.id === opts.clipId ? extendClip({ ...c, eventIds: [...c.eventIds, ...ids] }, created) : c));
   } else {
-    // No clip named: an event whose onset lands inside a clip of this track joins that clip (the first one in
-    // project order when clips overlap), so recorded / drawn / pasted material belongs to the region it was
-    // put into and the clip's quantize, move and delete act on it. Events outside every clip stay free (ADR-059).
-    const own = project.clips.filter((c) => c.trackId === trackId);
-    const joined = new Map<string, string[]>();
-    const free: MidiEvent[] = [];
-    for (const e of created) {
-      const c = own.find((x) => x.startTick <= e.tick && e.tick < x.endTick);
-      if (c) joined.set(c.id, [...(joined.get(c.id) ?? []), e.id]);
-      else free.push(e);
-    }
-    let clips = joined.size ? project.clips.map((c) => (joined.has(c.id) ? { ...c, eventIds: [...c.eventIds, ...joined.get(c.id)!] } : c)) : project.clips;
-    // Notes put where no clip is get a clip of their own, as recording onto an empty track does in a DAW
-    // (ADR-060): whole bars around the material, clamped to the gap between the neighbouring clips. CC / Program
-    // / SysEx alone (mixer and patch setup) make no clip.
-    if (free.some((e) => e.kind === 'note')) clips = [...clips, ...clipsAroundFreeEvents(project, trackId, own, free)];
+    const clips = clipsAdopting(project, project.clips, trackId, created);
     if (clips !== project.clips) patch.clips = clips;
   }
   return { command: cmd(opts.label ?? 'イベントを追加', patch), ids };
+}
+
+/**
+ * `clips` with `events` of a track (which are in no clip yet) given a home. An event whose onset lands
+ * inside a clip of the track joins that clip (the first one in project order when clips overlap), so
+ * recorded / drawn / pasted material belongs to the region it was put into and the clip's quantize, move
+ * and delete act on it (ADR-059). Notes put where no clip is get a clip of their own, as recording onto an
+ * empty track does in a DAW (ADR-060): whole bars around the material, clamped to the gap between the
+ * neighbouring clips. CC / Program / SysEx alone (mixer and patch setup) make no clip and stay free.
+ * Returns `clips` itself when nothing changes.
+ */
+function clipsAdopting(project: MidiProject, clips: MidiClip[], trackId: TrackId, events: readonly MidiEvent[]): MidiClip[] {
+  const own = clips.filter((c) => c.trackId === trackId);
+  const joined = new Map<string, string[]>();
+  const free: MidiEvent[] = [];
+  for (const e of events) {
+    const c = own.find((x) => x.startTick <= e.tick && e.tick < x.endTick);
+    if (c) joined.set(c.id, [...(joined.get(c.id) ?? []), e.id]);
+    else free.push(e);
+  }
+  let out = joined.size ? clips.map((c) => (joined.has(c.id) ? { ...c, eventIds: [...c.eventIds, ...joined.get(c.id)!] } : c)) : clips;
+  if (free.some((e) => e.kind === 'note')) out = [...out, ...clipsAroundFreeEvents(project, trackId, own, free)];
+  return out;
 }
 
 /**
@@ -324,6 +332,8 @@ export function rewriteEvents(project: MidiProject, ids: Iterable<string>, fn: (
   const wanted = new Set(ids);
   if (wanted.size === 0) return null;
   const changed = new Map<TrackId, MidiTrack>();
+  /** events that became notes: outside every clip they would be silent (ADR-064), so they get a clip like new notes */
+  const becameNotes = new Map<TrackId, string[]>();
   let order = project.nextOriginOrder;
   for (const t of project.tracks) {
     let touched = false;
@@ -335,6 +345,7 @@ export function rewriteEvents(project: MidiProject, ids: Iterable<string>, fn: (
       touched = true;
       const next = { ...body, id: e.id, originOrder: e.originOrder } as MidiEvent;
       assertValidEvent(next);
+      if (next.kind === 'note' && e.kind !== 'note') becameNotes.set(t.id, [...(becameNotes.get(t.id) ?? []), e.id]);
       if (next.tick !== e.tick || policyRank(next) !== policyRank(e)) moved.add(e.id);
       return next;
     });
@@ -344,7 +355,13 @@ export function rewriteEvents(project: MidiProject, ids: Iterable<string>, fn: (
     changed.set(t.id, { ...t, events: settled.events });
   }
   if (changed.size === 0) return null;
-  return cmd(label, { tracks: replaceTracks(project, changed), clips: refreshClipBounds(project.clips, changed), ...orderPatch(project, order) });
+  let clips = refreshClipBounds(project.clips, changed);
+  for (const [trackId, ids] of becameNotes) {
+    const inClip = new Set(clips.filter((c) => c.trackId === trackId).flatMap((c) => c.eventIds));
+    const loose = changed.get(trackId)!.events.filter((e) => ids.includes(e.id) && !inClip.has(e.id));
+    if (loose.length) clips = clipsAdopting(project, clips, trackId, loose);
+  }
+  return cmd(label, { tracks: replaceTracks(project, changed), clips, ...orderPatch(project, order) });
 }
 
 /** Replaces one event with another body (normally of a different kind), keeping its id and originOrder. */

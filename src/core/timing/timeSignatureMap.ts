@@ -127,7 +127,10 @@ export class TimeSignatureMap {
     if (bar < 1 || beat < 1) return null;
     const start = this.barBeatToTick(bar);
     if (beat > this.signatureAt(start).numerator) return null;
-    return Math.round(this.barBeatToTick(bar, beat) + tickInBeat);
+    const beatStart = this.barBeatToTick(bar, beat);
+    // a bar cut short by a signature change has fewer beats than its signature says
+    if (this.tickToBarBeat(beatStart).bar !== bar) return null;
+    return Math.round(beatStart + tickInBeat);
   }
 
   /** "001.01.000" style label (tick within beat rounded down for display). */

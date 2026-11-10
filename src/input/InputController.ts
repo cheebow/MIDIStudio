@@ -206,7 +206,10 @@ export class InputController {
       else if (key.startsWith(`${sourceId}#`)) source = key.slice(0, key.indexOf(':', sourceId.length));
       else continue;
       const [target, pitch] = key.slice(source.length + 1).split(':');
-      this.dispatch({ type: 'note-off', pitch: Number(pitch), releaseVelocity: 0, sourceId: source, atMs: performance.now(), target: target as 'piano' | 'drum' });
+      // with "keep MIDI channel" the recorder pairs note-on and note-off by channel: the note-off made here needs it too
+      const hash = source.lastIndexOf('#');
+      const ch = this._keepMidiChannel && source.length > sourceId.length && hash >= 0 ? { channel: Number(source.slice(hash + 1)) } : {};
+      this.dispatch({ type: 'note-off', pitch: Number(pitch), releaseVelocity: 0, sourceId: source, atMs: performance.now(), target: target as 'piano' | 'drum', ...ch });
     }
   }
 

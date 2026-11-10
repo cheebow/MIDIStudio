@@ -77,7 +77,8 @@ export function copyClips(project: MidiProject, clipIds: Iterable<string>): Clip
   return { ppq: project.ppq, events: items.flatMap((c) => c.events), span: Math.max(...clips.map((c) => c.endTick)) - base, clips: items };
 }
 
-function scaleTo(project: MidiProject, data: ClipboardData, v: number): number {
+/** A tick count of the clipboard in the ticks of `project` (exact, or it throws). */
+export function scaleTo(project: MidiProject, data: ClipboardData, v: number): number {
   const r = (v * project.ppq) / data.ppq;
   if (!Number.isInteger(r)) throw new Error(t('PPQ の異なる曲からの貼り付けで Tick が整数になりません。'));
   return r;
@@ -132,10 +133,6 @@ export function pasteClips(project: MidiProject, tick: number, data: ClipboardDa
 }
 
 /**
- * Duplicates clips as a group: by default right after the group (its span), or shifted by
- * `deltaTick` from where they are and by `trackOffset` lanes (clamped to the track list).
- */
-/**
  * Where copied clips go when pasted "onto" a track (ADR-062): the clip from the topmost copied track
  * lands on `anchorTrackId`, the others keep their relative lanes (clamped to the track list).
  */
@@ -147,6 +144,12 @@ export function tracksRelativeTo(project: MidiProject, data: ClipboardData, anch
   return (c) => project.tracks[Math.max(0, Math.min(last, c.trackIndex + offset))]?.id;
 }
 
+/**
+ * Duplicates clips as a group: by default right after the group (its span), or shifted by
+ * `deltaTick` from where they are and by `trackOffset` lanes (clamped to the track list).
+ * A copy that would land exactly on its original (no tick shift, lane clamped back to its own
+ * track) is not made: it would double the notes under a clip nobody can see.
+ */
 export function duplicateClips(project: MidiProject, clipIds: Iterable<string>, opts: { deltaTick?: number; trackOffset?: number } = {}): { command: Command; clipIds: string[] } | null {
   const sel = new Set(clipIds);
   const data = copyClips(project, sel);
@@ -154,5 +157,8 @@ export function duplicateClips(project: MidiProject, clipIds: Iterable<string>, 
   const base = Math.min(...project.clips.filter((c) => sel.has(c.id)).map((c) => c.startTick));
   const offset = opts.trackOffset ?? 0;
   const last = project.tracks.length - 1;
-  return pasteClips(project, base + (opts.deltaTick ?? data.span), data, (c) => project.tracks[Math.max(0, Math.min(last, c.trackIndex + offset))]?.id, 'クリップを複製');
+  const lane = (c: ClipboardClip) => Math.max(0, Math.min(last, c.trackIndex + offset));
+  const moving = opts.deltaTick === 0 ? { ...data, clips: (data.clips ?? []).filter((c) => lane(c) !== c.trackIndex) } : data;
+  if ((moving.clips ?? []).length === 0) return null;
+  return pasteClips(project, base + (opts.deltaTick ?? data.span), moving, (c) => project.tracks[lane(c)]?.id, 'クリップを複製');
 }

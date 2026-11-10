@@ -16,6 +16,11 @@ export function Dialog({ title, onClose, children, closable = true, header, wide
       className={wide ? 'dialog wide' : 'dialog'}
       aria-label={title}
       onClose={onClose}
+      // Esc on a dialog that has to be answered: also stopped at the key, since the browser may skip a
+      // second cancel event and close the element under React's feet
+      onKeyDown={(e) => {
+        if (!closable && e.key === 'Escape') e.preventDefault();
+      }}
       onCancel={(e) => {
         e.preventDefault();
         if (closable) onClose();

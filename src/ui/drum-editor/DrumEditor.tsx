@@ -314,7 +314,7 @@ export function DrumEditor() {
     e.currentTarget.setPointerCapture(e.pointerId);
     e.currentTarget.focus();
     lastPointer.current = pointerOf(e);
-    trackPointer(e.clientX, e.clientY);
+    trackPointer(e.clientX, e.clientY, true);
     if (y < RULER_H) {
       const lh = hitLoop(x, y, project.loop, pxPerTick, view.x, RULER_H);
       if (lh) setDrag({ kind: 'loop', hit: lh, startX: cx, origin: project.loop, preview: project.loop });
@@ -330,9 +330,13 @@ export function DrumEditor() {
       const lane: DrumMapEntry | undefined = lanes[toLane(y)];
       if (!lane) return;
       const tick = settings.snapEnabled ? snapTick(toTick(x) + gridLen / 2, grid, 'floor').tick : Math.round(toTick(x));
-      const r = addEvents(store.project, track.id, [{ kind: 'note', tick, pitch: lane.pitch, velocity: lane.defaultVelocity, durationTicks: Math.max(1, Math.round(gridLen)), releaseVelocity: 64 }], { label: 'ドラムノートを入力' });
-      if (r) store.run(r.command, { select: r.ids });
-      preview(lane.pitch, lane.defaultVelocity);
+      try {
+        const r = addEvents(store.project, track.id, [{ kind: 'note', tick, pitch: lane.pitch, velocity: lane.defaultVelocity, durationTicks: Math.max(1, Math.round(gridLen)), releaseVelocity: 64 }], { label: 'ドラムノートを入力' });
+        if (r) store.run(r.command, { select: r.ids });
+        preview(lane.pitch, lane.defaultVelocity);
+      } catch (err) {
+        reportError((err as Error).message); // e.g. past the last tick a file can hold
+      }
       return;
     }
     if (n) {
@@ -380,11 +384,23 @@ export function DrumEditor() {
       const moving = notes.filter((n) => selection.eventIds.has(n.id));
       const first = moving.length ? Math.min(...moving.map((n) => n.tick)) : drag.anchor.tick;
       const dTick = Math.max(-first, (settings.snapEnabled ? snapTick(raw + gridLen / 2, grid, 'floor').tick : Math.round(raw)) - drag.anchor.tick);
-      setDrag({ ...drag, dTick, dLane: Math.round((cy - drag.startY) / LANE_H), duplicate: drag.duplicate || p.altKey });
+      // the selection moves as a group: no note may leave the lanes, or two lanes would collapse into one (as the piano roll, ADR-084)
+      const sel = notes.filter((n) => selection.eventIds.has(n.id)).map((n) => laneOf.get(n.pitch)).filter((l): l is number => l !== undefined);
+      const rawLane = Math.round((cy - drag.startY) / LANE_H);
+      const dLane = sel.length ? Math.max(-Math.min(...sel), Math.min(lanes.length - 1 - Math.max(...sel), rawLane)) : rawLane;
+      setDrag({ ...drag, dTick, dLane, duplicate: drag.duplicate || p.altKey });
     } else setDrag({ ...drag, x1: cx, y1: cy });
   }
 
   function onPointerUp() {
+    try {
+      finishDrag();
+    } catch (err) {
+      reportError((err as Error).message); // shown in the banner like the other editors (ADR-084)
+    }
+  }
+
+  function finishDrag() {
     const d = dragRef.current;
     setDrag(null);
     if (!d || !track) return;

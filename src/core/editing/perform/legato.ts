@@ -49,7 +49,9 @@ export function legatoNotes(project: MidiProject, ids: Iterable<string>, opts: L
           pedal++;
           continue;
         }
-        const duration = Math.max(1, Math.min(target, SMF_LIMITS.maxTick) - n.tick);
+        // the next chord plays the same key: overlapping it would let this note's Note Off cut that one
+        const sameKey = opts.mode === 'overlap' && next.notes.some((m) => m.pitch === n.pitch && m.channelOverride === n.channelOverride);
+        const duration = Math.max(1, Math.min(sameKey ? next.tick : target, SMF_LIMITS.maxTick) - n.tick);
         if (duration !== n.durationTicks) updates.push({ id: n.id, changes: { durationTicks: duration } });
       }
     }

@@ -153,6 +153,8 @@ export class Recorder {
     try {
       this.playStartMs = null;
       await this.transport.play(startTick);
+      // a song that could not be loaded leaves the transport stopped without throwing
+      if (this.transport.getState().status !== 'playing') throw new Error(this.transport.getState().error ?? t('再生を開始できませんでした。'));
       // loop recording: passes are counted on the input clock from here (ADR-084)
       this.playStartMs = performance.now();
       this.loopSeconds = loop ? { start: tempo.tickToSeconds(loop.startTick), end: tempo.tickToSeconds(loop.endTick) } : null;
@@ -260,7 +262,10 @@ export class Recorder {
     this.detach?.();
     this.detach = null;
     if (phase === 'idle') return;
+    // where the take ends, read while the transport still runs: once stopped it is parked at the
+    // loop start, and the pass counted from there is one too many
     const stopSeconds = this.transport.getPosition().seconds;
+    const stopPass = phase === 'recording' ? this.loopPlace(performance.now(), false)?.pass : undefined;
     this.transport.stop();
     this.transport.setTail(0);
     if (phase === 'count-in') {
@@ -277,7 +282,7 @@ export class Recorder {
     let lost = 0;
     try {
       for (const [trackId, take] of this.takes) {
-        const res = take.finish(stopSeconds, this.loopPlace(performance.now(), false)?.pass);
+        const res = take.finish(stopSeconds, stopPass);
         const events = res.takes.reduce((n, t) => n + t.events.length, 0);
         // the target track was deleted (or its creation undone) while recording: nothing to add to (ADR-084)
         if (!p.tracks.some((tr) => tr.id === trackId)) {
@@ -287,7 +292,8 @@ export class Recorder {
         closed += res.closedAtStop;
         count += events;
         const replaceRange = rec.punch && this.loopAtStart ? { startTick: this.loopAtStart.startTick, endTick: this.loopAtStart.endTick } : undefined;
-        const r = takeToCommand(p, trackId, res, { mode: rec.mode, loopChoice: rec.loopTakes, quantize: grid && grid.den === 1 ? grid : null, replaceRange });
+        const loop = this.loopAtStart?.enabled && !rec.punch && this.loopAtStart.endTick > this.loopAtStart.startTick ? { startTick: this.loopAtStart.startTick, endTick: this.loopAtStart.endTick } : undefined;
+        const r = takeToCommand(p, trackId, res, { mode: rec.mode, loopChoice: rec.loopTakes, quantize: grid && grid.den === 1 ? grid : null, replaceRange, loop });
         if (!r) continue;
         p = applyCommand(p, r.command).project;
         Object.assign(patch, r.command.patch);

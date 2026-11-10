@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { deleteConductorEvent, upsertConductorEvent, type ConductorValue } from '../../core/editing/conductorOps';
 import type { ConductorEvent, MidiProject } from '../../core/model/types';
-import { bpmFromUs } from '../../core/timing/tempoMap';
+import { bpmFromUs, shownBpm } from '../../core/timing/tempoMap';
 import { TimeSignatureMap } from '../../core/timing/timeSignatureMap';
 import { useEditorState, useServices } from '../../app/store/context';
 import { t } from '../../i18n';
@@ -70,7 +70,7 @@ function defaultValue(project: MidiProject, kind: ConductorKind, tick: number): 
 function valueOf(c: ConductorEvent): ConductorValue {
   switch (c.kind) {
     case 'tempo':
-      return { kind: 'tempo', bpm: Math.round(bpmFromUs(c.usPerQuarter) * 100) / 100 };
+      return { kind: 'tempo', bpm: shownBpm(c.usPerQuarter) };
     case 'time-signature':
       return { kind: 'time-signature', numerator: c.numerator, denominator: c.denominator };
     case 'key-signature':
@@ -107,9 +107,10 @@ export function valueFieldText(v: ConductorValue): string {
 /** The input for a value of `kind` (number / text / key select). */
 export function ValueField({ kind, value, onChange, onCommit, label, autoFocus }: { kind: ConductorKind; value: string; onChange: (v: string) => void; onCommit?: (value?: string) => void; label: string; autoFocus?: boolean }) {
   const commitKeys = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
+    // without onCommit the field sits in a form: Enter must reach the form's own submit
+    if (e.key === 'Enter' && onCommit) {
       e.preventDefault();
-      onCommit?.();
+      onCommit();
     }
   };
   if (kind === 'key-signature')

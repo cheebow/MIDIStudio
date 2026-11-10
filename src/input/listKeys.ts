@@ -54,7 +54,10 @@ export function listKeyIntent(mode: InputMode, k: ListKey, isMusical: (code: str
   const otherMod = isMac ? k.ctrlKey : k.metaKey;
   if (k.key === 'Enter' && mod && !k.altKey) return { type: 'repeat-last' };
   if (k.key === 'Enter' && k.altKey && !mod) return { type: 'insert-menu' };
-  if (mod && !k.altKey && !otherMod && k.key.toLowerCase() === 'v') return { type: 'paste', insert: k.shiftKey };
+  // a non-Latin layout types another letter on the V key: fall back to the key position, as the global shortcuts do (ADR-084)
+  const typed = k.key.toLowerCase();
+  const letter = /^\p{L}$/u.test(typed) && !/^[a-z]$/.test(typed) && /^Key[A-Z]$/.test(k.code) ? k.code.slice(3).toLowerCase() : typed;
+  if (mod && !k.altKey && !otherMod && letter === 'v') return { type: 'paste', insert: k.shiftKey };
   if (mod || otherMod) return null; // ⌘Z / ⌘C … stay global
   if (k.altKey && !k.shiftKey && INSERT_KEYS[k.code]) return { type: 'insert', kind: INSERT_KEYS[k.code] };
   if (isInstrument(mode) && isMusical(k.code)) return null;

@@ -53,6 +53,19 @@ export function EventBytesDialog({ state, trackId, onClose, onDone }: { state: B
   const [dataMode, setDataMode] = useState<'text' | 'hex'>(kind === 'meta' && initialBytes && initialText === null ? 'hex' : 'text');
   const [text, setText] = useState(initialText ?? '');
 
+  /** Text and hex are two views of the same bytes: switching carries the current content over. */
+  const switchDataMode = (to: 'text' | 'hex') => {
+    if (to === dataMode) return;
+    if (to === 'hex') setHex(toHex(textToMetaBytes(text)));
+    else {
+      const s = hexFieldState(hex, false);
+      const asText = s.bytes ? metaBytesToText(s.bytes) : null;
+      if (asText === null) return reportError(s.bytes ? t('このデータはテキストとして表示できません。') : s.error);
+      setText(asText);
+    }
+    setDataMode(to);
+  };
+
   const params = useMemo(() => GS_PARAMS.filter((p) => p.max > p.min || p.name === 'GS Reset').filter((p) => !search || p.name.toLowerCase().includes(search.toLowerCase())), [search]);
   const param: GsParamDef | undefined = GS_PARAMS.find((p) => p.name === tpl);
   const decoded = kind === 'sysex' && status === 'F0' ? decodeGs(hexFieldState(hex, true).bytes ?? []) : null;
@@ -252,10 +265,10 @@ export function EventBytesDialog({ state, trackId, onClose, onDone }: { state: B
             <fieldset>
               <legend>{t('データ')}</legend>
               <label>
-                <input type="radio" name="meta-data" checked={dataMode === 'text'} onChange={() => setDataMode('text')} /> {t('テキスト（UTF-8）')}
+                <input type="radio" name="meta-data" checked={dataMode === 'text'} onChange={() => switchDataMode('text')} /> {t('テキスト（UTF-8）')}
               </label>
               <label>
-                <input type="radio" name="meta-data" checked={dataMode === 'hex'} onChange={() => setDataMode('hex')} /> {t('16進')}
+                <input type="radio" name="meta-data" checked={dataMode === 'hex'} onChange={() => switchDataMode('hex')} /> {t('16進')}
               </label>
               {dataMode === 'text' ? (
                 <input value={text} onChange={(e) => setText(e.target.value)} aria-label={t('テキスト')} data-testid="meta-text" />

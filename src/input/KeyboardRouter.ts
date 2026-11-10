@@ -83,6 +83,12 @@ export class KeyboardRouter {
       this.accent = true;
       return 'ignored';
     }
+    // macOS sends no keyup for other keys while ⌘ is down: a note key released during ⌘S / ⌘Z would
+    // sound (and record) until the next blur, and its next press would count as "already down"
+    if (k.code === 'MetaLeft' || k.code === 'MetaRight') {
+      this.releaseAll();
+      return 'ignored';
+    }
     if (k.targetKind === 'text' || k.targetKind === 'dialog') return 'ignored';
     if (this._mode === 'edit-shortcuts') return 'ignored';
     if (k.ctrlKey || k.metaKey || k.altKey) return 'ignored'; // leave shortcuts alone
@@ -130,8 +136,12 @@ export function shiftOctave(p: SavedInputPresets, delta: number): SavedInputPres
 export function reassignKey(map: Record<string, number>, oldCode: string, newCode: string): Record<string, number> {
   const pitch = map[oldCode];
   if (pitch === undefined || oldCode === newCode) return map;
+  // a key already used in this table swaps with the old one: its slot would otherwise lose its row
+  // in the settings (the rows are the map's entries) with no way to give it a key again
+  const displaced = map[newCode];
   const next: Record<string, number> = {};
   for (const [c, p] of Object.entries(map)) if (c !== oldCode && c !== newCode) next[c] = p;
   next[newCode] = pitch;
+  if (displaced !== undefined) next[oldCode] = displaced;
   return next;
 }
