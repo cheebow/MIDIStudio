@@ -343,3 +343,16 @@ test('ADR-050: the velocity dialog ramps the track; the humanize dialog moves no
   expect(v2.map((v, i) => Math.abs(v - [40, 70, 100][i]) <= 5)).toEqual([true, true, true]);
   expect(notesOf(await exportedSmf(page)).map((n) => n.tick)).toEqual([0, 480, 960]); // timing range 0: onsets untouched
 });
+
+test('ADR-097: notes drawn in bar 1 and then in bar 2 are one region, not one per bar', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('tool-draw').click();
+  for (const tick of [0, 1920, 1920 * 2]) {
+    const p = await rollPoint(page, tick, 60);
+    await page.mouse.click(p.x, p.y);
+  }
+  const [download] = await Promise.all([page.waitForEvent('download'), menu(page, 'ファイル', /\.midstudio/)]);
+  const { readFileSync } = await import('node:fs');
+  const project = JSON.parse(readFileSync((await download.path())!, 'utf8')).project as { clips: { startTick: number; endTick: number; eventIds: string[] }[] };
+  expect(project.clips.map((c) => [c.startTick, c.endTick, c.eventIds.length])).toEqual([[0, 1920 * 3, 3]]);
+});

@@ -73,7 +73,12 @@ export function assertValidEvent(e: NewEvent | MidiEvent): void {
  * (Bank Select -> Program -> controls -> notes) and get increasing originOrder (ADR-014).
  * Optionally adds them to a clip.
  */
-export function addEvents(project: MidiProject, trackId: TrackId, events: readonly NewEvent[], opts: { clipId?: string; label?: string } = {}): { command: Command; ids: string[] } | null {
+/**
+ * `opts.separateClip`: notes that land where no clip is always get a clip of their own (a recorded
+ * take is its own region). Without it, a new clip that would touch a clip of the track is made by
+ * extending that clip instead (ADR-097).
+ */
+export function addEvents(project: MidiProject, trackId: TrackId, events: readonly NewEvent[], opts: { clipId?: string; label?: string; separateClip?: boolean } = {}): { command: Command; ids: string[] } | null {
   if (events.length === 0) return null;
   const track = findTrack(project, trackId);
   events.forEach(assertValidEvent);
@@ -116,7 +121,7 @@ export function addEvents(project: MidiProject, trackId: TrackId, events: readon
   if (opts.clipId) {
     patch.clips = project.clips.map((c) => (c.id === opts.clipId ? extendClip({ ...c, eventIds: [...c.eventIds, ...ids] }, created) : c));
   } else {
-    const clips = clipsAdopting(project, project.clips, trackId, created);
+    const clips = clipsAdopting(project, project.clips, trackId, created, !opts.separateClip);
     if (clips !== project.clips) patch.clips = clips;
   }
   return { command: cmd(opts.label ?? 'イベントを追加', patch), ids };
@@ -129,9 +134,12 @@ export function addEvents(project: MidiProject, trackId: TrackId, events: readon
  * and delete act on it (ADR-059). Notes put where no clip is get a clip of their own, as recording onto an
  * empty track does in a DAW (ADR-060): whole bars around the material, clamped to the gap between the
  * neighbouring clips. CC / Program / SysEx alone (mixer and patch setup) make no clip and stay free.
+ * With `extend`, a new clip that would touch an existing clip of the track is not made: that clip grows
+ * over the range instead (the one before it; else the one after), so notes entered bar after bar stay
+ * one region rather than a row of one-bar regions (ADR-097).
  * Returns `clips` itself when nothing changes.
  */
-function clipsAdopting(project: MidiProject, clips: MidiClip[], trackId: TrackId, events: readonly MidiEvent[]): MidiClip[] {
+function clipsAdopting(project: MidiProject, clips: MidiClip[], trackId: TrackId, events: readonly MidiEvent[], extend = true): MidiClip[] {
   const own = clips.filter((c) => c.trackId === trackId);
   const joined = new Map<string, string[]>();
   const free: MidiEvent[] = [];
@@ -141,7 +149,21 @@ function clipsAdopting(project: MidiProject, clips: MidiClip[], trackId: TrackId
     else free.push(e);
   }
   let out = joined.size ? clips.map((c) => (joined.has(c.id) ? { ...c, eventIds: [...c.eventIds, ...joined.get(c.id)!] } : c)) : clips;
-  if (free.some((e) => e.kind === 'note')) out = [...out, ...clipsAroundFreeEvents(project, trackId, own, free)];
+  if (!free.some((e) => e.kind === 'note')) return out;
+  for (const made of clipsAroundFreeEvents(project, trackId, own, free)) {
+    // (the last match is the one drawn on top where clips overlap)
+    const before = extend ? own.findLast((c) => c.endTick === made.startTick) : undefined;
+    const after = extend && !before ? own.findLast((c) => c.startTick === made.endTick) : undefined;
+    const grown = before ?? after;
+    if (!grown) {
+      out = [...out, made];
+      continue;
+    }
+    out = out.map((c) => {
+      if (c.id !== grown.id) return c;
+      return before ? { ...c, endTick: made.endTick, eventIds: [...c.eventIds, ...made.eventIds] } : { ...c, startTick: made.startTick, eventIds: [...made.eventIds, ...c.eventIds] };
+    });
+  }
   return out;
 }
 
