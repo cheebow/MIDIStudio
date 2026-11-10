@@ -214,3 +214,13 @@ test('ADR-058: the bundled sample songs open from ファイル › サンプル�
   await expect(page.getByTestId('about-dialog')).toContainText("Merry X'mas For You!");
 });
 
+
+test('menu bar: every title sits on the same line (a Latin-only title like MIDI is not higher than the Japanese ones)', async ({ page }) => {
+  await page.goto('/');
+  const boxes = await page.locator('.menubar .menu-title').evaluateAll((els) => els.map((el) => {
+    const r = el.getBoundingClientRect();
+    return { top: Math.round(r.top * 10) / 10, height: Math.round(r.height * 10) / 10 };
+  }));
+  expect(boxes.length).toBeGreaterThan(5);
+  for (const b of boxes) expect(b).toEqual(boxes[0]);
+});
