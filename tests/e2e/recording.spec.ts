@@ -138,6 +138,33 @@ test.describe('live recording with the real engine (Chromium)', () => {
     expect(noteOns(await exportedSmf(page))).toHaveLength(0);
   });
 
+  // Stopping the transport used to leave the recorder in "recording": the take was never saved.
+  for (const how of ['Space', 'stop', 'pause'] as const) {
+    test(`a take is ended and kept by ${how === 'Space' ? 'Space' : how === 'stop' ? 'the stop button' : 'the play / pause button'}`, async ({ page }) => {
+      await page.goto('/');
+      await startAudio(page);
+      await page.getByRole('button', { name: '録音の設定' }).click();
+      await page.getByRole('dialog').getByRole('combobox').nth(1).selectOption('0'); // no count-in
+      await page.getByRole('button', { name: '閉じる', exact: true }).click();
+      await setInputMode(page, 'piano-performance');
+      await page.locator('body').click({ position: { x: 5, y: 5 } });
+      await page.getByTestId('record').click();
+      await expect(page.locator('.rec-label')).toBeVisible();
+      await page.waitForTimeout(400);
+      await page.keyboard.down('KeyZ');
+      await page.waitForTimeout(250);
+      await page.keyboard.up('KeyZ');
+      await page.waitForTimeout(150);
+      if (how === 'Space') await page.keyboard.press('Space');
+      else await page.getByTestId(how === 'stop' ? 'transport-stop' : 'transport-play').click();
+      await expect(page.getByTestId('record')).toHaveAttribute('aria-pressed', 'false');
+      await expect(page.locator('.rec-label')).toHaveCount(0);
+      await expect(page.getByTestId('status-info')).toContainText('録音しました');
+      await expect(page.getByTestId('transport-play')).toHaveAttribute('aria-label', '再生'); // not playing on
+      expect(noteOns(await exportedSmf(page))).toHaveLength(1);
+    });
+  }
+
   test('count-in shows the remaining beats before recording starts', async ({ page }) => {
     await page.goto('/');
     await startAudio(page);
