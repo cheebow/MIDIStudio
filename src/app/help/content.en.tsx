@@ -22,6 +22,7 @@ export const SHORTCUTS_EN: [string, string][] = [
   [`${MOD}A`, 'Select all notes of the selected track'],
   ['Delete / Backspace', 'Delete the selection'],
   ['V / P', 'Select tool / draw tool'],
+  ['C / G', 'Scissors tool / glue tool'],
   ['Q / Shift+Q', 'Quantize (to the edit grid) / quantize dialog'],
   ['T', 'Visual mode (Esc closes it)'],
   ['R', 'Start / stop real-time recording'],
@@ -82,6 +83,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
       <>
         <ul>
           <li>Tools: select (<K>V</K>) and draw (<K>P</K>). With the draw tool, a click places a note of the grid length; keep dragging to set its length.</li>
+          <li>The scissors (<K>C</K>) cut a note in two where you click it; the glue (<K>G</K>) joins the note you click with the next note of the same pitch (a gap between them is filled). With several notes selected, clicking one of them cuts all of them at that position, or joins the selected notes pitch by pitch. With snap on, the cut lands on the grid. In the track view the same tools split a clip and join it with the next one.</li>
           <li>Drag a note’s middle to move it, its right edge to change its length, <K>{ALT}</K>+drag to duplicate, Shift+click to add to the selection. Drag on empty space for a rubber-band selection.</li>
           <li>Snap and the edit grid (1/1 to 1/64, triplets, dotted) are in the tool row. Hold <K>{MOD}</K> while dragging to ignore snap for that drag.</li>
           <li>The info bar above the editor shows the position, length, pitch, velocity and release velocity of the selected notes, and you can type over them (the drum editor has it too). With several notes, values that differ show as a range such as “30–100”. A number sets every note (position and pitch move the group and keep its shape), “+10” / “-10” changes each one, <K>↑</K><K>↓</K> step by 1 (Shift for bigger steps), Esc goes back.</li>

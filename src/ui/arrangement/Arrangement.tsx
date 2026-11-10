@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { t } from '../../i18n';
 import { arrangementZoomPatch } from '../zoom';
 import { draggedLoop, hitLoop, loopCursor, loopSnap, type LoopDrag } from '../loopDrag';
-import { adoptFreeEvents, clampedTrackOffset, createClip, deleteClip, duplicateClip, freeEventsInClip, moveClips, reorderTracks, resizeClip, splitClip, updateClip, updateTrack } from '../../core/editing/operations';
+import { adoptFreeEvents, clampedTrackOffset, createClip, deleteClip, duplicateClip, freeEventsInClip, mergeClips, moveClips, reorderTracks, resizeClip, splitClip, updateClip, updateTrack } from '../../core/editing/operations';
 import { duplicateClips, pasteClips, pasteEvents, tracksRelativeTo } from '../../core/editing/clipboard';
 import { MOD_LABEL as MOD } from '../platform';
 import { isSecondaryClick, useContextMenu } from '../menu/ContextMenu';
@@ -19,7 +19,7 @@ import { useEditActions, useEditorState, useServices } from '../../app/store/con
 import { conductorMarks, drawLoopRuler, drawMarkerLane, drawMarkerLines, drawPlayhead, drawRulerConductorMarks, drawTempoLane, fitCanvas, readTheme } from '../canvas';
 import { useAnimationLoop, useDragState, useElementSize, usePlayheadFollow, useSignatureMap, useZoomAnchor } from '../hooks';
 import { useThemeVersion } from '../../app/theme';
-import { PencilIcon, SelectIcon } from '../icons';
+import { GlueIcon, PencilIcon, ScissorsIcon, SelectIcon } from '../icons';
 import { selectedTrack } from '../../core/model/selectedTrack';
 import { autoScrollStep, edgeScrollSpeed, pointerOf, useDragAutoScroll, type PointerLike } from '../dragAutoScroll';
 
@@ -406,6 +406,40 @@ export function Arrangement() {
     return best;
   }
 
+  /**
+   * Scissors / glue on a clip (ADR-095): the scissors split it at the (snapped) position; the glue
+   * joins it with the next clip of its track, or — when it is one of several selected clips — joins
+   * the selection (per track, as ⌘J does). The notes are not changed by either.
+   */
+  function applyClipTool(which: 'scissors' | 'glue', clip: MidiClip, x: number) {
+    try {
+      if (which === 'scissors') {
+        const inside = (tk: number) => tk > clip.startTick && tk < clip.endTick;
+        const raw = Math.round(tickAt(x));
+        const tk = inside(snap(tickAt(x))) ? snap(tickAt(x)) : raw;
+        if (!inside(tk)) return;
+        const before = new Set(project.clips.map((c) => c.id));
+        store.run(splitClip(store.project, clip.id, tk));
+        const made = store.project.clips.filter((c) => !before.has(c.id)).map((c) => c.id);
+        store.setSelection({ ...store.getState().selection, eventIds: new Set(), clipIds: new Set([clip.id, ...made]) });
+        return;
+      }
+      const group = selection.clipIds.size > 1 && selection.clipIds.has(clip.id);
+      const next = project.clips.filter((c) => c.trackId === clip.trackId && c.id !== clip.id && c.startTick >= clip.startTick).sort((a, b) => a.startTick - b.startTick)[0];
+      const ids = group ? [...selection.clipIds] : next ? [clip.id, next.id] : [];
+      const cmd = ids.length ? mergeClips(store.project, ids) : null;
+      if (!cmd) {
+        reportError(group ? t('同じトラックのクリップを 2 つ以上選んでください。') : t('このクリップのあとに、同じトラックのクリップがありません。'));
+        return;
+      }
+      store.run(cmd);
+      const alive = new Set(store.project.clips.map((c) => c.id));
+      store.setSelection({ ...store.getState().selection, eventIds: new Set(), clipIds: new Set(ids.filter((id) => alive.has(id))) });
+    } catch (err) {
+      reportError((err as Error).message);
+    }
+  }
+
   function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
     if (isSecondaryClick(e)) return; // the context menu handles it
     const rect = e.currentTarget.getBoundingClientRect();
@@ -437,7 +471,14 @@ export function Arrangement() {
       return;
     }
     store.updateSettings({ selectedTrackId: track.id });
-    const edge = hitClipEdge(x, y);
+    if ((tool === 'scissors' || tool === 'glue') && e.button === 0) {
+      const target = hitClip(x, y);
+      if (target) {
+        applyClipTool(tool, target, x);
+        return;
+      }
+    }
+    const edge = tool === 'scissors' || tool === 'glue' ? null : hitClipEdge(x, y);
     if (edge) {
       store.setSelection({ ...selection, eventIds: new Set(), clipIds: new Set([edge.clip.id]), trackIds: new Set([track.id]) });
       setDrag({ kind: 'resize', clip: edge.clip, edge: edge.edge, tick: edge.edge === 'start' ? edge.clip.startTick : edge.clip.endTick });
@@ -486,6 +527,10 @@ export function Arrangement() {
       lastPointer.current = pointerOf(e);
       trackPointer(e.clientX, e.clientY);
       applyDrag(lastPointer.current);
+      return;
+    }
+    if ((tool === 'scissors' || tool === 'glue') && y >= HEAD_H) {
+      e.currentTarget.style.cursor = hitClip(x, y) ? (tool === 'scissors' ? 'col-resize' : 'pointer') : 'default';
       return;
     }
     e.currentTarget.style.cursor = y < RULER_H ? loopCursor(hitLoop(x, y, project.loop, pxPerTick, scrollX, RULER_H)) || 'default' : y >= HEAD_H && hitClipEdge(x, y) ? 'ew-resize' : y >= HEAD_H && tool === 'draw' && !hitClip(x, y) ? 'crosshair' : 'default';
@@ -717,6 +762,12 @@ export function Arrangement() {
             </button>
             <button aria-label={t('描画')} aria-pressed={tool === 'draw'} className={`icon-btn${tool === 'draw' ? ' on' : ''}`} onClick={() => store.setTool('draw')} title={t('描画ツール (P): 空いているところをドラッグでクリップ（リージョン）を作成')} data-testid="arr-tool-draw">
               <PencilIcon />
+            </button>
+            <button aria-label={t('ハサミ')} aria-pressed={tool === 'scissors'} className={`icon-btn${tool === 'scissors' ? ' on' : ''}`} onClick={() => store.setTool('scissors')} title={t('ハサミツール (C): クリップをクリックした位置で 2 つに分ける')} data-testid="arr-tool-scissors">
+              <ScissorsIcon />
+            </button>
+            <button aria-label={t('ノリ')} aria-pressed={tool === 'glue'} className={`icon-btn${tool === 'glue' ? ' on' : ''}`} onClick={() => store.setTool('glue')} title={t('ノリツール (G): クリックしたクリップを、次のクリップとつなげる（複数選んでいれば、まとめて）')} data-testid="arr-tool-glue">
+              <GlueIcon />
             </button>
           </span>
           <span className="segmented zoom-buttons" role="group" aria-label={t('トラックビューの拡大・縮小')}>

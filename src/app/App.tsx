@@ -44,7 +44,7 @@ import { Arrangement } from '../ui/arrangement/Arrangement';
 import { PianoRoll } from '../ui/piano-roll/PianoRoll';
 import { TrackInspector } from '../ui/inspector/TrackInspector';
 import { Splitter } from '../ui/Splitter';
-import { PencilIcon, SelectIcon, SnapGridIcon } from '../ui/icons';
+import { GlueIcon, PencilIcon, ScissorsIcon, SelectIcon, SnapGridIcon } from '../ui/icons';
 import { DrumEditor } from '../ui/drum-editor/DrumEditor';
 import { ListEditor } from '../ui/list-editor/ListEditor';
 import { VisualMonitor } from '../ui/visual/VisualMonitor';
@@ -110,6 +110,7 @@ export default function App() {
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const inputState = useSyncExternalStore(input.subscribe, input.getSnapshot);
   const { project, selection, history, dirty } = state;
+  const selectLike = state.tool === 'select' || (project.settings.activePanel === 'drum' && state.tool !== 'draw');
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<ImportIssue[]>([]);
   const [dialog, setDialog] = useState<DialogKind>(null);
@@ -727,12 +728,23 @@ export default function App() {
             {!settings.editorCollapsed && (settings.activePanel === 'piano-roll' || settings.activePanel === 'drum') && (
               <span className="editor-tools">
                 <span className="segmented" role="group" aria-label={t('ツール')}>
-                  <button aria-label={t('選択')} aria-pressed={state.tool === 'select'} className={`icon-btn${state.tool === 'select' ? ' on' : ''}`} onClick={() => store.setTool('select')} title={t('選択ツール (V): クリックで選択、ドラッグで移動・範囲選択')} data-testid="tool-select">
+                  {/* the drum editor has no scissors / glue: there they act as the select tool (ADR-095) */}
+                  <button aria-label={t('選択')} aria-pressed={selectLike} className={`icon-btn${selectLike ? ' on' : ''}`} onClick={() => store.setTool('select')} title={t('選択ツール (V): クリックで選択、ドラッグで移動・範囲選択')} data-testid="tool-select">
                     <SelectIcon />
                   </button>
                   <button aria-label={t('描画')} aria-pressed={state.tool === 'draw'} className={`icon-btn${state.tool === 'draw' ? ' on' : ''}`} onClick={() => store.setTool('draw')} title={t('描画ツール (P): クリックで入力（ドラムではもう一度クリックで削除）')} data-testid="tool-draw">
                     <PencilIcon />
                   </button>
+                  {settings.activePanel === 'piano-roll' && (
+                    <>
+                      <button aria-label={t('ハサミ')} aria-pressed={state.tool === 'scissors'} className={`icon-btn${state.tool === 'scissors' ? ' on' : ''}`} onClick={() => store.setTool('scissors')} title={t('ハサミツール (C): ノートをクリックした位置で 2 つに分ける（複数選んでいれば、まとめて同じ位置で）')} data-testid="tool-scissors">
+                        <ScissorsIcon />
+                      </button>
+                      <button aria-label={t('ノリ')} aria-pressed={state.tool === 'glue'} className={`icon-btn${state.tool === 'glue' ? ' on' : ''}`} onClick={() => store.setTool('glue')} title={t('ノリツール (G): クリックしたノートを、次の同じ高さのノートとつなげる（複数選んでいれば、同じ高さどうしをまとめて）')} data-testid="tool-glue">
+                        <GlueIcon />
+                      </button>
+                    </>
+                  )}
                 </span>
                 <label className="icon-toggle" title={t('スナップ（グリッドに合わせる）。Ctrl / ⌘ を押しながらのドラッグで一時的に無効')}>
                   <input type="checkbox" aria-label="SNAP" checked={settings.snapEnabled} onChange={(e) => store.updateSettings({ snapEnabled: e.target.checked })} />

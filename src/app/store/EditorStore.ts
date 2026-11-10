@@ -6,7 +6,8 @@ import type { ClipboardData } from '../../core/editing/clipboard';
 import type { MidiProject, ProjectViewSettings } from '../../core/model/types';
 import { t } from '../../i18n';
 
-export type Tool = 'select' | 'draw';
+/** scissors / glue: cut and join notes in the piano roll, clips in the track view (ADR-095) */
+export type Tool = 'select' | 'draw' | 'scissors' | 'glue';
 
 export interface EditorState {
   project: MidiProject;
