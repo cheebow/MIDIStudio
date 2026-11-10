@@ -478,7 +478,9 @@ export function Arrangement() {
         return;
       }
     }
-    const edge = tool === 'scissors' || tool === 'glue' ? null : hitClipEdge(x, y);
+    // Shift / Ctrl / ⌘ + click adds to the selection also near an edge (it used to start a resize there,
+    // which replaced the selection with that one clip)
+    const edge = tool === 'scissors' || tool === 'glue' || add ? null : hitClipEdge(x, y);
     if (edge) {
       store.setSelection({ ...selection, eventIds: new Set(), clipIds: new Set([edge.clip.id]), trackIds: new Set([track.id]) });
       setDrag({ kind: 'resize', clip: edge.clip, edge: edge.edge, tick: edge.edge === 'start' ? edge.clip.startTick : edge.clip.endTick });
@@ -691,14 +693,12 @@ export function Arrangement() {
         ]);
         return;
       }
-      // quantize acts on the selection: select the clip's notes first (the clip stays selected)
+      // quantize acts on the selection: the clip's notes are selected for it, and only for it —
+      // afterwards the clip alone is selected again, so Delete / copy act on the clip (ADR-098)
       const ids = new Set(clip.eventIds);
       const noteIds = track.events.filter((ev) => ev.kind === 'note' && ids.has(ev.id)).map((ev) => ev.id);
       const free = freeEventsInClip(store.project, clip.id).length;
-      const withNotes = (fn: () => void) => () => {
-        store.setSelection({ ...store.getState().selection, eventIds: new Set(noteIds) });
-        fn();
-      };
+      const withNotes = (fn: () => void) => () => actions.onClipNotes(noteIds, fn);
       ctxMenu.open(e, [
         { label: t('ピアノロールで開く'), action: () => store.updateSettings({ selectedTrackId: track.id, activePanel: track.displayMode === 'drum' ? 'drum' : 'piano-roll', editorCollapsed: false }) },
         { label: t('名前と色…'), action: () => setClipEdit(clip) },

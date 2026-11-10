@@ -35,6 +35,8 @@ export interface EditActions {
   quantize: () => void;
   /** open the quantize dialog: note value, strength, shuffle, lengths (⇧Q, ADR-043) */
   quantizeDialog: () => void;
+  /** runs `fn` (a command or a dialog acting on the selection) on a clip's notes; afterwards the clip alone is selected again */
+  onClipNotes: (noteIds: string[], fn: () => void) => void;
   /** humanize / velocity dialogs (ADR-050) */
   humanizeDialog: () => void;
   velocityDialog: () => void;

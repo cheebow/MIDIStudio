@@ -194,6 +194,23 @@ export class EditorStore {
     this.set({ selection });
   }
 
+  /**
+   * A clip's notes selected only so that a command acting on the selection runs on them (the clip
+   * menu's quantize etc., ADR-098). returnClipNotes() ends it: the clip alone is selected again, so
+   * Delete / copy act on the clip and not on its notes.
+   */
+  private clipNotesBorrowed = false;
+  borrowClipNotes(noteIds: Iterable<string>): void {
+    this.clipNotesBorrowed = true;
+    this.set({ selection: { ...this.state.selection, eventIds: new Set(noteIds) } });
+  }
+  returnClipNotes(): void {
+    if (!this.clipNotesBorrowed) return;
+    this.clipNotesBorrowed = false;
+    const sel = this.state.selection;
+    if (sel.clipIds.size > 0 && sel.eventIds.size > 0) this.set({ selection: { ...sel, eventIds: new Set() } });
+  }
+
   selectEvents(ids: Iterable<string>): void {
     this.set({ selection: { ...this.state.selection, eventIds: new Set(ids) } });
   }

@@ -45,6 +45,8 @@ export class Recorder {
   private takes = new Map<string, LiveTake>();
   private detach: (() => void) | null = null;
   private countTimer: ReturnType<typeof setTimeout> | null = null;
+  /** ends the wait of a count-in that is cancelled, so start() returns */
+  private countDone: (() => void) | null = null;
   private targets: RecordTargets | null = null;
   private loopAtStart: MidiProject['loop'] | null = null;
   /** song seconds of the start position (early hits during the count-in are placed here) */
@@ -67,6 +69,8 @@ export class Recorder {
     private readonly input: InputController,
     private readonly clickAt: (contextTime: number, accent: boolean) => void,
     private readonly audioNow: () => number | null,
+    /** silences the count-in clicks already scheduled (a count-in that is cancelled) */
+    private readonly cancelClicks: () => void = () => {},
   ) {}
 
   subscribe = (fn: Listener) => {
@@ -132,24 +136,43 @@ export class Recorder {
     const beatSec = tempo.usPerQuarterAt(startTick) / 1e6 * (4 / sig.signatureAt(startTick).denominator);
     const now = this.audioNow();
     this.detach = this.input.addSink((e) => this.capture(e));
-    if (beats > 0 && now !== null) {
-      this.set({ phase: 'count-in', countIn: beats, message: null });
-      for (let i = 0; i < beats; i++) this.clickAt(now + 0.05 + i * beatSec, i % sig.signatureAt(startTick).numerator === 0);
-      await new Promise<void>((resolve) => {
-        let left = beats;
-        const tick = () => {
-          left--;
-          this.set({ countIn: left });
-          if (left <= 0 || this.phaseNow() !== 'count-in') resolve();
-          else this.countTimer = setTimeout(tick, beatSec * 1000);
-        };
-        this.countTimer = setTimeout(tick, 50 + beatSec * 1000);
-      });
-      if (this.phaseNow() !== 'count-in') return; // cancelled while counting in
-    }
-    this.set({ phase: 'recording', countIn: 0, message: null });
     // keep the transport running past the end of the song while recording
     this.transport.setTail(startTick + project.ppq * 4 * 2000);
+    // The song is loaded under the count-in, not after it: the load takes time, and the downbeat
+    // would be late by that much against the count-in clicks (ADR-098).
+    const loaded = this.transport.prepare(startTick).then(() => null, (e: unknown) => e);
+    if (beats > 0 && now !== null) {
+      this.set({ phase: 'count-in', countIn: beats, message: null });
+      const first = now + 0.05;
+      for (let i = 0; i < beats; i++) this.clickAt(first + i * beatSec, i % sig.signatureAt(startTick).numerator === 0);
+      await new Promise<void>((resolve) => {
+        this.countDone = resolve;
+        // Each wait is measured against the audio clock the clicks are on: a chain of fixed
+        // timeouts only ever runs late, and the lateness of every beat added up.
+        const wait = (beat: number) => {
+          const nominal = beatSec * 1000 + (beat === 1 ? 50 : 0);
+          const at = this.audioNow();
+          const left = at === null ? nominal : (first + beat * beatSec - at) * 1000;
+          this.countTimer = setTimeout(() => {
+            this.set({ countIn: beats - beat });
+            if (beat >= beats || this.phaseNow() !== 'count-in') resolve();
+            else wait(beat + 1);
+          }, Math.max(0, Math.min(nominal, left)));
+        };
+        wait(1);
+      });
+      this.countDone = null;
+      if (this.phaseNow() !== 'count-in') return; // cancelled while counting in
+    }
+    const failed = await loaded;
+    if (beats > 0 && now !== null && this.phaseNow() !== 'count-in') return; // cancelled while the song was loading
+    if (failed) {
+      // the song could not be loaded: do not go on to "recording" with the input attached
+      this.set({ phase: 'recording' });
+      this.stop();
+      throw failed instanceof Error ? failed : new Error(String(failed));
+    }
+    this.set({ phase: 'recording', countIn: 0, message: null });
     try {
       this.playStartMs = null;
       await this.transport.play(startTick);
@@ -269,7 +292,10 @@ export class Recorder {
     this.transport.stop();
     this.transport.setTail(0);
     if (phase === 'count-in') {
+      this.cancelClicks();
       this.set({ phase: 'idle', countIn: 0, message: t('録音を取り消しました（カウントイン中）。') });
+      this.countDone?.();
+      this.countDone = null;
       return;
     }
     const project = this.store.project;
