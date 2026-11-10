@@ -241,6 +241,9 @@ export function useGlobalShortcuts(d: ShortcutDeps): void {
       } else if (letter && k === 'p') {
         handled();
         store.setTool('draw');
+      } else if (letter && !e.shiftKey && (k === 'c' || k === 'g')) {
+        handled();
+        store.setTool(k === 'c' ? 'scissors' : 'glue'); // C: cut, G: glue (ADR-095)
       } else if (letter && k === 'l') {
         handled();
         const span = e.shiftKey ? selectedSpan() : null;

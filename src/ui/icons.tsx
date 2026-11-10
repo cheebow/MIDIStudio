@@ -39,6 +39,24 @@ export const PencilIcon = () => (
   </Svg>
 );
 
+export const ScissorsIcon = () => (
+  <Svg>
+    <circle cx="6" cy="6.5" r="2.6" />
+    <circle cx="6" cy="17.5" r="2.6" />
+    <path d="M20 4.5L8.2 15.8" />
+    <path d="M20 19.5L8.2 8.2" />
+  </Svg>
+);
+
+/** Glue: a tube with a drop at its nozzle. */
+export const GlueIcon = () => (
+  <Svg>
+    <path d="M8 21h8l1-10H7l1 10z" />
+    <path d="M10 11l1-4h2l1 4" />
+    <path d="M12 7V3.5" />
+  </Svg>
+);
+
 /** Snap: a note block aligned to the grid lines. */
 export const SnapGridIcon = () => (
   <Svg>

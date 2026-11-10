@@ -15,10 +15,12 @@ import { NoteInfoBar } from '../editing/NoteInfoBar';
 import { useAnimationLoop, useChordSegments, useDragState, useElementSize, usePlayheadFollow, useSignatureMap, useZoomAnchor } from '../hooks';
 import { useThemeVersion } from '../../app/theme';
 import { draggedLoop, hitLoop, loopCursor, loopSnap, type LoopDrag } from '../loopDrag';
+import { glueNotes, glueWithNext, splitNotes } from '../../core/editing/noteTools';
 import { selectedTrack } from '../../core/model/selectedTrack';
 import { pointerOf, useDragAutoScroll, type PointerLike } from '../dragAutoScroll';
 import { chordAt } from '../../core/theory/chords';
 
+const TOOL_NAMES = { select: '選択ツール', draw: '描画ツール', scissors: 'ハサミツール', glue: 'ノリツール' } as const;
 const ROW_H = 12;
 const KEYS_W = 72;
 const RULER_H = 20;
@@ -65,6 +67,8 @@ export function PianoRoll() {
   const setLastLength = (ticks: number) => setLastLen({ song: songKey, ticks });
   const [warning, setWarning] = useState<string | null>(null);
   const auditionRef = useRef<number | null>(null);
+  /** scissors: the cut a click would make at the pointer (a line on the notes it would cut) */
+  const cutPreview = useRef<{ tick: number; noteId: string } | null>(null);
   /** last pointer of the active drag, re-applied when the view scrolls under it */
   const lastPointer = useRef<PointerLike | null>(null);
   const trackPointer = useDragAutoScroll(scrollRef, gridRef, drag !== null, { top: TOP, vertical: drag?.kind !== 'loop' });
@@ -336,6 +340,21 @@ export function PianoRoll() {
       }
     }
     drawPlayhead(ctx, canvas, x, view.h);
+    const cut = tool === 'scissors' ? cutPreview.current : null;
+    if (cut) {
+      const group = selection.eventIds.size > 1 && selection.eventIds.has(cut.noteId);
+      const cx = Math.round(cut.tick * pxPerTick - view.x) + 0.5;
+      ctx.strokeStyle = readTheme(canvas).text;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (const n of notes) {
+        if (!(group ? selection.eventIds.has(n.id) : n.id === cut.noteId) || n.tick >= cut.tick || n.tick + n.durationTicks <= cut.tick) continue;
+        const ny = TOP + (127 - n.pitch) * ROW_H - view.y;
+        ctx.moveTo(cx, ny - 3);
+        ctx.lineTo(cx, ny + ROW_H + 3);
+      }
+      ctx.stroke();
+    }
     // keys: held by the player, and (while playing) the track's notes sounding at the playhead
     const held = new Set(input.getSnapshot().pianoHeld);
     if (auditionRef.current !== null) held.add(auditionRef.current);
@@ -354,7 +373,7 @@ export function PianoRoll() {
     }
     if (input.mode === 'step-piano' || input.mode === 'step-drums') drawStepCursor(ctx, Math.round(step.cursor * pxPerTick - view.x) + 0.5, view.h);
     follow.update(pos, scrollRef.current, w, leadPx, sig, pxPerTick, settings.followPlayback);
-  }, [transport, view, pxPerTick, settings.followPlayback, settings.showChords, chords, TOP, themeVersion, step, input, recorder, track?.id, sig, follow, notes]);
+  }, [transport, view, pxPerTick, settings.followPlayback, settings.showChords, chords, TOP, themeVersion, step, input, recorder, track?.id, sig, follow, notes, tool, selection.eventIds]);
 
   // Ctrl / ⌘ + wheel (and trackpad pinch, which Chrome reports as wheel + ctrlKey) zooms the roll.
   // React registers wheel listeners as passive, so preventDefault there would not stop the page
@@ -448,6 +467,10 @@ export function PianoRoll() {
       return;
     }
     const h = hit(x, y);
+    if (h && (tool === 'scissors' || tool === 'glue') && e.button === 0) {
+      applyNoteTool(tool, h.note, x);
+      return;
+    }
     if (h) {
       let sel = new Set(selection.eventIds);
       if (e.shiftKey) {
@@ -485,6 +508,41 @@ export function PianoRoll() {
     setDrag({ kind: 'box', x0: cx, y0: cy, x1: cx, y1: cy, additive: e.shiftKey });
   }
 
+  /** Where the scissors cut a note for a pointer at x: the nearest grid line inside it (snap on), else the exact position. */
+  function cutTick(n: NoteEvent, x: number): number | null {
+    const raw = (x + view.x) / pxPerTick;
+    const end = n.tick + n.durationTicks;
+    const inside = (tk: number) => tk > n.tick && tk < end;
+    const snapped = settings.snapEnabled ? snapTick(raw, grid).tick : Math.round(raw);
+    if (inside(snapped)) return snapped;
+    return inside(Math.round(raw)) ? Math.round(raw) : null;
+  }
+
+  /**
+   * Scissors / glue on a note (ADR-095). A note that is part of a selection of several notes takes
+   * the selection with it: all of them are cut at the same position / joined key by key. Otherwise
+   * the scissors cut this note and the glue joins it with the next note of the same key.
+   */
+  function applyNoteTool(which: 'scissors' | 'glue', n: NoteEvent, x: number) {
+    const own = [...selection.eventIds].filter((id) => notes.some((m) => m.id === id));
+    const group = own.length > 1 && own.includes(n.id);
+    try {
+      if (which === 'scissors') {
+        const tick = cutTick(n, x);
+        const r = tick === null ? null : splitNotes(store.project, group ? own : [n.id], tick);
+        if (r) store.run(r.command, { select: r.ids });
+        else setWarning(t('この位置では分割できません（ノートの内側をクリックしてください）。'));
+      } else {
+        const r = group ? glueNotes(store.project, own) : glueWithNext(store.project, n.id);
+        if (r) store.run(r.command, { select: r.ids });
+        else setWarning(group ? t('選んだノートに、同じ高さのものが 2 つ以上ありません。') : t('この音のあとに、同じ高さのノートがありません。'));
+      }
+      if (store.project !== project) setWarning(null);
+    } catch (err) {
+      setWarning((err as Error).message);
+    }
+  }
+
   function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
     const drag = dragRef.current;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -501,6 +559,13 @@ export function PianoRoll() {
       return;
     }
     const h = hit(x, y);
+    // scissors: the line where a click would cut (drawn by the overlay loop)
+    const cut = tool === 'scissors' && h ? cutTick(h.note, x) : null;
+    cutPreview.current = cut !== null && h ? { tick: cut, noteId: h.note.id } : null;
+    if (tool === 'scissors' || tool === 'glue') {
+      e.currentTarget.style.cursor = h ? (tool === 'scissors' ? 'col-resize' : 'pointer') : 'default';
+      return;
+    }
     e.currentTarget.style.cursor = h ? (h.edge ? 'ew-resize' : 'grab') : tool === 'draw' ? 'crosshair' : 'default';
   }
 
@@ -624,13 +689,16 @@ export function PianoRoll() {
                 className="roll-grid"
                 style={{ left: KEYS_W }}
                 tabIndex={0}
-                aria-label={t('ピアノロール: {name}。{tool}。矢印キーで移動・移調、Delete で削除', { name: track.name, tool: tool === 'draw' ? t('描画ツール') : t('選択ツール') })}
+                aria-label={t('ピアノロール: {name}。{tool}。矢印キーで移動・移調、Delete で削除', { name: track.name, tool: t(TOOL_NAMES[tool]) })}
                 data-testid="piano-roll-grid"
                 data-chords={chordNames}
                 onPointerDown={onPointerDown}
                 onContextMenu={onContextMenu}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
+                onPointerLeave={() => {
+                  cutPreview.current = null;
+                }}
                 onPointerCancel={() => {
                   setDrag(null);
                   audition(null);
