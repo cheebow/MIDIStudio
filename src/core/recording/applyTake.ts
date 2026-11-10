@@ -61,7 +61,7 @@ export function takeToCommand(project: MidiProject, trackId: string, take: TakeR
       patch = { tracks, clips };
     }
   }
-  const added = events.length ? addEvents(base, trackId, events, { label: '録音' }) : null;
+  const added = events.length ? addEvents(base, trackId, events, { label: '録音', separateClip: true }) : null;
   if (!added && opts.mode !== 'replace') return null;
   return { command: { label: opts.mode === 'replace' ? '録音（置き換え）' : '録音', patch: { ...patch, ...(added?.command.patch ?? {}) } }, ids: added?.ids ?? [] };
 }

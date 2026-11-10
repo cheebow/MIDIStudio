@@ -199,7 +199,7 @@ describe('clips (E03 / E04, REQ-PRJ-06)', () => {
   it('ADR-059: events added inside a clip later (recording, drawing, step input) join that clip; the rest gets its own clip', () => {
     const { s, clipId } = setup();
     const before = s.project.clips[0].eventIds.length;
-    const r = addEvents(s.project, s.track.id, [note(960, 67), { kind: 'cc', tick: 1919, controller: 1, value: 10 }, note(1920, 69), note(2400, 71)])!;
+    const r = addEvents(s.project, s.track.id, [note(960, 67), { kind: 'cc', tick: 1919, controller: 1, value: 10 }, note(1920, 69), note(2400, 71)], { separateClip: true })!; // a recorded take
     s.run(r.command);
     const clip = s.project.clips.find((c) => c.id === clipId)!;
     expect(clip.eventIds.length).toBe(before + 2); // the note at 960 and the CC at 1919 (onset inside [0, 1920))
@@ -235,17 +235,53 @@ describe('clips (E03 / E04, REQ-PRJ-06)', () => {
     expect(s.project.clips).toHaveLength(1);
     expect(s.project.clips[0]).toMatchObject({ startTick: 1920, endTick: 5760, eventIds: r1.ids });
     // a recording that starts in the clip and runs past its end: the inside joins, the rest gets the next clip
-    const r2 = addEvents(s.project, s.track.id, [note(5000, 64), note(6000, 65), note(9000, 67)])!;
+    const r2 = addEvents(s.project, s.track.id, [note(5000, 64), note(6000, 65), note(9000, 67)], { separateClip: true })!;
     s.run(r2.command);
     expect(s.project.clips).toHaveLength(2);
     expect(s.project.clips[0].eventIds).toEqual([...r1.ids, r2.ids[0]]);
     expect(s.project.clips[1]).toMatchObject({ startTick: 5760, endTick: 9600, eventIds: r2.ids.slice(1) }); // bar 4 … end of bar 5
     // a note in the gap before bar 2 is clamped so the new clip does not overlap the first
-    const r3 = addEvents(s.project, s.track.id, [note(500, 70, 1920)])!;
+    const r3 = addEvents(s.project, s.track.id, [note(500, 70, 1920)], { separateClip: true })!;
     s.run(r3.command);
     expect(s.project.clips[2]).toMatchObject({ startTick: 0, endTick: 1920, eventIds: r3.ids });
     s.undo();
     expect(s.project.clips).toHaveLength(2);
+  });
+
+  it('ADR-097: notes entered next to a clip extend that clip (bar after bar stays one region); a gap of a bar, or a recorded take, makes a new one', () => {
+    const s = new Session(createEmptyProject()); // 4/4, PPQ 480 → 1920 per bar
+    const a = addEvents(s.project, s.track.id, [note(0, 60)])!; // drawn in bar 1
+    s.run(a.command);
+    expect(s.project.clips).toHaveLength(1);
+    const clipId = s.project.clips[0].id;
+    const b = addEvents(s.project, s.track.id, [note(1920, 62)])!; // drawn in bar 2: the same region grows
+    s.run(b.command);
+    expect(s.project.clips).toHaveLength(1);
+    expect(s.project.clips[0]).toMatchObject({ id: clipId, startTick: 0, endTick: 3840, eventIds: [...a.ids, ...b.ids] });
+    s.undo();
+    expect(s.project.clips[0]).toMatchObject({ startTick: 0, endTick: 1920, eventIds: a.ids });
+    s.redo();
+    // bar 4 (bar 3 stays empty): not next to the clip, so a region of its own
+    const c = addEvents(s.project, s.track.id, [note(5760, 64)])!;
+    s.run(c.command);
+    expect(s.project.clips.map((x) => [x.startTick, x.endTick])).toEqual([[0, 3840], [5760, 7680]]);
+    // bar 3, between the two: the earlier clip grows up to the later one; they are not merged
+    const d = addEvents(s.project, s.track.id, [note(3840, 65)])!;
+    s.run(d.command);
+    expect(s.project.clips.map((x) => [x.startTick, x.endTick])).toEqual([[0, 5760], [5760, 7680]]);
+    expect(s.project.clips[0].eventIds).toEqual([...a.ids, ...b.ids, ...d.ids]);
+    // a note before a clip that starts later (nothing before it): that clip grows backwards
+    const t2 = new Session(createEmptyProject());
+    const late = addEvents(t2.project, t2.track.id, [note(1920, 60)])!;
+    t2.run(late.command);
+    const early = addEvents(t2.project, t2.track.id, [note(480, 62)])!;
+    t2.run(early.command);
+    expect(t2.project.clips).toHaveLength(1);
+    expect(t2.project.clips[0]).toMatchObject({ startTick: 0, endTick: 3840, eventIds: [...early.ids, ...late.ids] });
+    // a recorded take next to a clip is a region of its own
+    const take = addEvents(s.project, s.track.id, [note(7680, 67)], { separateClip: true })!;
+    s.run(take.command);
+    expect(s.project.clips.map((x) => [x.startTick, x.endTick])).toEqual([[0, 5760], [5760, 7680], [7680, 9600]]);
   });
 
   it('moving a clip moves all its events (CC included) and keeps durations', () => {
