@@ -86,7 +86,13 @@ export function TransportBar({ transport, project, audioReady, ensureAudio, metr
   const ts = sig.signatureAt(tick);
   const bar = (t: number) => sig.tickToBarBeat(t).bar;
   const playing = state.status === 'playing';
-  const { store } = useServices();
+  const { store, recorder } = useServices();
+  /** Stop and play / pause end a running take first (as the record button does): the transport alone would leave it unsaved. */
+  const endTake = (): boolean => {
+    if (recorder.getState().phase === 'idle') return false;
+    recorder.stop();
+    return true;
+  };
   const ctxMenu = useContextMenu();
   const [conductorEdit, setConductorEdit] = useState<ConductorDialogTarget | null>(null);
   /** menu for the BPM / time-signature readouts: change the value in effect here, or add one here */
@@ -116,11 +122,16 @@ export function TransportBar({ transport, project, audioReady, ensureAudio, metr
   return (
     <div className="transport" role="toolbar" aria-label={t('トランスポート')}>
       <button onClick={() => transport.seek(0)} title={t('先頭へ')} aria-label={t('先頭へ')}>⏮</button>
-      <button onClick={() => transport.stop()} title={t('停止')} aria-label={t('停止')} data-testid="transport-stop">■</button>
+      <button onClick={() => {
+        endTake(); // closes the take at the position it reached, then the playhead goes back
+        transport.stop();
+      }} title={t('停止')} aria-label={t('停止')} data-testid="transport-stop">■</button>
       <button
         className="primary"
         disabled={state.loading}
-        onClick={() => run(() => ensureAudio().then(() => transport.togglePlay()))}
+        onClick={() => {
+          if (!endTake()) run(() => ensureAudio().then(() => transport.togglePlay()));
+        }}
         title={audioReady ? t('再生 / 一時停止') : t('再生（音源を準備してから再生します）')}
         aria-label={playing ? t('一時停止') : t('再生')}
         data-testid="transport-play"

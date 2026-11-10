@@ -173,7 +173,10 @@ export function useGlobalShortcuts(d: ShortcutDeps): void {
       if (e.code === 'Space' && !mod) {
         handled();
         const span = e.shiftKey ? selectedSpan() : null;
-        if (span) void playFrom(span.start);
+        // while recording (or counting in), Space ends the take like the record button: stopping
+        // only the transport would leave the recorder waiting, the take unsaved
+        if (recorder.getState().phase !== 'idle') recorder.stop();
+        else if (span) void playFrom(span.start);
         else
           d.ensureAudio()
             .then(() => transport.togglePlay())
