@@ -70,7 +70,9 @@ a { color: var(--accent); }
 .shell > .menubar, .shell > .toolbar, .shell > .banner, .shell > .statusbar { flex: none; }
 .menubar { display: flex; gap: 2px; padding: 2px 8px; background: var(--panel); border-bottom: 1px solid var(--border); }
 .menu { position: relative; }
-.menu-title { border: none; background: transparent; padding: 4px 10px; }
+/* a fixed line height: with `normal`, a title of Latin letters only (MIDI) is laid out with the Latin font's
+   metrics and comes out lower-built than the Japanese ones (25 px vs 29 px in Chrome), so its text sat higher */
+.menu-title { border: none; background: transparent; padding: 4px 10px; line-height: 1.5; }
 .menu-title[aria-expanded='true'] { background: var(--selection); }
 .menu-items { position: absolute; top: 100%; left: 0; z-index: 50; min-width: 240px; max-height: calc(100vh - 60px); overflow-y: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 4px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18); }
 .menu-items hr { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
