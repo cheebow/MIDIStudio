@@ -11,6 +11,8 @@ export function defaultViewSettings(ppq: number): ProjectViewSettings {
   return {
     activePanel: 'piano-roll',
     listDisplayUnit: 'native',
+    listPositionUnit: 'tick',
+    conductorPositionUnit: 'mbt',
     // 1/16 when exact; otherwise snap off rather than a silently rounded grid (ADR-002)
     snapTicks: ppq % 4 === 0 ? ppq / 4 : 0,
     horizontalZoom: 24,

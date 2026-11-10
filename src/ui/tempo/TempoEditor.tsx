@@ -8,6 +8,7 @@ import type { ConductorEvent } from '../../core/model/types';
 import { shownBpm } from '../../core/timing/tempoMap';
 import { useEditorState, useServices } from '../../app/store/context';
 import { t } from '../../i18n';
+import { formatListPosition, parsePositionInput, type ParsedPosition } from '../../core/list/listPosition';
 import { ConductorEventDialog, KIND_NAMES, ValueField, parseConductorValue, signatureMap, type ConductorDialogTarget, type ConductorKind } from './conductorUi';
 
 const KINDS = Object.keys(KIND_NAMES) as ConductorKind[];
@@ -29,6 +30,9 @@ export function TempoEditor() {
   const { store, transport } = useServices();
   const { project } = useEditorState();
   const sig = useMemo(() => signatureMap(project), [project]);
+  /** notation of the position column (ADR-099): bar.beat.tick as it always was, or absolute ticks */
+  const posUnit = project.settings.conductorPositionUnit;
+  const formatPos = (tick: number) => formatListPosition(tick, posUnit, sig, 'native', project.ppq);
   const [dialog, setDialog] = useState<ConductorDialogTarget | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   /** kinds shown in the list (view state only; all kinds by default) */
@@ -63,6 +67,14 @@ export function TempoEditor() {
           </button>
         ))}
         <span className="toolbar-sep" aria-hidden="true" />
+        <div className="segmented" role="group" aria-label={t('位置の表記')}>
+          <button className={posUnit === 'tick' ? 'on' : ''} aria-pressed={posUnit === 'tick'} onClick={() => store.updateSettings({ conductorPositionUnit: 'tick' })} data-testid="conductor-pos-tick">
+            Tick
+          </button>
+          <button className={posUnit === 'mbt' ? 'on' : ''} aria-pressed={posUnit === 'mbt'} onClick={() => store.updateSettings({ conductorPositionUnit: 'mbt' })} data-testid="conductor-pos-mbt">
+            {t('小節.拍.Tick')}
+          </button>
+        </div>
         <span className="note">{t('表示:')}</span>
         {KINDS.map((k) => (
           <button key={k} className={`toggle${shown.has(k) ? ' on' : ''}`} aria-pressed={shown.has(k)} onClick={() => toggle(k)} data-testid={`show-${k}`} title={shown.has(k) ? t('{kind}を一覧に表示しない', { kind: t(KIND_NAMES[k]) }) : t('{kind}を一覧に表示する', { kind: t(KIND_NAMES[k]) })}>
@@ -92,7 +104,7 @@ export function TempoEditor() {
         {project.conductor.length > 0 && rows.length === 0 && <p className="note">{t('表示する種類が選ばれていません（上の「表示」で選んでください）。')}</p>}
         {rows.map((c) => (
           // the key includes the shown position: a time-signature change elsewhere re-labels this row (ADR-084)
-          <TempoRow key={`${c.id}:${c.tick}:${sig.format(c.tick)}:${fieldText(c)}`} event={c} format={(t) => sig.format(t)} parse={(t) => sig.parse(t)} onError={setMessage} onSeek={() => transport.seek(c.tick)} onDelete={() => store.run(deleteConductorEvent(store.project, c.id))} onDialog={() => setDialog({ kind: c.kind, tick: c.tick, id: c.id })} />
+          <TempoRow key={`${c.id}:${c.tick}:${formatPos(c.tick)}:${fieldText(c)}`} event={c} format={formatPos} parse={(text, current) => parsePositionInput(text, posUnit, sig, current)} onError={setMessage} onSeek={() => transport.seek(c.tick)} onDelete={() => store.run(deleteConductorEvent(store.project, c.id))} onDialog={() => setDialog({ kind: c.kind, tick: c.tick, id: c.id })} />
         ))}
         {hidden > 0 && rows.length > 0 && <p className="note">{t('ほかに {n} 件（表示していない種類）', { n: hidden })}</p>}
       </div>
@@ -101,16 +113,20 @@ export function TempoEditor() {
   );
 }
 
-function TempoRow({ event: c, format, parse, onError, onSeek, onDelete, onDialog }: { event: ConductorEvent; format: (t: number) => string; parse: (t: string) => number | null; onError: (m: string | null) => void; onSeek: () => void; onDelete: () => void; onDialog: () => void }) {
+function TempoRow({ event: c, format, parse, onError, onSeek, onDelete, onDialog }: { event: ConductorEvent; format: (t: number) => string; parse: (text: string, current: number) => ParsedPosition; onError: (m: string | null) => void; onSeek: () => void; onDelete: () => void; onDialog: () => void }) {
   const { store } = useServices();
   const [pos, setPos] = useState(format(c.tick));
   const [value, setValue] = useState(fieldText(c));
   const commit = (override?: string) => {
-    const tick = parse(pos);
+    const parsed = parse(pos, c.tick);
     const v = override ?? value;
     try {
-      if (tick === null) throw new Error(t('位置は 小節.拍.Tick（例 5.1.0）で入力してください。'));
-      if (tick === c.tick && v === fieldText(c)) return;
+      if (!parsed.ok) throw new Error(parsed.message);
+      const tick = parsed.ticks;
+      if (tick === c.tick && v === fieldText(c)) {
+        if (pos !== format(c.tick)) setPos(format(c.tick)); // "5" typed for 005.01.000: show it in full
+        return;
+      }
       store.run(upsertConductorEvent(store.project, tick, parseConductorValue(c.kind, v), c.id));
       onError(null);
     } catch (e) {

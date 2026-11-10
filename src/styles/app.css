@@ -103,6 +103,11 @@ a { color: var(--accent); }
 .segmented button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .transport { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .transport .position { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 1.2rem; min-width: 8ch; padding: 0 4px; }
+/* the readout is a button (click to type a position, ADR-099) that looks like the plain text it was */
+.transport button.position { border: 1px dashed transparent; background: transparent; color: inherit; cursor: text; }
+.transport button.position:hover, .transport button.position:focus-visible { border-color: var(--border); }
+.transport input.position.locate { width: 11ch; border: 1px solid var(--accent); }
+.transport input.position.locate[aria-invalid='true'] { border-color: var(--error); }
 .transport .time { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; color: var(--muted); }
 .seek-bar { flex: 1 1 120px; min-width: 80px; height: 22px; }
 .seek-bar canvas { display: block; width: 100%; height: 22px; border-radius: 4px; outline: none; touch-action: none; }

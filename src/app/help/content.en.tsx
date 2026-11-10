@@ -159,6 +159,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
           <li>With “Conductor” on, tempo, time signature, key and marker events line up in time order too. Edit the tempo VEL (BPM), the time signature NOTE (3/4) and the marker DETAIL in place.</li>
           <li>Changing ST moves the events after it (ripple). GT changes only that note.</li>
           <li>Units can be ticks or ♩=48 (Recomposer style). Values that do not divide evenly are shown as fractions.</li>
+          <li>The TICK column can also be written as Bar.Beat.Tick (“Tick / Bar.Beat.Tick” in the toolbar). Type 12.3.0 to move the event there; 12.3 and 12 work too, and +120 / -120 moves from where it is. In this notation + / - is one tick and ⌥↑↓ one beat. The unit of ST and GT does not change.</li>
           <li>The filter narrows the list to notes only, CC only and so on.</li>
         </ul>
       </>
@@ -185,6 +186,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
         <ul>
           <li>Add, change and delete tempos, time signatures, key signatures and markers in one list. Filter by kind.</li>
           <li>“Go to this position” moves the playhead there. Clicking the BPM or the time signature in the transport also adds or changes them.</li>
+          <li>Positions can be shown and typed as Bar.Beat.Tick or as ticks (switch in the toolbar).</li>
         </ul>
       </>
     ),
@@ -209,7 +211,7 @@ export const HELP_SECTIONS_EN: HelpSection[] = [
     body: (
       <>
         <ul>
-          <li><K>Space</K> plays / pauses, ■ stops (back to the start, or to the loop start). Click or drag the seek bar, or click the ruler, to move.</li>
+          <li><K>Space</K> plays / pauses, ■ stops (back to the start, or to the loop start). Click or drag the seek bar, or click the ruler, to move. Click the position readout (001.01.000), type e.g. 12.3.0 and press Enter to go there.</li>
           <li>Loop with <K>L</K>; set the range with the bar numbers, by dragging in the ruler or seek bar, or with <K>Shift+L</K> (the selection).</li>
           <li>Metronome: <K>K</K>. Follow playback: <K>F</K>.</li>
           <li>Notes, patches and tempos changed during playback take effect at the next stop, seek or loop wrap, so the sound never breaks up (the transport shows “changes apply after stop”). Mute / solo, the loop range and the mixer are immediate.</li>

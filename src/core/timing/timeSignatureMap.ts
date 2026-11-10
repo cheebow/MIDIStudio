@@ -133,9 +133,14 @@ export class TimeSignatureMap {
     return Math.round(beatStart + tickInBeat);
   }
 
-  /** "001.01.000" style label (tick within beat rounded down for display). */
+  /**
+   * "001.01.000" style label (tick within beat rounded down for display). The tick part is as wide
+   * as the largest tick of a beat there, so the labels of a song with a PPQ of 1000 or more (or
+   * with long beats, like 2/2 at PPQ 960) still line up.
+   */
   format(tick: number): string {
     const p = this.tickToBarBeat(tick);
-    return `${String(p.bar).padStart(3, '0')}.${String(p.beat).padStart(2, '0')}.${String(Math.floor(p.tickInBeat)).padStart(3, '0')}`;
+    const width = Math.max(3, String(Math.max(0, Math.ceil((this.ppq * 4) / p.denominator) - 1)).length);
+    return `${String(p.bar).padStart(3, '0')}.${String(p.beat).padStart(2, '0')}.${String(Math.floor(p.tickInBeat)).padStart(width, '0')}`;
   }
 }

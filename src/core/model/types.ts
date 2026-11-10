@@ -154,12 +154,18 @@ export interface LoopRange {
 }
 
 export type ListDisplayUnit = 'native' | 'classic48';
+/** how the position of a list / conductor row is written (ADR-099): absolute ticks, or bar.beat.tick */
+export type ListPositionUnit = 'tick' | 'mbt';
 export type EditorPanel = 'piano-roll' | 'drum' | 'list' | 'mixer' | 'tempo';
 
 export interface ProjectViewSettings {
   selectedTrackId?: TrackId;
   activePanel: EditorPanel;
   listDisplayUnit: ListDisplayUnit;
+  /** independent of listDisplayUnit, which is the unit of the ST / GT lengths */
+  listPositionUnit: ListPositionUnit;
+  /** the same choice for the conductor tab, which has always shown bar.beat.tick (its default) */
+  conductorPositionUnit: ListPositionUnit;
   /** Snap in ticks (0 = off). Stored in ticks so it is exact for the project PPQ. */
   snapTicks: number;
   /** arrangement: pixels per quarter note */
