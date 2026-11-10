@@ -62,8 +62,10 @@ export interface AutoScrollOptions {
  * While `active`, scrolls `scrollRef` every frame when the last pointer position (reported through
  * the returned function, in client coordinates) is near or past an edge of `areaRef`. Changing the
  * scroll position fires the container's scroll event, where the editor re-applies the drag.
+ * `press` marks a pointerdown: the press is where the 4 px are counted from. (Not every press
+ * becomes a drag — a ruler click only seeks — so the previous one cannot be left as the origin.)
  */
-export function useDragAutoScroll(scrollRef: RefObject<HTMLElement | null>, areaRef: RefObject<HTMLElement | null>, active: boolean, opts: AutoScrollOptions = {}): (clientX: number, clientY: number) => void {
+export function useDragAutoScroll(scrollRef: RefObject<HTMLElement | null>, areaRef: RefObject<HTMLElement | null>, active: boolean, opts: AutoScrollOptions = {}): (clientX: number, clientY: number, press?: boolean) => void {
   const pointer = useRef<{ x: number; y: number } | null>(null);
   /** where the drag started: the scroll waits until the pointer has really moved, so a click near an edge does not scroll */
   const origin = useRef<{ x: number; y: number } | null>(null);
@@ -99,8 +101,11 @@ export function useDragAutoScroll(scrollRef: RefObject<HTMLElement | null>, area
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
   }, [active, scrollRef, areaRef, top, vertical]);
-  return (x, y) => {
-    if (!origin.current) origin.current = { x, y };
+  return (x, y, press = false) => {
+    if (press) {
+      origin.current = { x, y };
+      armed.current = false;
+    } else if (!origin.current) origin.current = { x, y };
     else if (Math.abs(x - origin.current.x) + Math.abs(y - origin.current.y) > ARM_PX) armed.current = true;
     pointer.current = { x, y };
   };

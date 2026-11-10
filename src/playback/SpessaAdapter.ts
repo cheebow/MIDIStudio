@@ -4,6 +4,7 @@
 // seconds-based PlaybackEngine used by the Transport (ADR-018). spessasynth_lib is loaded on demand (first audio start).
 //
 // Verified against node_modules/spessasynth_lib@4.4.3 dist/index.d.ts (see docs/DECISIONS.md ADR-012, ADR-075).
+import { applySongBounds, playFrom } from './sequencerDrive';
 import type { Sequencer, WorkletSynthesizer } from 'spessasynth_lib';
 import type { EngineSong, PlaybackEngine } from './PlaybackEngine';
 import { t } from '../i18n';
@@ -226,12 +227,7 @@ export class SpessaAdapter implements PlaybackEngine {
     } catch (cause) {
       throw new PlaybackError('midi-load', t('再生用の MIDI を準備できませんでした: {message}', { message: (cause as Error).message }), { cause });
     }
-    if (song.loop) {
-      midi.loop = { start: song.loop.startTick, end: song.loop.endTick, type: 'hard' };
-      midi.lastVoiceEventTick = Math.max(midi.lastVoiceEventTick, song.loop.endTick);
-    }
-    // The sequencer ends at the last voice event (meta events do not count); extend it for recording.
-    if (song.minEndTick) midi.lastVoiceEventTick = Math.max(midi.lastVoiceEventTick, song.minEndTick);
+    applySongBounds(midi, song);
     const done = new Promise<void>((resolve, reject) => {
       sequencer.eventHandler.addEvent('songChange', 'midi-studio-load', () => resolve());
       sequencer.eventHandler.addEvent('midiError', 'midi-studio-load', (e) =>
@@ -243,7 +239,11 @@ export class SpessaAdapter implements PlaybackEngine {
     if (generation !== this.loadGeneration) return;
     sequencer.loopCount = song.loop ? Infinity : 0;
     sequencer.pause();
+    this.pausedSeek = null; // a new song starts at its beginning
   }
+
+  /** the last seek made while paused: re-applied once playing, where it is exact (see playFrom) */
+  private pausedSeek: number | null = null;
 
   private meters: { analysers: AnalyserNode[]; buf: Float32Array<ArrayBuffer>; levels: number[] } | null = null;
 
@@ -287,7 +287,8 @@ export class SpessaAdapter implements PlaybackEngine {
 
   play(): void {
     this.requireSoundBank();
-    this.engine?.sequencer.play();
+    if (this.engine) playFrom(this.engine.sequencer, this.pausedSeek);
+    this.pausedSeek = null;
   }
 
   pause(): void {
@@ -296,7 +297,9 @@ export class SpessaAdapter implements PlaybackEngine {
 
   seekSeconds(seconds: number): void {
     if (!this.engine) return;
-    this.engine.sequencer.currentTime = Math.max(0, seconds);
+    const t = Math.max(0, seconds);
+    this.engine.sequencer.currentTime = t;
+    this.pausedSeek = this.engine.sequencer.paused ? t : null;
   }
 
   getSeconds(): number {

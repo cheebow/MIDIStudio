@@ -251,8 +251,15 @@ export default function App() {
   };
 
   function loadProject(p: MidiProject, opts: { dirty?: boolean; message?: string } = {}) {
+    // Nothing of the song being left may carry over: a running take is closed into that song (not
+    // the new one), the playhead does not stay parked at its loop start, the step cursor and the
+    // import notes of the previous file go too.
+    if (recorder.getState().phase !== 'idle') recorder.stop();
     transport.stop();
+    transport.seek(0);
     store.load(p, { dirty: opts.dirty });
+    step.setCursor(0);
+    setIssues([]);
     setRestore(null); // the restore offer is only for the song that was there at startup
     if (opts.message) setInfo(opts.message);
   }
@@ -320,7 +327,6 @@ export default function App() {
       setError(t('{name} を開けませんでした（現在の曲はそのままです）: {errors}', { name: file.name, errors: r.errors.slice(0, 5).map((m) => t(m)).join(' / ') }));
       return;
     }
-    setIssues([]);
     loadProject(r.project, { message: t('{name} を開きました。', { name: file.name }) });
   }
 

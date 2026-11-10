@@ -189,7 +189,7 @@ describe('step recording', () => {
       [240, 67, 216, 90],
       [720, 72, 216 + 480, 100],
     ]);
-    expect(st.cursor).toBe(720 + 216 + 480);
+    expect(st.cursor).toBe(720 + 240 * 3); // the step line after the tied note (2 ties), not its gated end
     ({ p, st } = run(p, stepUndoLast(p, st)));
     expect(notes(p).map((n) => n[1])).toEqual([60, 64, 67]);
     expect(st.cursor).toBe(720);

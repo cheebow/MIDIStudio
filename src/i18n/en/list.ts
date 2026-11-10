@@ -126,4 +126,5 @@ export const EN_LIST: Record<string, string> = {
   'RPN コースチューン': 'RPN Coarse Tuning',
   'NRPN（CC99, CC98, CC6, CC38）': 'NRPN (CC99, CC98, CC6, CC38)',
   'GS Reset': 'GS Reset',
+  'このデータはテキストとして表示できません。': 'This data cannot be shown as text.',
 };

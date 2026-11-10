@@ -3,7 +3,7 @@
 import { newId } from '../model/ids';
 import type { ConductorEvent, MidiProject } from '../model/types';
 import { sortEvents } from '../events/order';
-import { bpmFromUs, MAX_BPM, MIN_BPM, usFromBpm } from '../timing/tempoMap';
+import { MAX_BPM, MIN_BPM, shownBpm, usFromBpm } from '../timing/tempoMap';
 import { TimeSignatureMap } from '../timing/timeSignatureMap';
 import type { Command } from './history';
 import { EditError } from './operations';
@@ -15,9 +15,10 @@ function withConductor(conductor: ConductorEvent[], label: string): Command {
 
 export function setTempo(project: MidiProject, tick: number, bpm: number): Command {
   if (!(bpm >= MIN_BPM && bpm <= MAX_BPM)) throw new EditError(t('テンポは 4〜999 BPM で入力してください。'));
-  const us = usFromBpm(bpm);
   // the one that takes effect: when an imported file has two at one tick, the last one wins (ADR-087)
   const existing = sortEvents(project.conductor).findLast((c) => c.kind === 'tempo' && c.tick === tick);
+  // the BPM shown (2 decimals) of an unchanged tempo keeps its exact µs (integer µs is the source of truth, ADR-087)
+  const us = existing?.kind === 'tempo' && shownBpm(existing.usPerQuarter) === bpm ? existing.usPerQuarter : usFromBpm(bpm);
   const conductor = existing
     ? project.conductor.map((c) => (c === existing ? { ...c, usPerQuarter: us } : c))
     : [...project.conductor, { id: newId('evt'), kind: 'tempo' as const, tick, usPerQuarter: us, originOrder: project.nextOriginOrder }];
@@ -83,7 +84,7 @@ export function upsertConductorEvent(project: MidiProject, tick: number, value: 
     case 'tempo': {
       // the BPM shown (2 decimals) of an unchanged tempo keeps its exact µs: moving it, or OK without
       // a change, must not rewrite the value (integer µs is the source of truth, ADR-087)
-      const same = old?.kind === 'tempo' && Math.round(bpmFromUs(old.usPerQuarter) * 100) / 100 === value.bpm;
+      const same = old?.kind === 'tempo' && shownBpm(old.usPerQuarter) === value.bpm;
       ev = { ...base, kind: 'tempo', usPerQuarter: same ? old.usPerQuarter : usFromBpm(value.bpm) };
       break;
     }

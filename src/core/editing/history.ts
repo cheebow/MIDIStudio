@@ -117,7 +117,10 @@ export function undo(project: MidiProject, h: History): { project: MidiProject; 
   const entry = h.past[h.past.length - 1];
   if (!entry) return { project, history: h };
   const { project: prev } = applyCommand(project, entry.undo);
-  return { project: prev, history: { ...h, past: h.past.slice(0, -1), future: [...h.future, entry] }, label: entry.label };
+  // Merging must not continue across an undo/redo boundary: the step that is on top again is closed too
+  // (a nudge after the undo would otherwise join a nudge from before it, and one Undo would revert both).
+  const past = h.past.slice(0, -1).map((e, i, a) => (i === a.length - 1 && e.mergeKey !== undefined ? { ...e, mergeKey: undefined } : e));
+  return { project: prev, history: { ...h, past, future: [...h.future, entry] }, label: entry.label };
 }
 
 export function redo(project: MidiProject, h: History): { project: MidiProject; history: History; label?: string } {

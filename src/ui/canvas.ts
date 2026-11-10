@@ -1,7 +1,7 @@
 import type { ConductorEvent } from '../core/model/types';
 import { chordIndexAtOrBefore, type ChordSegment } from '../core/theory/chords';
 import { noteName } from '../core/list/noteNames';
-import { bpmFromUs } from '../core/timing/tempoMap';
+import { bpmFromUs, shownBpm } from '../core/timing/tempoMap';
 import { DEFAULT_TEMPO_US } from '../core/model/defaults';
 
 // Canvas helpers: device-pixel-ratio sizing and theme colours from CSS variables.
@@ -133,7 +133,7 @@ export function drawLoopRuler(ctx: CanvasRenderingContext2D, loop: { enabled: bo
 
 /** BPM for display: up to 2 decimals, trailing zeros dropped (120, 98.5, 133.33). */
 export function formatBpm(usPerQuarter: number): string {
-  return String(Math.round(bpmFromUs(usPerQuarter) * 100) / 100);
+  return String(shownBpm(usPerQuarter));
 }
 
 export interface ConductorMark {

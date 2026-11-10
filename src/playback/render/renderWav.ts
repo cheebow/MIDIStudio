@@ -48,5 +48,11 @@ export function renderSongToWav(opts: RenderOptions): ArrayBuffer | null {
       opts.onProgress?.(p / 100);
     }
   }
-  return audioToWav([left, right], opts.sampleRate);
+  // The file has the level of live playback: a quiet part stays quiet, and parts exported one by one
+  // (solo) add up to the mix. audioToWav's own normalisation would bring every file to full scale.
+  // Only a render that goes over full scale is turned down, so that it is not clipped.
+  let peak = 0;
+  for (const ch of [left, right]) for (let i = 0; i < ch.length; i++) peak = Math.max(peak, Math.abs(ch[i]));
+  if (peak > 1) for (const ch of [left, right]) for (let i = 0; i < ch.length; i++) ch[i] /= peak;
+  return audioToWav([left, right], opts.sampleRate, { normalizeAudio: false });
 }

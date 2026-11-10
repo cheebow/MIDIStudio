@@ -12,7 +12,7 @@ import { shiftOctave } from '../../input/KeyboardRouter';
 import { formatTicks, isConductorEvent, listRows, type ListRow, type ListUnit, type RowCategory } from '../../core/list/listRows';
 import { deleteConductorEvent, setTempo, setTimeSignature, upsertConductorEvent } from '../../core/editing/conductorOps';
 import { pasteRowsAt } from '../../core/list/listPaste';
-import { bpmFromUs } from '../../core/timing/tempoMap';
+import { shownBpm } from '../../core/timing/tempoMap';
 import { parseTicksInput, setAbsoluteTick, setGateTime, setRowChannel, setRowKey, setRowValue, setStepTime } from '../../core/list/listEdit';
 import { applyNameInput, convertEventKinds, type ConvertTarget } from '../../core/list/listConvert';
 import { parseNameInput } from '../../core/list/listName';
@@ -286,7 +286,8 @@ export function ListEditor() {
             setMessage(t('テンポは 4〜999 BPM で入力してください。'));
             return false;
           }
-          cmd = setTempo(store.project, cur.tick, Number(s));
+          // confirming the 2-decimal BPM shown changes nothing (setTempo keeps the exact µs): no undo step either
+          if (Number(s) !== shownBpm(cur.event.usPerQuarter)) cmd = setTempo(store.project, cur.tick, Number(s));
         } else if (cur.event.kind === 'time-signature') {
           const m = /^(\d+)\s*\/\s*(\d+)$/.exec(s);
           if (!m) {
@@ -332,12 +333,22 @@ export function ListEditor() {
       setMessage(selection.eventIds.size > 1 && selection.eventIds.has(cur.id) ? t('入力は現在行だけに適用しました。複数行は右クリックの「選択行の一括変更…」を使ってください。') : null);
       setEditing(null);
       gridRef.current?.focus();
-      afterCommit(how);
+      // A new TICK can move the row: the cursor follows the event, not the index it had (the row
+      // that slid into that index would otherwise become the selection).
+      const moved = col === 'tick' && currentRows().findIndex((r) => r.id === cur.id) !== cursor.row;
+      if (moved) pendingFocus.current = { id: cur.id, col };
+      else afterCommit(how);
       return true;
     } catch (e) {
       setMessage((e as Error).message);
       return false;
     }
+  }
+
+  /** the rows of the project as it is now (right after a command, before the next render) */
+  function currentRows(): ListRow[] {
+    const tr = selectedTrack(store.project);
+    return tr ? listRows(store.project, tr, filtered ? visibleCats : undefined, sig, { conductor: showConductor }) : [];
   }
 
   function afterCommit(how: Commit) {
@@ -351,18 +362,31 @@ export function ListEditor() {
     }
   }
 
-  function startEdit(initial?: string) {
-    if (!cur) return;
-    if (isBytesRow(cur) && (cursor.col === 'name' || cursor.col === 'detail' || (cursor.col === 'vel' && cur.value === null))) {
-      setBytesDialog({ mode: 'edit', id: cur.id });
+  /** `at`: the row and column to edit when it is not the cursor cell of this render (a menu opened on another row) */
+  function startEdit(initial?: string, at?: { row: ListRow; col: Col }) {
+    const row = at?.row ?? cur;
+    const col = at?.col ?? cursor.col;
+    if (!row) return;
+    if (isBytesRow(row) && (col === 'name' || col === 'detail' || (col === 'vel' && row.value === null))) {
+      setBytesDialog({ mode: 'edit', id: row.id });
       return;
     }
-    const why = canEdit(cur, cursor.col);
+    const why = canEdit(row, col);
     if (why) {
       setMessage(why);
       return;
     }
-    setEditing(initial === undefined ? { text: cellText(cur, cursor.col), selectAll: true } : { text: initial, selectAll: false });
+    setEditing(initial === undefined ? { text: cellText(row, col), selectAll: true } : { text: initial, selectAll: false });
+  }
+
+  /** 「値を編集」 of a row menu: the menu's row, in the cursor column (a conductor row has one editable column) */
+  function editRow(r: ListRow) {
+    const k = r.event.kind;
+    const col: Col = k === 'tempo' ? 'vel' : k === 'time-signature' ? 'name' : k === 'marker' ? 'detail' : cursor.col;
+    const i = rows.findIndex((x) => x.id === r.id);
+    if (i < 0) return;
+    setCursor({ row: i, col });
+    startEdit(undefined, { row: r, col });
   }
 
   function repeatLast() {
@@ -386,8 +410,10 @@ export function ListEditor() {
     setCursor({ row: r, col });
     const target = rows[r];
     if (target) {
-      if (extend) store.selectEvents([...selection.eventIds, target.id]);
-      else store.selectEvents([target.id]);
+      // conductor rows are never part of the selection (ADR-066): the edit commands could do nothing with them
+      const own = isConductorEvent(target.event) ? [] : [target.id];
+      if (extend) store.selectEvents([...selection.eventIds, ...own]);
+      else store.selectEvents(own);
       if (stepMode && target.tick !== step.cursor) step.setCursor(target.tick);
     }
     scrollToRow(r);
@@ -402,7 +428,11 @@ export function ListEditor() {
         setMessage(r.message);
         return;
       }
-      if (r.command) store.run(r.command, { mergeKey });
+      if (r.command) {
+        // TICK can re-sort the row: the cursor stays on the event, so a held +/- keeps moving the same one
+        if (col === 'tick' && row.id === cur?.id) pendingFocus.current = { id: row.id, col: cursor.col };
+        store.run(r.command, { mergeKey });
+      }
       setMessage(null);
     } catch (e) {
       setMessage((e as Error).message);
@@ -493,7 +523,7 @@ export function ListEditor() {
       let cmd;
       if (kind === 'tempo') {
         const last = [...store.project.conductor].filter((c) => c.kind === 'tempo' && c.tick <= tick).sort((a, b) => a.tick - b.tick || a.originOrder - b.originOrder).pop();
-        cmd = setTempo(store.project, tick, Math.round(bpmFromUs(last && last.kind === 'tempo' ? last.usPerQuarter : 500_000) * 100) / 100);
+        cmd = setTempo(store.project, tick, shownBpm(last && last.kind === 'tempo' ? last.usPerQuarter : 500_000));
       } else if (kind === 'time-signature') {
         const ts = sig.signatureAt(tick);
         cmd = setTimeSignature(store.project, tick, ts.numerator, ts.denominator);
@@ -543,12 +573,12 @@ export function ListEditor() {
   }
 
   /** rows a row command acts on: the selection when the cursor row is part of it, else the cursor row */
-  const targetIds = (): string[] => (cur && selection.eventIds.has(cur.id) && selection.eventIds.size > 1 ? [...selection.eventIds] : cur ? [cur.id] : []);
+  const targetIds = (r: ListRow | undefined = cur): string[] => (r && selection.eventIds.has(r.id) && selection.eventIds.size > 1 ? [...selection.eventIds] : r ? [r.id] : []);
 
-  function doConvert(target: ConvertTarget) {
+  function doConvert(target: ConvertTarget, r: ListRow) {
     gridRef.current?.focus();
     try {
-      const cmd = convertEventKinds(store.project, targetIds(), target);
+      const cmd = convertEventKinds(store.project, targetIds(r), target);
       if (cmd) store.run(cmd);
       setMessage(null);
     } catch (e) {
@@ -558,7 +588,7 @@ export function ListEditor() {
 
   function convertMenu(r: ListRow): MenuItem {
     const raw = r.event.kind === 'raw';
-    const item = (label: string, target: ConvertTarget, kind: string): MenuItem => ({ label, disabled: raw || r.event.kind === kind, action: () => doConvert(target) });
+    const item = (label: string, target: ConvertTarget, kind: string): MenuItem => ({ label, disabled: raw || r.event.kind === kind, action: () => doConvert(target, r) });
     return {
       label: t('種類を変更'),
       disabled: raw,
@@ -571,8 +601,8 @@ export function ListEditor() {
         item('Channel Pressure', { kind: 'channel-pressure' }, 'channel-pressure'),
         item('Poly Pressure', { kind: 'poly-pressure' }, 'poly-pressure'),
         { separator: true, label: '' },
-        { label: t('SysEx…'), disabled: raw || r.event.kind === 'sysex', action: () => setBytesDialog({ mode: 'convert', ids: targetIds(), kind: 'sysex' }) },
-        { label: t('Meta…'), disabled: raw || r.event.kind === 'meta', action: () => setBytesDialog({ mode: 'convert', ids: targetIds(), kind: 'meta' }) },
+        { label: t('SysEx…'), disabled: raw || r.event.kind === 'sysex', action: () => setBytesDialog({ mode: 'convert', ids: targetIds(r), kind: 'sysex' }) },
+        { label: t('Meta…'), disabled: raw || r.event.kind === 'meta', action: () => setBytesDialog({ mode: 'convert', ids: targetIds(r), kind: 'meta' }) },
       ],
     };
   }
@@ -588,7 +618,7 @@ export function ListEditor() {
   function rowMenuItems(r: ListRow): MenuItem[] {
     if (isConductorEvent(r.event)) {
       return [
-        { label: t('値を編集'), shortcut: 'Enter', action: () => startEdit() },
+        { label: t('値を編集'), shortcut: 'Enter', action: () => editRow(r) },
         { label: t('挿入'), shortcut: 'Insert', items: insertMenuItems() },
         ...pasteMenuItems(),
         { separator: true, label: '' },
@@ -599,7 +629,7 @@ export function ListEditor() {
       ];
     }
     return [
-      { label: t('値を編集'), shortcut: 'Enter', action: () => startEdit() },
+      { label: t('値を編集'), shortcut: 'Enter', action: () => editRow(r) },
       { label: t('挿入'), shortcut: 'Insert', items: insertMenuItems() },
       convertMenu(r),
       ...pasteMenuItems(),
@@ -658,6 +688,7 @@ export function ListEditor() {
         repeatLast();
         break;
       case 'delete':
+        // (a conductor row is never selected: moveCursor leaves the selection empty on it)
         if (cur && isConductorEvent(cur.event) && selection.eventIds.size === 0) store.run(deleteConductorEvent(store.project, cur.id));
         else store.run(deleteEvents(store.project, selection.eventIds.size ? selection.eventIds : cur ? [cur.id] : []));
         break;
@@ -807,6 +838,7 @@ export function ListEditor() {
                     style={{ top: i * ROW_H, height: ROW_H }}
                     data-testid="list-row"
                     onPointerDown={(e) => {
+                      if ((e.target as HTMLElement).closest('.cell-input')) return; // placing the caret in the open editor
                       gridRef.current?.focus();
                       if (isSecondaryClick(e)) return; // the context-menu handler keeps a multi-row selection
                       const col = ((e.target as HTMLElement).dataset.col as Col | undefined) ?? cursor.col;
@@ -817,7 +849,9 @@ export function ListEditor() {
                     }}
                     onDoubleClick={() => startEdit()}
                     onContextMenu={(e) => {
-                      if (!selection.eventIds.has(r.id)) moveCursor(i);
+                      // the cursor goes to the clicked row; a selection that contains it is kept
+                      if (selection.eventIds.has(r.id)) setCursor({ row: i, col: cursor.col });
+                      else moveCursor(i);
                       ctxMenu.open(e, rowMenuItems(r));
                     }}
                   >

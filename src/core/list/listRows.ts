@@ -3,7 +3,7 @@
 // hidden by a filter). GT = Note On -> Note Off ticks. Nothing here rounds: display units are exact.
 import { base64ToBytes } from '../model/base64';
 import type { ConductorEvent, MidiEvent, MidiProject, MidiTrack } from '../model/types';
-import { bpmFromUs } from '../timing/tempoMap';
+import { shownBpm } from '../timing/tempoMap';
 import { compareEvents } from '../events/order';
 import { TimeSignatureMap } from '../timing/timeSignatureMap';
 import { formatClassic48 } from '../timing/classic48';
@@ -148,7 +148,7 @@ export function keySignatureName(sharpsFlats: number, minor: boolean): string {
 function describeConductor(c: ConductorEvent): Pick<ListRow, 'name' | 'key' | 'gtTicks' | 'value' | 'detail'> {
   switch (c.kind) {
     case 'tempo': {
-      const bpm = Math.round(bpmFromUs(c.usPerQuarter) * 100) / 100;
+      const bpm = shownBpm(c.usPerQuarter);
       return { name: 'Tempo', key: null, gtTicks: null, value: bpm, detail: `${bpm.toFixed(2)} BPM` };
     }
     case 'time-signature':

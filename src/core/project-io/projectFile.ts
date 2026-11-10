@@ -68,6 +68,8 @@ export function parseProjectFile(text: string): ProjectParseResult {
   const errors = validateProject(env.project);
   if (errors.length > 0) return { ok: false, errors };
   const loaded = normaliseOrder(env.project as MidiProject);
+  // the spread below would carry a malformed one along, and the SMF export would throw on it
+  if (validSourceText(loaded.sourceTitle) === undefined) delete loaded.sourceTitle;
   // Settings and key maps gain fields over time; missing ones fall back to defaults.
   const project: MidiProject = adoptLooseNotes({
     ...loaded,
@@ -279,6 +281,7 @@ export function validateProject(p: unknown): string[] {
   if (typeof p.title !== 'string') err(t('project.title が不正です。'));
   if (!isInt(p.ppq, 1, 0x7fff)) err(t('PPQ が不正です（{ppq}）。', { ppq: String(p.ppq) }));
   if (!isInt(p.nextOriginOrder, 0, Number.MAX_SAFE_INTEGER)) err(t('nextOriginOrder が不正です。'));
+  if (p.conductorEndOfTrackTick !== undefined && !isInt(p.conductorEndOfTrackTick, 0, MAX_TICK)) err(t('conductorEndOfTrackTick が不正です。'));
   const ids = new Set<string>();
   const uniqueId = (id: unknown, where: string) => {
     if (typeof id !== 'string' || id === '') return err(t('{where}: id が不正です。', { where }));
@@ -357,6 +360,8 @@ export function validateProject(p: unknown): string[] {
         switch (e.kind) {
           case 'note':
             if (!d7(e.pitch) || !isInt(e.velocity, 1, 127) || !d7(e.releaseVelocity) || !isInt(e.durationTicks, 1, MAX_TICK)) err(t('{we}: ノートの値が不正です。', { we }));
+            // the Note Off is an event too: past the limit, our own reader would refuse the exported file
+            else if (isInt(e.tick, 0, MAX_TICK) && e.tick + e.durationTicks > MAX_TICK) err(t('{we}: ノートの値が不正です。', { we }));
             if (e.releaseOrder !== undefined && !Number.isSafeInteger(e.releaseOrder)) err(t('{we}: releaseOrder が不正です。', { we }));
             break;
           case 'cc':

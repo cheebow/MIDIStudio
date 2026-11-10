@@ -21,6 +21,8 @@ export interface MetronomeMaps {
 
 const LOOKAHEAD_S = 0.12;
 const TIMER_MS = 25;
+/** how far behind the position a (re)start may be noticed and its beat still clicked */
+const START_GRACE_S = 0.04;
 
 export class Metronome {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -73,20 +75,27 @@ export class Metronome {
     const loop = maps.loop && maps.loop.endSeconds > maps.loop.startSeconds ? maps.loop : null;
     // Seek or loop wrap: the song time jumped backwards or far ahead -> restart scheduling. At a
     // loop wrap the beats just after the loop start were already scheduled before the wrap.
+    // A (re)start is noticed a few ms after it happened: the beat playback started on (bar 1 after
+    // Space, the downbeat after the count-in) is then just behind `now`. It is still clicked.
+    let catchUp = false;
     if (now < this.lastSongTime - 0.01 || now > this.scheduledUntil + 1) {
       const carried = this.afterWrap;
-      this.scheduledUntil = loop && carried !== null && now >= loop.startSeconds - 0.01 && now <= carried + LOOKAHEAD_S ? carried : now;
+      if (loop && carried !== null && now >= loop.startSeconds - 0.01 && now <= carried + LOOKAHEAD_S) this.scheduledUntil = carried;
+      else {
+        this.scheduledUntil = Math.max(0, now - START_GRACE_S);
+        catchUp = true;
+      }
       this.afterWrap = null;
     }
     this.lastSongTime = now;
-    const from = Math.max(this.scheduledUntil, now);
+    const from = catchUp ? this.scheduledUntil : Math.max(this.scheduledUntil, now);
     const to = now + LOOKAHEAD_S;
     if (to <= from) return;
     if (loop && now < loop.endSeconds && to > loop.endSeconds) {
       // The look-ahead crosses the loop end (ADR-084): click up to the loop end only, then the
       // beats from the loop start, timed after the loop end — the click exactly on the loop start
       // used to be lost (the wrap is noticed only after it), and beats past the loop end were heard.
-      this.schedule(ctx, maps, from, loop.endSeconds, 0);
+      this.schedule(ctx, maps, from, loop.endSeconds, 0, catchUp);
       const endAt = this.host.songTimeToContextTime(loop.endSeconds);
       const startAt = this.host.songTimeToContextTime(loop.startSeconds);
       const wrapTo = loop.startSeconds + (to - loop.endSeconds);
@@ -96,16 +105,17 @@ export class Metronome {
       this.scheduledUntil = loop.endSeconds;
       return;
     }
-    this.schedule(ctx, maps, from, loop && now < loop.endSeconds ? Math.min(to, loop.endSeconds) : to, 0);
+    this.schedule(ctx, maps, from, loop && now < loop.endSeconds ? Math.min(to, loop.endSeconds) : to, 0, catchUp);
     this.scheduledUntil = to;
   }
 
   /** Clicks for the beats in [from, to) song seconds, shifted by `shift` seconds of context time. */
-  private schedule(ctx: { currentTime: number }, maps: MetronomeMaps, from: number, to: number, shift: number): void {
+  private schedule(ctx: { currentTime: number }, maps: MetronomeMaps, from: number, to: number, shift: number, late = false): void {
     if (to <= from) return;
     for (const beat of beatsInWindow(maps.tempo, maps.signature, from, to)) {
       const at = this.host.songTimeToContextTime(beat.seconds);
-      if (at === null || at + shift < ctx.currentTime) continue;
+      // `late`: a beat a few ms in the past is the one playback just started on — it sounds at once
+      if (at === null || (at + shift < ctx.currentTime && !late)) continue;
       this.click(ctx as AudioContext, at + shift, beat.accent);
     }
   }

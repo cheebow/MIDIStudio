@@ -57,14 +57,16 @@ function toConductor(e: Extract<SmfEvent, { kind: 'meta' }>, order: number, ctx:
       return { id, kind: 'tempo', tick: e.tick, usPerQuarter: us, originOrder: order };
     }
     case 0x58:
-      if (d.length < 2 || d[1] > 7 || d[0] === 0) break;
+      // any other length is kept as a raw meta: writing it back as 4 bytes would change the file
+      if (d.length !== 4 || d[1] > 7 || d[0] === 0) break;
       return {
         id,
         kind: 'time-signature',
         tick: e.tick,
         numerator: d[0],
         denominator: 2 ** d[1],
-        ...(d.length >= 4 ? { clocksPerClick: d[2], thirtySecondsPerQuarter: d[3] } : {}),
+        clocksPerClick: d[2],
+        thirtySecondsPerQuarter: d[3],
         originOrder: order,
       };
     case 0x59: {
@@ -300,7 +302,8 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
     }
   }
 
-  const convertTrack = (events: readonly SmfEvent[], trackIndex: number, endOfTrackTick: number, channel: number, fallbackName: string): MidiTrack => {
+  /** `keepPorts`: every FF 21 stays an event (Format 0, where the caller has already taken the port prefix). */
+  const convertTrack = (events: readonly SmfEvent[], trackIndex: number, endOfTrackTick: number, channel: number, fallbackName: string, keepPorts = false): MidiTrack => {
     const builder = new TrackBuilder(channel, ctx);
     let name: { name: string; source?: SourceText } | null = null;
     let port: number | null = null;
@@ -325,7 +328,7 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
         movedConductor.add(trackIndex);
       } else if (e.metaType === 0x03 && name === null && e.tick === 0) {
         name = text(e.data, ctx.decode);
-      } else if (e.metaType === 0x21 && e.data.length === 1 && e.data[0] < 128 && port === null && !sawMusic) {
+      } else if (e.metaType === 0x21 && e.data.length === 1 && e.data[0] < 128 && port === null && !sawMusic && !keepPorts) {
         port = e.data[0];
       } else {
         if (e.metaType === 0x21) portChanges++;
@@ -388,6 +391,8 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
     const systemRest: SmfEvent[] = [];
     const midPorts: SmfEvent[] = [];
     let port: number | null = null;
+    const firstMusic = t0.events.findIndex((e) => e.kind !== 'meta');
+    const firstMusicOrder = firstMusic < 0 ? Infinity : base + firstMusic;
     for (const e of system) {
       const order = orders.get(e)!;
       if (e.kind === 'meta' && takeConductor(e, order, 0)) continue;
@@ -395,7 +400,8 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
         nameFromTrack = text(e.data, ctx.decode);
         continue;
       }
-      if (e.kind === 'meta' && e.metaType === 0x21 && port === null && e.data.length === 1 && e.data[0] < 128 && e.tick === 0) {
+      if (e.kind === 'meta' && e.metaType === 0x21 && port === null && e.data.length === 1 && e.data[0] < 128 && e.tick === 0 && order < firstMusicOrder) {
+        // (after a channel / SysEx event it is a change, not the prefix: those events stay on their port)
         port = e.data[0];
         continue;
       }
@@ -408,8 +414,13 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
       }
       systemRest.push(e);
     }
-    if (byChannel.size === 0) systemRest.push(...midPorts); // no channel track to carry them: kept as events, never dropped
-    else systemRest.sort((a, b) => orders.get(a)! - orders.get(b)!);
+    // The System track carries them too when it has a SysEx after one (a GS Reset would otherwise go
+    // to the first port), or when there is no channel track at all: kept as events, never dropped.
+    const sysexAfterPort = midPorts.length > 0 && systemRest.some((e) => e.kind === 'sysex' && orders.get(e)! > orders.get(midPorts[0])!);
+    if (byChannel.size === 0 || sysexAfterPort) {
+      systemRest.push(...midPorts);
+      systemRest.sort((a, b) => orders.get(a)! - orders.get(b)!);
+    }
     for (const [ch, list] of byChannel) {
       if (midPorts.length === 0) break;
       const copies = midPorts.map((e) => {
@@ -436,7 +447,7 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
       }
     };
     if (systemRest.length > 0) {
-      const tr = withOrder(systemRest, () => convertTrack(systemRest, 0, t0.endOfTrackTick, 0, 'System'));
+      const tr = withOrder(systemRest, () => convertTrack(systemRest, 0, t0.endOfTrackTick, 0, 'System', true));
       if (port !== null) {
         tr.port = portLabel(port);
         tr.hasPortPrefix = true;
@@ -445,7 +456,7 @@ export function importSmf(smf: SmfFile, readerWarnings: readonly ImportIssue[] =
     }
     for (const ch of [...byChannel.keys()].sort((a, b) => a - b)) {
       const list = byChannel.get(ch)!;
-      const tr = withOrder(list, () => convertTrack(list, 0, t0.endOfTrackTick, ch, `Ch ${ch + 1}`));
+      const tr = withOrder(list, () => convertTrack(list, 0, t0.endOfTrackTick, ch, `Ch ${ch + 1}`, true));
       if (port !== null) {
         tr.port = portLabel(port);
         tr.hasPortPrefix = true;

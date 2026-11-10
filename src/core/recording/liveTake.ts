@@ -79,8 +79,16 @@ export class LiveTake {
     if (!on) return;
     this.open.delete(key);
     let end = offTick;
-    if (this.opts.punch) end = Math.min(end, this.opts.punch.outTick);
-    if (this.opts.loop && on.pass !== offPass) end = this.opts.loop.endTick;
+    if (this.opts.punch) {
+      end = Math.min(end, this.opts.punch.outTick);
+      // punch with the loop on: the engine cycles over the punch range, so a release that arrives
+      // after the wrap lies before its note-on — the note was held to the punch out
+      if (end <= on.tick) end = this.opts.punch.outTick;
+    }
+    if (this.opts.loop && on.pass < offPass) end = this.opts.loop.endTick;
+    // A pickup moved to the next pass's loop start (ADR-088) whose release came before the wrap: it
+    // was a short tap within the last 32nd of the loop, not a note as long as the loop.
+    else if (this.opts.loop && on.pass > offPass) end = on.tick + Math.max(1, Math.round(this.opts.tempo.ppq / 8));
     const pitch = Number(key.split(':')[1]);
     this.push({ kind: 'note', tick: on.tick, pitch, velocity: on.velocity, durationTicks: Math.max(1, end - on.tick), releaseVelocity, ...(on.channel !== undefined ? { channelOverride: on.channel } : {}) }, on.pass);
   }

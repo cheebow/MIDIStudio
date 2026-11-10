@@ -38,7 +38,10 @@ export function buildPlaybackSnapshot(source: MidiProject, opts: { tailTick?: nu
   const tracks: MidiTrack[] = project.tracks.map((t) => ({ ...t, events: t.events.filter((e) => playable(e) && (audible.has(t.id) || !isNoteLike(e))) }));
   const loopOn = project.loop.enabled && project.loop.endTick > project.loop.startTick;
   const conductorMeta = project.conductorMeta.filter(playable);
-  // The engine loops when it reaches an event at/after the loop end; guarantee one exists.
+  // The engine loops when it reaches an event at/after the loop end; guarantee one exists. It
+  // restarts on the first event at/after the loop START, so one is guaranteed there too: without
+  // it every pass begins at the first note of the loop and is shorter by the rest before it.
+  if (loopOn) conductorMeta.push({ id: '__loop_start__', kind: 'meta', tick: project.loop.startTick, metaType: 0x01, dataBase64: '', originOrder: Number.MAX_SAFE_INTEGER });
   if (loopOn) conductorMeta.push({ id: '__loop_end__', kind: 'meta', tick: project.loop.endTick, metaType: 0x01, dataBase64: '', originOrder: Number.MAX_SAFE_INTEGER });
   if (opts.tailTick) conductorMeta.push({ id: '__tail__', kind: 'meta', tick: opts.tailTick, metaType: 0x01, dataBase64: '', originOrder: Number.MAX_SAFE_INTEGER });
   const { bytes } = exportSmfBytes({ ...project, tracks, conductorMeta });

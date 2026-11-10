@@ -57,7 +57,12 @@ export function PianoRoll() {
   const [drag, dragRef, setDrag] = useDragState<Drag>();
   /** velocities being dragged in the lane below: note shading follows them live */
   const [velPreview, setVelPreview] = useState<ReadonlyMap<string, number> | null>(null);
-  const [lastLength, setLastLength] = useState<number | null>(null);
+  // the length of the note last drawn / resized, for the next one — of this song only (ticks of
+  // another PPQ would be another note value)
+  const songKey = `${project.id}:${project.ppq}`;
+  const [lastLen, setLastLen] = useState<{ song: string; ticks: number } | null>(null);
+  const lastLength = lastLen?.song === songKey ? lastLen.ticks : null;
+  const setLastLength = (ticks: number) => setLastLen({ song: songKey, ticks });
   const [warning, setWarning] = useState<string | null>(null);
   const auditionRef = useRef<number | null>(null);
   /** last pointer of the active drag, re-applied when the view scrolls under it */
@@ -395,7 +400,8 @@ export function PianoRoll() {
       const n = notes[i];
       if (n.pitch !== p || t < n.tick || t > n.tick + n.durationTicks) continue;
       const rightPx = (n.tick + n.durationTicks) * pxPerTick - view.x;
-      return { note: n, edge: rightPx - x <= EDGE_PX };
+      // at most the last third of the note: a short one (zoomed out) must still be movable by its body
+      return { note: n, edge: rightPx - x <= Math.min(EDGE_PX, (n.durationTicks * pxPerTick) / 3) };
     }
     return null;
   }
@@ -433,7 +439,7 @@ export function PianoRoll() {
     e.currentTarget.setPointerCapture(e.pointerId);
     e.currentTarget.focus();
     lastPointer.current = pointerOf(e);
-    trackPointer(e.clientX, e.clientY);
+    trackPointer(e.clientX, e.clientY, true);
     if (y < TOP) {
       // ruler (loop handles) or chord strip: both seek
       const lh = y < RULER_H ? hitLoop(x, y, project.loop, pxPerTick, view.x, RULER_H) : null;

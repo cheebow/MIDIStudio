@@ -5,7 +5,7 @@
 import { useMemo, useState } from 'react';
 import { deleteConductorEvent, upsertConductorEvent } from '../../core/editing/conductorOps';
 import type { ConductorEvent } from '../../core/model/types';
-import { bpmFromUs } from '../../core/timing/tempoMap';
+import { shownBpm } from '../../core/timing/tempoMap';
 import { useEditorState, useServices } from '../../app/store/context';
 import { t } from '../../i18n';
 import { ConductorEventDialog, KIND_NAMES, ValueField, parseConductorValue, signatureMap, type ConductorDialogTarget, type ConductorKind } from './conductorUi';
@@ -15,7 +15,7 @@ const KINDS = Object.keys(KIND_NAMES) as ConductorKind[];
 function fieldText(c: ConductorEvent): string {
   switch (c.kind) {
     case 'tempo':
-      return String(Math.round(bpmFromUs(c.usPerQuarter) * 100) / 100);
+      return String(shownBpm(c.usPerQuarter));
     case 'time-signature':
       return `${c.numerator}/${c.denominator}`;
     case 'key-signature':

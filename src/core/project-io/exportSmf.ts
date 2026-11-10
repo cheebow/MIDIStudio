@@ -5,6 +5,7 @@ import { portIndex } from '../model/ports';
 import { encodeUtf8 } from '../model/text';
 import type { ConductorEvent, MidiEvent, MidiProject, MidiTrack, SourceText } from '../model/types';
 import { compareEvents } from '../events/order';
+import { channelDataLength } from '../smf/reader';
 import { writeSmf } from '../smf/writer';
 import { MAX_TEMPO_US } from '../timing/tempoMap';
 import type { SmfEvent, SmfFile, SmfTrack } from '../smf/types';
@@ -133,7 +134,9 @@ function trackToSmf(track: MidiTrack, warnings: ExportWarning[]): SmfTrack {
         break;
       case 'raw': {
         const bytes = b64(e.rawBase64);
-        if (bytes.length >= 2 && bytes[0] >= 0x80 && bytes[0] < 0xf0) {
+        // exactly one complete channel message: anything else would desynchronise the track for every reader
+        const complete = bytes.length >= 2 && bytes[0] >= 0x80 && bytes[0] < 0xf0 && bytes.length === 1 + channelDataLength(bytes[0]) && bytes.subarray(1).every((b) => b < 0x80);
+        if (complete) {
           push(e.tick, 0, e.originOrder, { kind: 'channel', tick: e.tick, status: bytes[0], data: [...bytes.subarray(1)] });
         } else {
           warnings.push({ code: 'W_EXPORT_RAW_SKIPPED', message: t('トラック「{name}」の Tick {tick}: 書き出せない形式の raw イベントがあります（{reason}）。', { name: track.name, tick: e.tick, reason: e.reason }), trackId: track.id });

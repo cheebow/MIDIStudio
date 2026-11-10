@@ -53,18 +53,23 @@ export function formatRational(r: Rational, maxDecimals = 3): string {
   return `${r.num}/${r.den}`;
 }
 
-/** Parses "12", "-3", "12.5", "25/2". Returns null for anything else. */
+/** `rational`, or null when a part is too large to be exact (typed input must not throw). */
+export function safeRational(num: number, den = 1): Rational | null {
+  return Number.isSafeInteger(num) && Number.isSafeInteger(den) && den !== 0 ? rational(num, den) : null;
+}
+
+/** Parses "12", "-3", "12.5", "25/2". Returns null for anything else (including numbers too large to be exact). */
 export function parseRational(text: string): Rational | null {
   const s = text.trim();
   let m = /^(-?\d+)$/.exec(s);
-  if (m) return rational(Number(m[1]));
+  if (m) return safeRational(Number(m[1]));
   m = /^(-?)(\d+)\.(\d{1,9})$/.exec(s);
   if (m) {
     const scale = 10 ** m[3].length;
     const v = Number(m[2]) * scale + Number(m[3]);
-    return rational(m[1] === '-' ? -v : v, scale);
+    return safeRational(m[1] === '-' ? -v : v, scale);
   }
   m = /^(-?\d+)\/(\d+)$/.exec(s);
-  if (m && Number(m[2]) !== 0) return rational(Number(m[1]), Number(m[2]));
+  if (m) return safeRational(Number(m[1]), Number(m[2]));
   return null;
 }

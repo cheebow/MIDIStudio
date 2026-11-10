@@ -14,6 +14,11 @@ interface Segment {
   startUs: number;
 }
 
+/** The BPM as the UI shows it (2 decimals). Integer µs stays the source of truth: compare against this to tell "unchanged". */
+export function shownBpm(usPerQuarter: number): number {
+  return Math.round(bpmFromUs(usPerQuarter) * 100) / 100;
+}
+
 export function bpmFromUs(usPerQuarter: number): number {
   return 60_000_000 / usPerQuarter;
 }

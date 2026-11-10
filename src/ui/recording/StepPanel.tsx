@@ -25,6 +25,8 @@ export function StepPanel({ drum }: { drum: boolean }) {
       <label title={t('⇧← 半分 / ⇧→ 倍 / {dot} 付点 / {alt}T 三連', { dot: drum ? `${ALT}.` : '.', alt: ALT })}>
         {t('音長')}{' '}
         <select value={rec.stepTicks} onChange={(e) => set({ stepTicks: Number(e.target.value) })} aria-label={t('ステップの長さ')}>
+          {/* a length reached with the keys (⇧→ doubled past the list, a dotted triplet...) is shown as itself */}
+          {!options.some((o) => o.t.num === rec.stepTicks) && <option value={rec.stepTicks}>{rec.stepTicks}</option>}
           {options.map((o) => (
             <option key={gridLabel(o.g)} value={o.t.num}>
               {gridLabel(o.g)}（{o.t.num}）

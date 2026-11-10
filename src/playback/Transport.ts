@@ -131,6 +131,9 @@ export class Transport {
    */
   setProject(project: MidiProject): Promise<void> {
     const prev = this.project;
+    // another song (new / open / sample): its playhead starts at the beginning, not where the previous
+    // song was parked (its loop start, in ticks of possibly another PPQ)
+    if (prev && prev.id !== project.id && this.state.status !== 'playing') this.parkedTick = 0;
     const prevTick = prev ? this.getPosition().tick : 0;
     this.project = project;
     this.tempo = new TempoMap(project.ppq, project.conductor.filter((c) => c.kind === 'tempo'));
@@ -415,6 +418,21 @@ export class Transport {
 
   // ------------------------------------------------------------ live preview
 
+  /** the song's SysEx (up to the playhead) the preview synth was last given */
+  private previewSysEx = '';
+
+  /**
+   * The preview synth gets the song's SysEx too, when the set in effect changes (not per note): a
+   * part made a rhythm part by GS "Use for Rhythm Part" plays drums in the song, and the keys and
+   * pads have to audition the same kit.
+   */
+  private sendPreviewSysEx(list: ReturnType<typeof chaseAt>['sysex']): void {
+    const key = list.map((s) => `${s.port}:${s.status}:${Array.from(s.data).join(',')}`).join('|');
+    if (key === this.previewSysEx) return;
+    this.previewSysEx = key;
+    for (const s of list) if (s.status === 'F0') this.engine.send([0xf0, ...s.data], s.port);
+  }
+
   /**
    * Plays a preview note on a track's port/channel on the separate preview synth (ARCHITECTURE F),
    * so sequencer loops, seeks and reloads never cut a note that is being played live.
@@ -429,7 +447,9 @@ export class Transport {
     // (bank / program / controllers), or the track's first sound when none is set yet.
     // Controllers the player is driving right now (pedal, wheels) keep their live value: re-sending
     // the song's CC64 = 0 on every note would lift a held pedal (ADR-082).
-    const chase = chaseAt(project, Math.floor(this.getPosition().tick) + 1).channels.get(`${port}:${ch}`);
+    const state = chaseAt(project, Math.floor(this.getPosition().tick) + 1);
+    this.sendPreviewSysEx(state.sysex);
+    const chase = state.channels.get(`${port}:${ch}`);
     const live = this.performed.get(`${port}:${ch}`);
     if (chase) {
       for (const m of chaseMessages(chase)) {

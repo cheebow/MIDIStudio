@@ -58,9 +58,11 @@ export function stepTie(project: MidiProject, state: StepState, s: StepSettings)
     .filter((e): e is NoteEvent => e?.kind === 'note')
     .map((n) => ({ id: n.id, changes: { durationTicks: n.durationTicks + s.stepTicks } }));
   const command = updates.length ? updateEvents(project, updates, 'タイ') : null;
-  // the cursor goes to the end of the longest tied note
+  // the cursor goes to the step line after the longest tied note — not to the note's end, which the
+  // gate puts short of the line (90 %: every later step would be early by the missing 10 %)
   const longest = updates.reduce((m, u) => Math.max(m, u.changes.durationTicks), 0);
-  return { command, state: { cursor: Math.max(state.cursor, state.lastStep.tick + longest), lastStep: state.lastStep } };
+  const steps = Math.ceil(longest / s.stepTicks);
+  return { command, state: { cursor: Math.max(state.cursor, state.lastStep.tick + steps * s.stepTicks), lastStep: state.lastStep } };
 }
 
 /** Backspace: delete what was written at the last step and move the cursor there. */

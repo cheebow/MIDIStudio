@@ -22,7 +22,7 @@ type LaneEvent = Extract<MidiEvent, { kind: 'cc' | 'pitch-bend' }>;
 
 type Drag =
   /** velocity paint; onlySelected: the drag started on a selected note, so only selected notes change */
-  | { kind: 'paint'; values: Map<string, number>; onlySelected: boolean }
+  | { kind: 'paint'; values: Map<string, number>; onlySelected: boolean; x: number; y: number }
   /** one note of a stack, grabbed by its bar's head (ADR-072) */
   | { kind: 'one'; id: string; value: number }
   /** value drag of the selected points; delta in value units */
@@ -196,6 +196,25 @@ export function ControllerLane({
     return notes.filter((n) => Math.abs(n.tick - t) <= tol).map((n) => n.id);
   }
 
+  /**
+   * The notes a paint stroke passed from (x0, y0) to (x1, y1), each with the velocity of the line at
+   * its position: pointer events of a fast stroke are far apart, and the notes between two of them
+   * must not keep their old value.
+   */
+  function notesAlong(x0: number, y0: number, x1: number, y1: number): [string, number][] {
+    const tol = 4;
+    const lo = Math.min(x0, x1) - tol;
+    const hi = Math.max(x0, x1) + tol;
+    const out: [string, number][] = [];
+    for (const n of notes) {
+      const nx = n.tick * pxPerTick - viewX;
+      if (nx < lo || nx > hi) continue;
+      const k = x1 === x0 ? 1 : Math.max(0, Math.min(1, (nx - x0) / (x1 - x0)));
+      out.push([n.id, Math.max(1, yToValue(y0 + (y1 - y0) * k))]);
+    }
+    return out;
+  }
+
   /** the nearest point within a few pixels of (x, y) */
   function pointAt(x: number, y: number): LaneEvent | null {
     let best: LaneEvent | null = null;
@@ -247,7 +266,7 @@ export function ControllerLane({
       const targets = notesAt(x);
       const sel = targets.filter((id) => selection.eventIds.has(id));
       for (const id of sel.length ? sel : targets) values.set(id, Math.max(1, yToValue(y)));
-      setDrag({ kind: 'paint', values, onlySelected: sel.length > 0 });
+      setDrag({ kind: 'paint', values, onlySelected: sel.length > 0, x, y });
       return;
     }
     const hit = pointAt(x, y);
@@ -286,10 +305,8 @@ export function ControllerLane({
       setDrag({ ...d, value: Math.max(1, yToValue(y)) });
     } else if (d.kind === 'paint') {
       const values = new Map(d.values);
-      const v = Math.max(1, yToValue(y));
-      const under = notesAt(x);
-      for (const id of d.onlySelected ? under.filter((id) => selection.eventIds.has(id)) : under) values.set(id, v);
-      setDrag({ ...d, values });
+      for (const [id, v] of notesAlong(d.x, d.y, x, y)) if (!d.onlySelected || selection.eventIds.has(id)) values.set(id, v);
+      setDrag({ ...d, values, x, y });
     } else if (d.kind === 'points') {
       // the group keeps its shape: no point may leave the value range
       const delta = Math.max(range.min - d.min, Math.min(range.max - d.max, dyToDelta(y - d.startY)));
@@ -317,8 +334,17 @@ export function ControllerLane({
       const tick = Math.max(0, snap((d.x + viewX) / pxPerTick));
       const value = yToValue(d.y);
       const ev = isPb ? { kind: 'pitch-bend' as const, tick, value } : { kind: 'cc' as const, tick, controller: lane as number, value };
-      const r = addEvents(store.project, track.id, [ev], { label: isPb ? 'Pitch Bend を入力' : t('CC{n} を入力', { n: lane }) });
-      if (r) store.run(r.command, { select: r.ids });
+      const label = isPb ? 'Pitch Bend を入力' : t('CC{n} を入力', { n: lane });
+      // one value per position: a point already at this (snapped) tick gets the value instead of a
+      // second event stacked on it, of which only the last would sound
+      const there = laneEvents.findLast((p) => p.tick === tick);
+      if (there) {
+        if (there.value !== value) store.run(updateEvents(store.project, [{ id: there.id, changes: { value } }], label), { select: [there.id] });
+        else store.selectEvents([there.id]);
+      } else {
+        const r = addEvents(store.project, track.id, [ev], { label });
+        if (r) store.run(r.command, { select: r.ids });
+      }
     } else {
       const ids = pointsInBox(d.x0, d.y0, d.x1, d.y1);
       store.selectEvents(d.additive ? [...selection.eventIds, ...ids] : ids);

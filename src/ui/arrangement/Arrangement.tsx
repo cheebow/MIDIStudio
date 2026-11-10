@@ -373,7 +373,8 @@ export function Arrangement() {
     // unclamped: the margin before bar 1 is empty space, not tick 0 of a clip that starts there
     const tk = (x + scrollX) / pxPerTick;
     if (tk < 0) return null;
-    return project.clips.find((c) => c.trackId === track.id && tk >= c.startTick && tk < c.endTick) ?? null;
+    // the last one is drawn on top: where clips overlap, the visible one is the one hit
+    return project.clips.findLast((c) => c.trackId === track.id && tk >= c.startTick && tk < c.endTick) ?? null;
   }
 
   /** a clip edge within EDGE_PX of x in the lane at y (edges win over the clip body) */
@@ -385,13 +386,19 @@ export function Arrangement() {
     let bestD = EDGE_PX + 0.001;
     for (const c of project.clips) {
       if (c.trackId !== track.id) continue;
-      const ds = Math.abs(c.startTick * pxPerTick - scrollX - x);
-      const de = Math.abs(c.endTick * pxPerTick - scrollX - x);
-      if (ds < bestD) {
+      const startPx = c.startTick * pxPerTick - scrollX;
+      const endPx = c.endTick * pxPerTick - scrollX;
+      // inside a narrow clip the edges take a third each, so its body can still be grabbed and moved
+      const inner = Math.min(EDGE_PX, (endPx - startPx) / 3);
+      const inside = x >= startPx && x <= endPx;
+      // where two clips meet, the edge of the clip the pointer is in wins
+      const ds = Math.abs(startPx - x) - (inside ? 0.01 : 0);
+      const de = Math.abs(endPx - x) - (inside ? 0.01 : 0);
+      if (ds < bestD && (!inside || ds <= inner)) {
         best = { clip: c, edge: 'start' };
         bestD = ds;
       }
-      if (de < bestD) {
+      if (de < bestD && (!inside || de <= inner)) {
         best = { clip: c, edge: 'end' };
         bestD = de;
       }
@@ -407,7 +414,7 @@ export function Arrangement() {
     const { cx, cy } = contentPoint(e.clientX, e.clientY);
     e.currentTarget.setPointerCapture(e.pointerId);
     lastPointer.current = pointerOf(e);
-    trackPointer(e.clientX, e.clientY);
+    trackPointer(e.clientX, e.clientY, true);
     if (y < HEAD_H) {
       const hit = y < RULER_H ? hitLoop(x, y, project.loop, pxPerTick, scrollX, RULER_H) : null;
       if (hit) setDrag({ kind: 'loop', hit, startX: cx, origin: project.loop, preview: project.loop });

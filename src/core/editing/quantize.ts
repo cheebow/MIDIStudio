@@ -46,6 +46,8 @@ export function quantizeNotes(project: MidiProject, ids: Iterable<string>, opts:
       if (opts.quantizeEnds) {
         const q = snap(end);
         end = Math.round(end + (q - end) * strength);
+        // a note shorter than half the grid: its end snapped onto its own start. It keeps one grid, not 1 tick.
+        if (end <= newOn) end = newOn + Math.max(1, Math.round(opts.grid.num / opts.grid.den));
       } else end = newOn + e.durationTicks;
       if (lengthUnit > 0) end = newOn + Math.round(Math.max(1, Math.round((end - newOn) / lengthUnit)) * lengthUnit);
       const duration = Math.max(1, end - newOn);

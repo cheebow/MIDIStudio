@@ -52,7 +52,8 @@ function req<T>(r: IDBRequest<T>): Promise<T> {
 function done(tx: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(wrap(tx.error));
+    // a failed request bubbles here before the transaction aborts: tx.error is still null then
+    tx.onerror = (ev) => reject(wrap((ev.target as IDBRequest | null)?.error ?? tx.error));
     tx.onabort = () => reject(wrap(tx.error));
   });
 }
@@ -72,8 +73,10 @@ export class ProjectStore {
           if (!db.objectStoreNames.contains(PROJECTS)) db.createObjectStore(PROJECTS, { keyPath: 'id' });
           if (!db.objectStoreNames.contains(AUTOSAVE)) db.createObjectStore(AUTOSAVE);
         };
+        let blocked = false;
         open.onsuccess = () => {
           const db = open.result;
+          if (blocked) return db.close(); // already reported as blocked: the next call opens a new one
           // The browser can close the connection (site data cleared, a newer version opened in another
           // tab): drop it so the next call opens a new one instead of failing until a reload (ADR-087).
           const forget = () => {
@@ -87,7 +90,10 @@ export class ProjectStore {
           resolve(db);
         };
         open.onerror = () => reject(wrap(open.error));
-        open.onblocked = () => reject(new StorageError('blocked', t('別のタブがデータベースを使用中です。他の MIDI Studio のタブを閉じてください。')));
+        open.onblocked = () => {
+          blocked = true;
+          reject(new StorageError('blocked', t('別のタブがデータベースを使用中です。他の MIDI Studio のタブを閉じてください。')));
+        };
       }).catch((e: unknown) => {
         this.dbPromise = null;
         throw e;

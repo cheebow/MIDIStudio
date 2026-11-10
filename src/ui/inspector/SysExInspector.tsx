@@ -49,8 +49,10 @@ export function SysExInspector() {
                       type="number"
                       min={gs.param.min}
                       max={gs.param.max}
+                      key={gs.data[0]} // uncontrolled: remount when the value changes elsewhere (undo)
                       defaultValue={gs.data[0]}
                       onBlur={(ev) => {
+                        if (ev.target.value.trim() === '' || Number(ev.target.value) === gs.data[0]) return;
                         try {
                           store.run(setGsValue(store.project, e.id, Number(ev.target.value)));
                         } catch (err) {

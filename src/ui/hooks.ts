@@ -88,6 +88,11 @@ export function useZoomAnchor(scrollRef: RefObject<HTMLElement | null>, pxPerTic
     pending.current = null;
     el.scrollLeft = Math.max(0, Math.round(a.tick * pxPerTick + leadPx - a.x));
   }, [scrollRef, pxPerTick, leadPx, viewW]);
+  // An anchor is for the zoom of the same event only: one whose zoom did not happen (already at
+  // the limit) must not steer a later zoom from a button. Runs after the effect above, every render.
+  useLayoutEffect(() => {
+    pending.current = null;
+  });
   return (tick, x) => {
     pending.current = { tick, x };
   };

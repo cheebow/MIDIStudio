@@ -16,6 +16,8 @@ export interface ApplyOptions {
   quantize?: Rational | null;
   /** Replace range: defaults to the recorded range (punch range when punching) */
   replaceRange?: { startTick: number; endTick: number };
+  /** loop recording: an onset quantized onto the loop end is the downbeat of the next pass, i.e. the loop start */
+  loop?: { startTick: number; endTick: number };
 }
 
 export function takeToCommand(project: MidiProject, trackId: string, take: TakeResult, opts: ApplyOptions): { command: Command; ids: string[] } | null {
@@ -23,12 +25,23 @@ export function takeToCommand(project: MidiProject, trackId: string, take: TakeR
   let events: NewEvent[] = takes.flatMap((t) => t.events);
   if (opts.quantize) {
     const g = opts.quantize;
-    events = events.map((e) => (e.kind === 'note' ? { ...e, tick: snapTick(e.tick, g).tick } : e));
+    const place = (tick: number): number => {
+      const q = snapTick(tick, g).tick;
+      // the loop end is never played in the loop: a note snapped onto it belongs to the loop start
+      if (opts.loop && q >= opts.loop.endTick) return opts.loop.startTick;
+      // punch: a note stays inside the punch range it was recorded in
+      if (opts.replaceRange && (q < opts.replaceRange.startTick || q >= opts.replaceRange.endTick)) return tick;
+      return q;
+    };
+    events = events.map((e) => (e.kind === 'note' ? { ...e, tick: place(e.tick) } : e));
   }
   let base = project;
   let patch = {};
   if (opts.mode === 'replace') {
-    const r = opts.replaceRange ?? take.range;
+    // the range of the take as played, widened to the quantized onsets: an old note under a note that
+    // was snapped just outside it would otherwise stay and double the new one
+    const onsets = events.map((e) => e.tick);
+    const r = opts.replaceRange ?? { startTick: Math.min(take.range.startTick, ...onsets), endTick: Math.max(take.range.endTick, ...onsets.map((x) => x + 1)) };
     const track = project.tracks.find((t) => t.id === trackId);
     if (track) {
       // Replace removes the notes whose onset is in the range, plus only the controller data the take

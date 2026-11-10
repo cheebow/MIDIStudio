@@ -105,7 +105,7 @@ export function useGlobalShortcuts(d: ShortcutDeps): void {
       // ⌥R (rhythm) for the pads: ⌥P is the list's "insert Program Change" (ADR-066 追記) and Alt+D is the browser's address bar
       if (e.altKey && !mod && !e.shiftKey && (e.code === 'KeyK' || e.code === 'KeyR')) {
         handled();
-        toggleMode(e.code === 'KeyK' ? 'piano-performance' : 'drum-performance');
+        if (!e.repeat) toggleMode(e.code === 'KeyK' ? 'piano-performance' : 'drum-performance');
         return;
       }
       // PC-keyboard performance: ↑ ↓ shift the octave (also in step input), Tab held = sustain.
@@ -164,6 +164,12 @@ export function useGlobalShortcuts(d: ShortcutDeps): void {
       const settings = project.settings;
       const track = selectedTrack(project);
       const pos = () => Math.round(transport.getPosition().tick);
+      // A held key repeats: play / record / mute / solo / loop / metronome / snap / visual mode would
+      // flip back and forth at the repeat rate.
+      if (e.repeat && !mod && (e.code === 'Space' || (letter && ['r', 't', 'm', 's', 'k', 'l', 'j'].includes(k)))) {
+        handled();
+        return;
+      }
       if (e.code === 'Space' && !mod) {
         handled();
         const span = e.shiftKey ? selectedSpan() : null;

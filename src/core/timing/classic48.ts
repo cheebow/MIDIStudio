@@ -1,7 +1,7 @@
 // RCM-style "1/4 = 48" display unit (REQ-EDT-11, ARCHITECTURE E). Display value = ticks * 48 / ppq.
 // Conversion back to ticks is accepted only when exact; otherwise the caller must ask the user
 // (or use native ticks). Nothing here rounds.
-import { formatRational, parseRational, rational, type Rational } from './rational';
+import { formatRational, parseRational, rational, safeRational, type Rational } from './rational';
 
 export const CLASSIC_UNITS_PER_QUARTER = 48;
 
@@ -22,7 +22,8 @@ export type Classic48Parse =
 export function classic48ToTicks(input: string | Rational, ppq: number): Classic48Parse {
   const value = typeof input === 'string' ? parseRational(input) : input;
   if (!value) return { ok: false, reason: 'syntax' };
-  const t = rational(value.num * ppq, value.den * CLASSIC_UNITS_PER_QUARTER);
+  const t = safeRational(value.num * ppq, value.den * CLASSIC_UNITS_PER_QUARTER);
+  if (!t) return { ok: false, reason: 'syntax' };
   if (t.den === 1) return { ok: true, ticks: t.num };
   return { ok: false, reason: 'inexact', exactTicks: t, display: formatRational(t) };
 }

@@ -27,9 +27,10 @@ export interface ArpeggioOptions {
 }
 
 /** Ticks of a note-value rhythm at a PPQ (the quarter note = PPQ). */
+const ARPEGGIO_STEPS_PER_QUARTER: Record<Exclude<ArpeggioRhythm, 'even'>, number> = { '4': 1, '8': 2, '8t': 3, '16': 4, '16t': 6, '32': 8 };
+
 export function arpeggioStepTicks(rhythm: Exclude<ArpeggioRhythm, 'even'>, ppq: number): number {
-  const per: Record<Exclude<ArpeggioRhythm, 'even'>, number> = { '4': 1, '8': 2, '8t': 3, '16': 4, '16t': 6, '32': 8 };
-  return Math.max(1, Math.round(ppq / per[rhythm]));
+  return Math.max(1, Math.round(ppq / ARPEGGIO_STEPS_PER_QUARTER[rhythm]));
 }
 
 /** Each step sounds for this part of its slot (the rest is a small gap). */
@@ -71,9 +72,11 @@ export function arpeggiateChords(project: MidiProject, ids: Iterable<string>, op
         }
         onsets = Array.from({ length: k }, (_, j) => Math.floor((span * j) / k));
       } else {
-        const step = arpeggioStepTicks(rhythm, project.ppq);
+        // each onset is rounded on its own: adding up a rounded step drifts off the beat when the
+        // PPQ is not a multiple of the note value (32nds at PPQ 100)
+        const per = ARPEGGIO_STEPS_PER_QUARTER[rhythm];
         onsets = [];
-        for (let o = 0; o < span; o += step) onsets.push(o);
+        for (let j = 0, o = 0; o < span; o = Math.round((++j * project.ppq) / per)) if (onsets[onsets.length - 1] !== o) onsets.push(o);
         // every note of the chord must sound at least once (or it would stay where it was); the
         // pattern itself may stop part-way (a 6-string up-and-down in eight 8ths turns after 6)
         if (onsets.length < g.notes.length) {
