@@ -14,7 +14,8 @@ import { deleteConductorEvent } from '../../core/editing/conductorOps';
 import { ConductorEventDialog, conductorValueText, KIND_NAMES, type ConductorDialogTarget, type ConductorKind } from '../tempo/conductorUi';
 import type { MenuItem } from '../menu/MenuBar';
 import type { MidiClip, MidiProject, MidiTrack } from '../../core/model/types';
-import { snapTick, gridTicks, gridLabel } from '../../core/timing/grid';
+import { snapTick, gridTicks } from '../../core/timing/grid';
+import { noteMenu } from '../menu/editMenus';
 import { useEditActions, useEditorState, useServices } from '../../app/store/context';
 import { conductorMarks, drawLoopRuler, drawMarkerLane, drawMarkerLines, drawPlayhead, drawRulerConductorMarks, drawTempoLane, fitCanvas, readTheme } from '../canvas';
 import { useAnimationLoop, useDragState, useElementSize, usePlayheadFollow, useSignatureMap, useZoomAnchor } from '../hooks';
@@ -686,7 +687,7 @@ export function Arrangement() {
         ctxMenu.open(e, [
           { label: t('コピー（{n} 個のクリップ）', { n }), shortcut: `${MOD}C`, action: actions.copy },
           { label: t('切り取り'), shortcut: `${MOD}X`, action: run(actions.cut) },
-          { label: t('複製（すぐ後ろへ）'), shortcut: `${MOD}D`, action: run(actions.duplicate) },
+          { label: t('複製'), shortcut: `${MOD}D`, action: run(actions.duplicate) },
           { label: t('結合（同じトラックのクリップを 1 つに）'), shortcut: `${MOD}J`, action: run(actions.mergeClips), disabled: !mergeable, reason: t('同じトラックのクリップを 2 つ以上選択してください') },
           { separator: true, label: '' },
           { label: t('削除（中のノートごと）'), shortcut: 'Delete', action: run(actions.delete) },
@@ -707,14 +708,15 @@ export function Arrangement() {
         { label: t('切り取り'), shortcut: `${MOD}X`, action: run(actions.cut) },
         { label: t('この位置のクリップを全トラックで選択'), action: () => selectClipsAt(tick, track.id) },
         { separator: true, label: '' },
-        { label: t('クオンタイズ（{grid}）', { grid: gridLabel(settings.grid) }), action: withNotes(actions.quantize), disabled: noteIds.length === 0, reason: t('クリップにノートがありません') },
-        { label: t('クオンタイズ…'), action: withNotes(actions.quantizeDialog), disabled: noteIds.length === 0, reason: t('クリップにノートがありません') },
-        { label: t('ヒューマナイズ…'), action: withNotes(actions.humanizeDialog), disabled: noteIds.length === 0, reason: t('クリップにノートがありません') },
-        { label: t('ベロシティ…'), action: withNotes(actions.velocityDialog), disabled: noteIds.length === 0, reason: t('クリップにノートがありません') },
+        // ノート ▸ as in the 編集 menu (ADR-100), acting on the notes of this clip
+        noteMenu(
+          { ...actions, quantize: withNotes(actions.quantize), quantizeDialog: withNotes(actions.quantizeDialog), humanizeDialog: withNotes(actions.humanizeDialog), velocityDialog: withNotes(actions.velocityDialog) },
+          { grid: settings.grid, noteLength: false, disabledReason: noteIds.length === 0 ? t('クリップにノートがありません') : undefined },
+        ),
         { separator: true, label: '' },
         { label: `${t('範囲内の外れたノートを取り込む')}${free ? t('（{n} 個）', { n: free }) : ''}`, action: run(() => store.run(adoptFreeEvents(store.project, clip.id))), disabled: free === 0, reason: t('クリップの範囲内に、クリップに属していないイベントはありません') },
         { label: t('ここで分割'), action: run(() => store.run(splitClip(store.project, clip.id, tick))), disabled: tick <= clip.startTick || tick >= clip.endTick, reason: t('クリップの内側で右クリックしてください') },
-        { label: t('複製（すぐ後ろへ）'), action: run(() => store.run(duplicateClip(store.project, clip.id, clip.endTick).command)) },
+        { label: t('複製'), shortcut: `${MOD}D`, action: run(() => store.run(duplicateClip(store.project, clip.id, clip.endTick).command)) },
         { separator: true, label: '' },
         { label: t('削除（中のノートごと）'), shortcut: 'Delete', action: run(() => store.run(deleteClip(store.project, clip.id, { deleteEvents: true }))) },
       ]);

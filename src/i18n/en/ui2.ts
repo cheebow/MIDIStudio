@@ -388,4 +388,10 @@ export const EN_UI2: Record<string, string> = {
   'クリックして位置（小節.拍.Tick）を入力し、再生位置を移動': 'Click to type a position (bar.beat.tick) and move the playhead there',
   '再生位置 {pos}（クリックで位置を入力して移動）': 'Playhead at {pos} (click to type a position and go there)',
   '移動先の位置（小節.拍.Tick）': 'Position to go to (bar.beat.tick)',
+  // list toolbar (ADR-099)
+  '表示（絞り込み中）': 'View (filtered)',
+  オプション: 'Options',
+  '一覧に出すイベントの種類': 'The kinds of events in the list',
+  'セルの確定後の動きと、鍵盤からの入力': 'What happens after a cell is confirmed, and input from the keyboard',
+  'ST・GT の単位。Tick は曲の PPQ（{ppq}）のまま、♩=48 は 4 分音符を 48 とする表示（Classic 48）です。': 'The unit of ST and GT. Tick is the song’s own PPQ ({ppq}); ♩=48 shows a quarter note as 48 (Classic 48).',
 };

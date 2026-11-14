@@ -27,6 +27,22 @@ export interface Menu {
 /** delay before a hovered item switches the open submenu (lets the pointer cross to the submenu) */
 const SUBMENU_HOVER_MS = 120;
 
+/**
+ * The label with its access key underlined. An access key only works while the menu is open, so it
+ * is not shown in the shortcut column: "N" there read as a shortcut that works anywhere (ADR-099).
+ */
+function accessLabel(label: string, key: string | undefined) {
+  const i = key ? label.toLowerCase().indexOf(key.toLowerCase()) : -1;
+  if (i < 0) return label;
+  return (
+    <>
+      {label.slice(0, i)}
+      <u>{label.slice(i, i + 1)}</u>
+      {label.slice(i + 1)}
+    </>
+  );
+}
+
 export function MenuBar({ menus }: { menus: Menu[] }) {
   const [open, setOpen] = useState<number | null>(null);
   /** opened with the keyboard: the list focuses its first item */
@@ -228,8 +244,8 @@ export function MenuList({ items, onClose, onLeft, sub = false, autoFocusFirst =
             }}
           >
             <span className="check">{it.checked ? '✓' : ''}</span>
-            <span className="label">{it.label}</span>
-            <span className="shortcut">{it.shortcut ?? (it.accessKey ? it.accessKey.toUpperCase() : '')}</span>
+            <span className="label">{accessLabel(it.label, it.accessKey)}</span>
+            <span className="shortcut">{it.shortcut ?? ''}</span>
           </button>
         ),
       )}

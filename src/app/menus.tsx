@@ -8,7 +8,7 @@ import { deleteEvents, moveTrack, sortTracksByChannel, updateTrack } from '../co
 import { looseNoteIds } from '../core/model/looseNotes';
 import { mergeDrumTracks, mergeSameChannelTracks } from '../core/editing/trackMerge';
 import { insertGsReset } from '../core/gs/gsProject';
-import { gridLabel } from '../core/timing/grid';
+import { assistMenu, noteMenu, transposeMenu } from '../ui/menu/editMenus';
 import type { InputMode } from '../input/KeyboardRouter';
 import type { InputController } from '../input/InputController';
 import type { Transport } from '../playback/Transport';
@@ -68,7 +68,6 @@ export interface MenuDeps {
 }
 
 const sep: MenuItem = { separator: true, label: '' };
-const noSelReason = () => t('ノートやイベントを選択してください');
 
 export function buildMenus(d: MenuDeps): Menu[] {
   const { project, store, transport, actions, selectedTrack } = d;
@@ -108,31 +107,10 @@ export function buildMenus(d: MenuDeps): Menu[] {
         { label: t('削除'), shortcut: 'Delete', action: actions.delete, disabled: noSel && !d.hasClipSelection, reason: t('ノート・イベント・クリップを選択してください') },
         { label: t('すべて選択（選択トラックのノート）'), shortcut: `${MOD}A`, action: actions.selectAll },
         sep,
-        {
-          label: t('移調'),
-          disabled: noSel,
-          reason: noSelReason(),
-          items: [
-            { label: t('+1 半音'), action: () => actions.transpose(1) },
-            { label: t('−1 半音'), action: () => actions.transpose(-1) },
-            { label: t('+1 オクターブ'), action: () => actions.transpose(12) },
-            { label: t('−1 オクターブ'), action: () => actions.transpose(-12) },
-          ],
-        },
-        {
-          label: t('ノート'),
-          items: [
-            { label: t('クオンタイズ（{grid}）', { grid: gridLabel(settings.grid) }), shortcut: 'Q', action: actions.quantize, disabled: noSel, reason: noSelReason() },
-            { label: t('クオンタイズ…（音符・強さ・シャッフル・長さ）'), shortcut: '⇧Q', action: actions.quantizeDialog, disabled: !selectedTrack, reason: t('トラックがありません') },
-            { label: t('ノート長をグリッド（{grid}）に揃える', { grid: gridLabel(settings.grid) }), action: actions.noteLength, disabled: noSel, reason: noSelReason() },
-            { label: t('ヒューマナイズ…'), action: actions.humanizeDialog, disabled: !selectedTrack, reason: t('トラックがありません') },
-            { label: t('ベロシティ…'), action: actions.velocityDialog, disabled: !selectedTrack, reason: t('トラックがありません') },
-            { label: t('ストラム…'), action: () => actions.performDialog('strum'), disabled: !selectedTrack, reason: t('トラックがありません') },
-            { label: t('アルペジオ…'), action: () => actions.performDialog('arpeggio'), disabled: !selectedTrack, reason: t('トラックがありません') },
-            { label: t('レガート調整…'), action: () => actions.performDialog('legato'), disabled: !selectedTrack, reason: t('トラックがありません') },
-            { label: t('ベロシティ・シェイパー…'), action: () => actions.performDialog('velocity-shaper'), disabled: !selectedTrack, reason: t('トラックがありません') },
-          ],
-        },
+        // the same three groups as the right-click menus of the editors (ADR-100)
+        transposeMenu(actions, { noSel }),
+        noteMenu(actions, { grid: settings.grid, noSel, noTrack: !selectedTrack }),
+        assistMenu(actions, selectedTrack ? () => ({ trackId: selectedTrack.id, tick: Math.round(transport.getPosition().tick) }) : null),
         {
           label: t('クリップ'),
           items: [

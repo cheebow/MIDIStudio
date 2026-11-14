@@ -1,5 +1,5 @@
 // Performance tools under 入力支援 (ADR-092, revived from the shelved ADR-077 / 078; TEST_PLAN
-// E-STR-*, E-PT-*): strum, arpeggio, legato and velocity shaper, from 編集 › ノート and the
+// E-STR-*, E-PT-*): strum, arpeggio, legato and velocity shaper, from 編集 › 入力支援 and the
 // right-click 入力支援 submenu (beside ギターボイシング ▸).
 import { expect, test, type Page } from '@playwright/test';
 import { build, off, on, program } from '../fixtures/songs';
@@ -59,11 +59,11 @@ async function selectAllNotes(page: Page) {
   await page.keyboard.press(SELECT_ALL);
 }
 
-test('E-STR-01: 編集 › ストラム… spreads every chord from its low string (on the beat = down), keeps ends and rhythm; one undo step', async ({ page }) => {
+test('E-STR-01: 編集 › 入力支援 › ストラム… spreads every chord from its low string (on the beat = down), keeps ends and rhythm; one undo step', async ({ page }) => {
   await page.goto('/');
   await importMidi(page, progression());
   await selectAllNotes(page);
-  await menu(page, '編集', /^ストラム…/, /^ノート$/);
+  await menu(page, '編集', /^ストラム…/, /^入力支援$/);
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByTestId('strum-dialog')).toBeVisible();
   await expect(dialog.getByTestId('perform-status')).toContainText('和音 4 個');
@@ -117,7 +117,7 @@ test('E-STR-02: from the note right-click menu (入力支援 › ストラム…
   expect(notesOf(await exportedSmf(page))).toEqual(before);
 });
 
-test('E-PT-01: 編集 › ノート › レガート調整… previews live, cancel keeps the song, apply is one undo step', async ({ page }) => {
+test('E-PT-01: 編集 › 入力支援 › レガート調整… previews live, cancel keeps the song, apply is one undo step', async ({ page }) => {
   await page.goto('/');
   await importMidi(page, build(1, 480, [program(0, 0, 0), on(0, 0, 60), off(100, 0, 60), on(380, 0, 62), off(100, 0, 62), on(380, 0, 64), off(100, 0, 64)]));
   const before = notesOf(await exportedSmf(page));
@@ -127,7 +127,7 @@ test('E-PT-01: 編集 › ノート › レガート調整… previews live, can
     [960, 64, 100, 100],
   ]);
   await selectAllNotes(page);
-  await menu(page, '編集', /^レガート調整…/, /^ノート$/);
+  await menu(page, '編集', /^レガート調整…/, /^入力支援$/);
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByTestId('legato-dialog')).toBeVisible();
   await expect(dialog.getByRole('radio', { name: /選択中のノート（3 個）/ })).toBeChecked();
@@ -139,7 +139,7 @@ test('E-PT-01: 編集 › ノート › レガート調整… previews live, can
   await expect(page.getByTestId('dirty-state')).not.toHaveText('● 未保存');
 
   await selectAllNotes(page);
-  await menu(page, '編集', /^レガート調整…/, /^ノート$/);
+  await menu(page, '編集', /^レガート調整…/, /^入力支援$/);
   await page.getByRole('dialog').getByRole('radio', { name: /^つなぐ/ }).check();
   await page.getByRole('dialog').getByTestId('perform-apply').click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -205,7 +205,7 @@ test('E-PT-04: arpeggio: the automatic length is named (quarter triplets); by 8t
   await page.goto('/');
   await importMidi(page, build(1, 480, [program(0, 0, 0), ...[on(0, 0, 60), on(0, 0, 64), on(0, 0, 67), off(960, 0, 60), off(0, 0, 64), off(0, 0, 67)]]));
   await selectAllNotes(page);
-  await menu(page, '編集', /^アルペジオ…/, /^ノート$/);
+  await menu(page, '編集', /^アルペジオ…/, /^入力支援$/);
   const dialog = page.getByRole('dialog');
   // automatic: the 3-note chord over 2 beats comes to quarter triplets, and the dialog says so
   await expect(dialog.getByTestId('arpeggio-length')).toHaveValue('even');
@@ -239,7 +239,7 @@ test('E-PT-05: up-and-down 8ths over four bars of guitar forms spread every bar,
   }
   await importMidi(page, build(1, 480, evs));
   await selectAllNotes(page);
-  await menu(page, '編集', /^アルペジオ…/, /^ノート$/);
+  await menu(page, '編集', /^アルペジオ…/, /^入力支援$/);
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('radio', { name: /^往復/ }).check();
   await dialog.getByTestId('arpeggio-length').selectOption('8');

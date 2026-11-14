@@ -53,7 +53,9 @@ test('E07: Classic 48 changes the display only; inexact input is refused, not ro
 
 test('E12: with a filter on, numeric edits are refused with a reason', async ({ page }) => {
   await openList(page);
+  await page.getByTestId('list-show').click();
   await page.getByRole('checkbox', { name: 'PB' }).uncheck();
+  await page.keyboard.press('Escape');
   const g4 = page.getByTestId('list-row').filter({ has: page.locator('[data-col="name"]', { hasText: /^G4$/ }) });
   await g4.locator('[data-col="st"]').click();
   await page.keyboard.press('Enter');

@@ -445,7 +445,7 @@ export function PianoRoll() {
     if (n) {
       // right-click on an unselected note selects just that note
       if (!store.getState().selection.eventIds.has(n.id)) store.selectEvents([n.id]);
-      ctxMenu.open(e, [...noteMenuItems(editActions, {}), ...assist]);
+      ctxMenu.open(e, [...noteMenuItems(editActions, { grid: store.project.settings.grid }), ...assist]);
     } else ctxMenu.open(e, [...emptyMenuItems(editActions, store, transport, track.id, tick, reportError), ...assist]);
   }
 

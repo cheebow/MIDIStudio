@@ -26,10 +26,11 @@ import { useEditActions, useEditorState, useServices } from '../../app/store/con
 import { isSecondaryClick, useContextMenu } from '../menu/ContextMenu';
 import { assistMenuItems, noteMenuItems } from '../menu/editMenus';
 import type { MenuItem } from '../menu/MenuBar';
+import { ToolbarPopover } from '../menu/ToolbarPopover';
 import { useSignatureMap } from '../hooks';
 import { selectedTrack } from '../../core/model/selectedTrack';
 import { listKeyIntent } from '../../input/listKeys';
-import { IS_MAC, MOD_LABEL } from '../platform';
+import { ALT_LABEL, IS_MAC, MOD_LABEL } from '../platform';
 import { EventBytesDialog, type BytesDialogState } from './EventBytesDialog';
 import { ListBatchDialog } from './ListBatchDialog';
 
@@ -573,9 +574,10 @@ export function ListEditor() {
 
   function insertMenuItems(): MenuItem[] {
     return [
-      ...INSERT_KINDS.map((k) => ({ label: k.label, accessKey: k.key, action: () => doInsert(k.kind) })),
-      { label: t('SysEx…'), accessKey: 's', action: () => setBytesDialog({ mode: 'insert', kind: 'sysex', tick: insertTick() }) },
-      { label: t('Meta…'), accessKey: 'm', action: () => setBytesDialog({ mode: 'insert', kind: 'meta', tick: insertTick() }) },
+      // the shortcut shown is the one that works from the list itself (⌥ + letter); the bare letter picks the item only while this menu is open
+      ...INSERT_KINDS.map((k) => ({ label: k.label, accessKey: k.key, shortcut: `${ALT_LABEL}${k.key.toUpperCase()}`, action: () => doInsert(k.kind) })),
+      { label: t('SysEx…'), accessKey: 's', shortcut: `${ALT_LABEL}S`, action: () => setBytesDialog({ mode: 'insert', kind: 'sysex', tick: insertTick() }) },
+      { label: t('Meta…'), accessKey: 'm', shortcut: `${ALT_LABEL}M`, action: () => setBytesDialog({ mode: 'insert', kind: 'meta', tick: insertTick() }) },
       { separator: true, label: '' },
       { label: t('セット'), items: INSERT_SETS.map((s) => ({ label: t(SET_LABEL[s]), action: () => doInsertSet(s) })) },
       { separator: true, label: '' },
@@ -638,6 +640,7 @@ export function ListEditor() {
         { label: t('削除'), shortcut: 'Delete', action: () => store.run(deleteConductorEvent(store.project, r.id)) },
         { label: t('再生位置をここに移動'), action: () => transport.seek(r.tick) },
         { label: t('コンダクタートラックを開く'), action: () => store.updateSettings({ activePanel: 'tempo' }) },
+        { separator: true, label: '' },
         ...assistAt(r.tick),
       ];
     }
@@ -647,11 +650,11 @@ export function ListEditor() {
       convertMenu(r),
       ...pasteMenuItems(),
       { separator: true, label: '' },
-      ...noteMenuItems(editActions, { noteLength: false }),
+      ...noteMenuItems(editActions, { grid: settings.grid, noteLength: false }),
+      ...assistAt(r.tick),
       { separator: true, label: '' },
       { label: t('選択行の一括変更…'), disabled: selection.eventIds.size === 0, action: () => setBatchOpen(true) },
       { label: t('再生位置をここに移動'), action: () => transport.seek(r.tick) },
-      ...assistAt(r.tick),
     ];
   }
 
@@ -662,7 +665,7 @@ export function ListEditor() {
 
   /** right-click below the rows (or on an empty track): insert at the cursor / step / play position */
   function emptyMenu(): MenuItem[] {
-    return [{ label: t('挿入'), shortcut: 'Insert', items: insertMenuItems() }, ...pasteMenuItems(), ...assistAt(insertTick())];
+    return [{ label: t('挿入'), shortcut: 'Insert', items: insertMenuItems() }, ...pasteMenuItems(), { separator: true, label: '' }, ...assistAt(insertTick())];
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -732,14 +735,17 @@ export function ListEditor() {
   return (
     <div className="list-editor">
       <div className="list-toolbar">
-        <div className="segmented" role="group" aria-label={t('表示単位')}>
-          <button className={unit === 'native' ? 'on' : ''} aria-pressed={unit === 'native'} onClick={() => store.updateSettings({ listDisplayUnit: 'native' })}>
-            Native Tick（PPQ {project.ppq}）
+        <span className="note">{t('長さ')}</span>
+        <div className="segmented" role="group" aria-label={t('表示単位')} title={t('ST・GT の単位。Tick は曲の PPQ（{ppq}）のまま、♩=48 は 4 分音符を 48 とする表示（Classic 48）です。', { ppq: project.ppq })}>
+          <button className={unit === 'native' ? 'on' : ''} aria-pressed={unit === 'native'} onClick={() => store.updateSettings({ listDisplayUnit: 'native' })} data-testid="unit-native">
+            Tick
           </button>
           <button className={unit === 'classic48' ? 'on' : ''} aria-pressed={unit === 'classic48'} onClick={() => store.updateSettings({ listDisplayUnit: 'classic48' })} data-testid="unit-classic48">
-            Classic 48（♩=48）
+            ♩=48
           </button>
         </div>
+        {unit === 'classic48' && !lossless && <span className="warn-text" title={t('PPQ が 48 の倍数でないため、一部の値は小数・分数で表示されます。入力は整数 Tick に正確に戻せる値だけ受け付けます。')}>ⓘ</span>}
+        <span className="note">{t('位置')}</span>
         <div className="segmented" role="group" aria-label={t('位置の表記')} title={t('TICK 列の位置の書き方。小節.拍.Tick では「12.3.0」のように入力できます（ST・GT の単位は変わりません）。')}>
           <button className={posUnit === 'tick' ? 'on' : ''} aria-pressed={posUnit === 'tick'} onClick={() => store.updateSettings({ listPositionUnit: 'tick' })} data-testid="pos-tick">
             Tick
@@ -748,26 +754,31 @@ export function ListEditor() {
             {t('小節.拍.Tick')}
           </button>
         </div>
-        {unit === 'classic48' && !lossless && <span className="warn-text" title={t('PPQ が 48 の倍数でないため、一部の値は小数・分数で表示されます。入力は整数 Tick に正確に戻せる値だけ受け付けます。')}>{t('ⓘ 小数・分数表示あり')}</span>}
-        <span className="note">{t('表示:')}</span>
-        {ALL_CATS.map((c) => (
-          <label key={c} className="note">
-            <input
-              type="checkbox"
-              checked={visibleCats.has(c)}
-              onChange={(e) => {
-                const next = new Set(visibleCats);
-                if (e.target.checked) next.add(c);
-                else next.delete(c);
-                setVisibleCats(next);
-              }}
-            />
-            {CAT_LABEL[c]}
+        <span className="toolbar-sep" aria-hidden="true" />
+        <ToolbarPopover label={filtered || !showConductor ? t('表示（絞り込み中）') : t('表示')} title={t('一覧に出すイベントの種類')} active={filtered || !showConductor} testId="list-show">
+          {ALL_CATS.map((c) => (
+            <label key={c}>
+              <input
+                type="checkbox"
+                checked={visibleCats.has(c)}
+                onChange={(e) => {
+                  const next = new Set(visibleCats);
+                  if (e.target.checked) next.add(c);
+                  else next.delete(c);
+                  setVisibleCats(next);
+                }}
+              />
+              {CAT_LABEL[c]}
+            </label>
+          ))}
+          <hr />
+          <label title={t('テンポ・拍子・調号・マーカーを時刻順に混ぜて表示します。ST には入りません。')}>
+            <input type="checkbox" checked={showConductor} onChange={(e) => setShowConductor(e.target.checked)} /> {t('コンダクター')}
           </label>
-        ))}
-        <label className="note" title={t('テンポ・拍子・調号・マーカーを時刻順に混ぜて表示します。ST には入りません。')}>
-          <input type="checkbox" checked={showConductor} onChange={(e) => setShowConductor(e.target.checked)} /> {t('コンダクター')}
-        </label>
+          <button className="link" disabled={!filtered && showConductor} onClick={() => (setVisibleCats(new Set(ALL_CATS)), setShowConductor(true))}>
+            {t('すべて表示')}
+          </button>
+        </ToolbarPopover>
         <button
           aria-haspopup="menu"
           title={t('カーソル位置にイベントを挿入（Insert / {alt}Enter）。{alt}N / C / P / B / A / Y / S / M ならどのモードでもメニューなしで入ります。', { alt: IS_MAC ? '⌥' : 'Alt+' })}
@@ -783,27 +794,22 @@ export function ListEditor() {
           const r = duplicateEvents(store.project, selection.eventIds, 0);
           if (r) store.run(r.command, { select: r.ids });
         }}>{t('複製')}</button>
-        <label className="note" title={t('セルを Enter で確定したあと、カーソルをどこへ動かすか（Tab はいつも右の列へ）')}>
-          {t('確定後:')}{' '}
-          <select value={settings.list.enterMoves} onChange={(e) => setList({ enterMoves: e.target.value as typeof settings.list.enterMoves })} aria-label={t('Enter で確定したあとのカーソル')}>
-            <option value="down">{t('下の行へ')}</option>
-            <option value="right">{t('右の列へ')}</option>
-            <option value="stay">{t('動かない')}</option>
-          </select>
-        </label>
-        {!stepMode && (
-          <>
-            <label className="note" title={t('鍵盤を弾くと現在行の K# が変わります。次に K# のある行へ進むかどうか。')}>
-              <input type="checkbox" checked={settings.list.captureAdvance} onChange={(e) => setList({ captureAdvance: e.target.checked })} /> {t('鍵盤入力後に次の行へ')}
-            </label>
-            <label className="note">
-              <input type="checkbox" checked={settings.list.captureVelocity} onChange={(e) => setList({ captureVelocity: e.target.checked })} /> {t('VEL も取り込む')}
-            </label>
-          </>
-        )}
-        <button onClick={() => store.updateSettings({ activePanel: 'tempo' })} title={t('テンポ・拍子・調号・マーカーは「コンダクター」タブで編集します')}>
-          {t('コンダクタートラックを開く')}
-        </button>
+        <ToolbarPopover label={t('オプション')} title={t('セルの確定後の動きと、鍵盤からの入力')} testId="list-settings">
+          <label title={t('セルを Enter で確定したあと、カーソルをどこへ動かすか（Tab はいつも右の列へ）')}>
+            {t('確定後:')}{' '}
+            <select value={settings.list.enterMoves} onChange={(e) => setList({ enterMoves: e.target.value as typeof settings.list.enterMoves })} aria-label={t('Enter で確定したあとのカーソル')}>
+              <option value="down">{t('下の行へ')}</option>
+              <option value="right">{t('右の列へ')}</option>
+              <option value="stay">{t('動かない')}</option>
+            </select>
+          </label>
+          <label title={t('鍵盤を弾くと現在行の K# が変わります。次に K# のある行へ進むかどうか。')}>
+            <input type="checkbox" checked={settings.list.captureAdvance} disabled={stepMode} onChange={(e) => setList({ captureAdvance: e.target.checked })} /> {t('鍵盤入力後に次の行へ')}
+          </label>
+          <label>
+            <input type="checkbox" checked={settings.list.captureVelocity} disabled={stepMode} onChange={(e) => setList({ captureVelocity: e.target.checked })} /> {t('VEL も取り込む')}
+          </label>
+        </ToolbarPopover>
       </div>
       {filtered && <div className="list-notice">{t('フィルター中: ST は表示されていないイベントも含めた次のイベントまでの距離です。ST の編集はすべて表示したときだけできます。')}</div>}
       {editing && mode !== 'edit-shortcuts' && <div className="list-notice">{t('セル入力中（鍵盤は鳴りません）')}</div>}
