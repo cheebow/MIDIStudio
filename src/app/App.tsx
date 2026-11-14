@@ -92,7 +92,7 @@ export default function App() {
     const input = new InputController(transport, () => store.project, store.project.inputPresets);
     const step = new StepController(store, input);
     const metronome = new Metronome(adapter, () => transport.playingMaps);
-    const recorder = new Recorder(store, transport, input, (t, accent) => metronome.clickAt(t, accent), () => adapter.audioContext?.currentTime ?? null);
+    const recorder = new Recorder(store, transport, input, (t, accent) => metronome.clickAt(t, accent), () => adapter.audioContext?.currentTime ?? null, () => metronome.cancelClicks());
     const midi = new MidiInputAdapter(
       {
         onMessage: (m, dev, ts) => input.midiMessage(m, dev, ts),
@@ -114,6 +114,12 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<ImportIssue[]>([]);
   const [dialog, setDialog] = useState<DialogKind>(null);
+  // A clip's notes were selected only to run a command on them (the clip menu's quantize etc.,
+  // ADR-098). Once the command has run — at once, or when its dialog closes — the clip alone is
+  // selected again.
+  useEffect(() => {
+    if (dialog === null) store.returnClipNotes();
+  }, [dialog, state.selection, store]);
   const [recent, setRecent] = useState<ProjectSummary[]>([]);
   const [restore, setRestore] = useState<{ savedAt: string; json: string; title: string } | null>(null);
   const [showInspector, setShowInspector] = useState(true);
@@ -262,6 +268,9 @@ export default function App() {
     step.setCursor(0);
     setIssues([]);
     setRestore(null); // the restore offer is only for the song that was there at startup
+    // The autosave belongs to the song being left: once that one is discarded or replaced, keeping
+    // it would offer "restore" for edits the user chose to drop, at the next start (ADR-098).
+    if (!opts.dirty) void db.clearAutosave().catch(() => undefined);
     if (opts.message) setInfo(opts.message);
   }
 
@@ -351,6 +360,8 @@ export default function App() {
     const p = store.project;
     downloadBytes(serializeProject(p, { savedAt: new Date().toISOString(), pretty: true }), safeFileName(p.title, 'midstudio'), 'application/json');
     store.markSaved();
+    // saved like "save in the browser": the song is no longer unsaved, so nothing is left to restore
+    void db.clearAutosave().catch(() => undefined);
   }
 
   function exportMidi() {
@@ -488,12 +499,18 @@ export default function App() {
     selectAll: () => selectedTrack && store.selectEvents(selectedTrack.events.filter((e) => e.kind === 'note').map((e) => e.id)),
     quantize: () =>
       tryRun(() => {
+        // the notes are taken now: the selection may be another one when the question is answered
+        const ids = new Set(store.getState().selection.eventIds);
         try {
-          store.run(quantizeNotes(store.project, store.getState().selection.eventIds, { grid }));
+          store.run(quantizeNotes(store.project, ids, { grid }));
         } catch (e) {
-          setDialog({ confirm: `${t((e as Error).message)}\n${t('丸めて実行しますか？')}`, onYes: () => store.run(quantizeNotes(store.project, store.getState().selection.eventIds, { grid, allowRounding: true })) });
+          setDialog({ confirm: `${t((e as Error).message)}\n${t('丸めて実行しますか？')}`, onYes: () => store.run(quantizeNotes(store.project, ids, { grid, allowRounding: true })) });
         }
       }),
+    onClipNotes: (noteIds, fn) => {
+      store.borrowClipNotes(noteIds);
+      fn();
+    },
     quantizeDialog: () => setDialog('quantize'),
     humanizeDialog: () => setDialog('humanize'),
     velocityDialog: () => setDialog('velocity'),

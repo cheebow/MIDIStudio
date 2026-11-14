@@ -26,7 +26,7 @@
 
 - 上部ツールバー固定、中央はトラックアレンジ、下部は切替可能な編集パネル。
 - ユーザーはトラック/エディターの高さ変更、パネル最大化、水平・垂直分割（ピアノロール＋リスト等）、レイアウト保存が可能。
-- Track Inspectorは左右のサイドパネルで開閉。Port/Channel、Bank/Program、Volume/Pan、Reverb/Chorus、DrumMap、Track Color/Mute/Soloを編集。
+- Track Inspectorは左右のサイドパネルで開閉。Port/Channel、Bank/Program、Volume/Pan、Reverb/Chorus、DrumMap、Track Color/Mute/Soloを編集。Bank MSB / LSB は欄を離れるか Enter で確定する（打つ途中の値を曲に書かない。ADR-098）。
 - 画面幅が狭い場合はサイドバーを閉じ、下部エディターをタブ切替で表示。
 - メニュー項目は利用できない機能をdisabledとし、ツールチップで理由を示す。
 

@@ -53,6 +53,11 @@ export class Metronome {
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    this.cancelClicks();
+  }
+
+  /** Silences the clicks already handed to the audio clock (a count-in that was cancelled). */
+  cancelClicks(): void {
     for (const n of this.nodes) {
       try {
         n.stop();

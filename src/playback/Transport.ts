@@ -283,6 +283,19 @@ export class Transport {
     }
   }
 
+  /**
+   * Loads the song into the engine, parked at `tick`, without playing. The recorder does this under
+   * the count-in, so the downbeat is not late by the time the load takes. Does nothing when the
+   * engine already has the song; throws when the load fails.
+   */
+  async prepare(tick: number): Promise<void> {
+    if (!this.project || !this.tempo || !this.engine.ready) return;
+    if (this.loaded === this.project) return;
+    await this.enqueueReload(tick, false);
+    // a failed load leaves its message in the state (the reload queue itself never rejects)
+    if (this.loaded !== this.project && this.state.error) throw new TransportError(this.state.error);
+  }
+
   async play(fromTick?: number): Promise<void> {
     if (!this.project || !this.tempo) throw new TransportError(t('曲が読み込まれていません。'));
     if (!this.engine.ready) {

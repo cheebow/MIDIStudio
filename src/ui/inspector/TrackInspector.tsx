@@ -119,11 +119,11 @@ export function TrackInspector() {
           <div className="inspector-row">
             <label>
               Bank MSB
-              <input type="number" min={0} max={127} value={msb ?? ''} placeholder="--" onChange={(e) => run(() => setSound({ msb: e.target.value === '' ? null : Number(e.target.value), lsb, program: firstProgram?.program ?? 0 }))} />
+              <BankInput value={msb} onCommit={(v) => run(() => setSound({ msb: v, lsb, program: firstProgram?.program ?? 0 }))} />
             </label>
             <label>
               LSB
-              <input type="number" min={0} max={127} value={lsb ?? ''} placeholder="--" onChange={(e) => run(() => setSound({ msb, lsb: e.target.value === '' ? null : Number(e.target.value), program: firstProgram?.program ?? 0 }))} />
+              <BankInput value={lsb} onCommit={(v) => run(() => setSound({ msb, lsb: v, program: firstProgram?.program ?? 0 }))} />
             </label>
           </div>
         </>
@@ -161,5 +161,41 @@ export function TrackInspector() {
       )}
       <p className="note">{t('音色名は GM / GS の表記です。実際の音は読み込んだ SoundFont によります（Roland 実機の音色ではありません）。')}</p>
     </aside>
+  );
+}
+
+/**
+ * Bank Select MSB / LSB field. The value is written when the field is left or Enter is pressed, not
+ * on every keystroke: typing "120" used to write bank 1 and bank 12 to the song on the way (three
+ * undo steps), and a "-" typed by mistake deleted the Bank Select (ADR-098). An empty field means
+ * "no Bank Select"; Esc puts the old value back.
+ */
+function BankInput({ value, onCommit }: { value: number | null; onCommit: (v: number | null) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = (el: HTMLInputElement) => {
+    if (draft === null) return;
+    setDraft(null);
+    // text the browser could not read as a number ("-", "1e"): not a request to remove the bank
+    if (el.validity.badInput) return;
+    const text = draft.trim();
+    const n = text === '' ? null : Number(text);
+    if (n !== null && !Number.isFinite(n)) return;
+    const v = n === null ? null : Math.max(0, Math.min(127, Math.round(n)));
+    if (v !== value) onCommit(v);
+  };
+  return (
+    <input
+      type="number"
+      min={0}
+      max={127}
+      value={draft ?? (value ?? '')}
+      placeholder="--"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={(e) => commit(e.currentTarget)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit(e.currentTarget);
+        else if (e.key === 'Escape') setDraft(null);
+      }}
+    />
   );
 }
