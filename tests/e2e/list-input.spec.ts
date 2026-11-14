@@ -25,7 +25,9 @@ test('LIST-07: in the PC-keyboard mode a key writes the K# of the current row an
   await expect(page.getByTestId('list-message')).toContainText('ノート番号がありません');
   expect(noteOns(await exportedSmf(page)).sort()).toEqual([62, 65, 67]);
   // the toggle off keeps the cursor on the row
+  await page.getByTestId('list-settings').click();
   await page.getByRole('checkbox', { name: '鍵盤入力後に次の行へ' }).uncheck();
+  await page.keyboard.press('Escape');
   await byName(/^D4$/).locator('[data-col="name"]').click();
   await page.keyboard.press('KeyZ');
   await expect(byName(/^C4$/).locator('[data-col="name"]')).toHaveClass(/cursor/);

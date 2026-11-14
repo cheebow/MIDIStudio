@@ -168,6 +168,7 @@ test('LIST-14: conductor rows show in time order and the tempo / time signature 
   await expect(rowByName(page, /^TS$/).first().locator('[data-col="detail"]')).toHaveText('3/4');
   // the conductor rows never enter ST: the track rows keep their values
   await expect(rowByName(page, /^C4$/).locator('[data-col="st"]')).toHaveText('0');
+  await page.getByTestId('list-show').click(); // the kinds shown are in the 表示 panel
   await page.getByRole('checkbox', { name: 'コンダクター' }).uncheck();
   await expect(rowByName(page, /^Tempo$/)).toHaveCount(0);
   await page.getByRole('checkbox', { name: 'コンダクター' }).check();

@@ -301,8 +301,8 @@ export function DrumEditor() {
     if (n) {
       // right-click on an unselected note selects just that note
       if (!store.getState().selection.eventIds.has(n.id)) store.selectEvents([n.id]);
-      ctxMenu.open(e, noteMenuItems(editActions, { transpose: false, noteLength: false }));
-    } else ctxMenu.open(e, emptyMenuItems(editActions, store, transport, track.id, tick, reportError));
+      ctxMenu.open(e, noteMenuItems(editActions, { grid: store.project.settings.grid, transpose: false, noteLength: false }));
+    } else ctxMenu.open(e, emptyMenuItems(editActions, store, transport, track.id, tick, reportError, { transpose: false, noteLength: false }));
   }
 
   function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {

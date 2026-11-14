@@ -37,6 +37,7 @@ test('track view: after クオンタイズ from the clip menu the clip alone is 
   await importMidi(page, build(1, 480, [program(0, 0, 0), on(10, 0, 60), off(480, 0, 60)]));
   const p = await arr(page, 10);
   await page.mouse.click(p.x, p.y, { button: 'right' });
+  await page.getByTestId('context-menu').getByRole('menuitem', { name: 'ノート', exact: true }).hover();
   await page.getByTestId('context-menu').getByRole('menuitem', { name: /^クオンタイズ（/ }).click();
   expect(notesOf(await exportedSmf(page))).toEqual([{ tick: 0, pitch: 60 }]);
   await page.keyboard.press('Delete');
@@ -55,7 +56,8 @@ test('track view: the same after the クオンタイズ… dialog', async ({ pag
   await importMidi(page, build(1, 480, [program(0, 0, 0), on(10, 0, 60), off(480, 0, 60)]));
   const p = await arr(page, 10);
   await page.mouse.click(p.x, p.y, { button: 'right' });
-  await page.getByTestId('context-menu').getByRole('menuitem', { name: 'クオンタイズ…' }).click();
+  await page.getByTestId('context-menu').getByRole('menuitem', { name: 'ノート', exact: true }).hover();
+  await page.getByTestId('context-menu').getByRole('menuitem', { name: /^クオンタイズ…/ }).click();
   await page.getByTestId('quantize-apply').click();
   expect(notesOf(await exportedSmf(page))).toEqual([{ tick: 0, pitch: 60 }]);
   await page.keyboard.press('Delete');

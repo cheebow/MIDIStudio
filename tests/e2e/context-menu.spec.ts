@@ -86,7 +86,7 @@ test('track view: right-click a clip → duplicate, then delete via the menu', a
   await page.mouse.click(p.x, p.y, { button: 'right' });
   const menu = page.getByTestId('context-menu');
   await expect(menu).toBeVisible();
-  await menu.getByRole('menuitem', { name: '複製（すぐ後ろへ）' }).click();
+  await menu.getByRole('menuitem', { name: /^複製/ }).click();
   await expect(menu).toBeHidden();
   expect(notesOf(await exportedSmf(page)).length).toBe(2);
   await page.mouse.click(p.x, p.y, { button: 'right' });
@@ -103,7 +103,8 @@ test('piano roll: right-click a note → transpose and delete; right-click empty
   await importMidi(page, build(1, 480, [program(0, 0, 0), on(0, 0, 60), off(480, 0, 60)]));
   let a = await rollPoint(page, 100, 60);
   await page.mouse.click(a.x, a.y, { button: 'right' });
-  await page.getByTestId('context-menu').getByRole('menuitem', { name: '半音上げる' }).click();
+  await page.getByTestId('context-menu').getByRole('menuitem', { name: '移調' }).hover();
+  await page.getByTestId('context-menu').getByRole('menuitem', { name: '+1 半音' }).click();
   expect(notesOf(await exportedSmf(page))).toEqual([{ tick: 0, pitch: 61 }]);
   a = await rollPoint(page, 100, 61);
   await page.mouse.click(a.x, a.y, { button: 'right' });
@@ -118,7 +119,8 @@ test('piano roll: right-click a note → transpose and delete; right-click empty
   // the note menu also opens the quantize dialog for the clicked note (ADR-043); the pasted note kept pitch 61
   const c = await rollPoint(page, 960, 61);
   await page.mouse.click(c.x, c.y, { button: 'right' });
-  await page.getByTestId('context-menu').getByRole('menuitem', { name: 'クオンタイズ…' }).click();
+  await page.getByTestId('context-menu').getByRole('menuitem', { name: 'ノート', exact: true }).hover();
+  await page.getByTestId('context-menu').getByRole('menuitem', { name: /^クオンタイズ…/ }).click();
   await expect(page.getByRole('dialog').getByRole('radio', { name: /選択中のノート（1 個）/ })).toBeChecked();
   await page.getByRole('button', { name: 'キャンセル' }).click();
 });
@@ -129,6 +131,7 @@ test('track view: a clip can be quantized from its right-click menu (its notes o
   await importMidi(page, build(1, 480, [on(10, 0, 60), off(100, 0, 60), on(140, 0, 62), off(100, 0, 62)], [on(130, 1, 64), off(100, 1, 64)]));
   const p = await firstClip(page);
   await page.mouse.click(p.x, p.y, { button: 'right' });
+  await page.getByTestId('context-menu').getByRole('menuitem', { name: 'ノート', exact: true }).hover();
   await page.getByTestId('context-menu').getByRole('menuitem', { name: /^クオンタイズ（1\/16）/ }).click();
   expect(notesOf(await exportedSmf(page))).toEqual([
     { tick: 0, pitch: 60 },
@@ -136,7 +139,8 @@ test('track view: a clip can be quantized from its right-click menu (its notes o
     { tick: 240, pitch: 62 },
   ]);
   await page.mouse.click(p.x, p.y, { button: 'right' });
-  await page.getByTestId('context-menu').getByRole('menuitem', { name: 'クオンタイズ…' }).click();
+  await page.getByTestId('context-menu').getByRole('menuitem', { name: 'ノート', exact: true }).hover();
+  await page.getByTestId('context-menu').getByRole('menuitem', { name: /^クオンタイズ…/ }).click();
   await expect(page.getByRole('dialog').getByRole('radio', { name: /選択中のノート（2 個）/ })).toBeChecked();
   await page.getByRole('button', { name: 'キャンセル' }).click();
 });
