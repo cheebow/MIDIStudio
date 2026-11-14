@@ -243,6 +243,8 @@ function sanitizeSettings(raw: unknown, d: ProjectViewSettings, trackIds: Readon
     ...(typeof r.selectedTrackId === 'string' && trackIds.has(r.selectedTrackId) ? { selectedTrackId: r.selectedTrackId } : {}),
     activePanel: oneOf(r.activePanel, ['piano-roll', 'drum', 'list', 'mixer', 'tempo'] as const, d.activePanel),
     listDisplayUnit: oneOf(r.listDisplayUnit, ['native', 'classic48'] as const, d.listDisplayUnit),
+    listPositionUnit: oneOf(r.listPositionUnit, ['tick', 'mbt'] as const, d.listPositionUnit),
+    conductorPositionUnit: oneOf(r.conductorPositionUnit, ['tick', 'mbt'] as const, d.conductorPositionUnit),
     snapTicks: isInt(r.snapTicks, 0, MAX_TICK) ? r.snapTicks : d.snapTicks,
     horizontalZoom: num(r.horizontalZoom, 2, 400, d.horizontalZoom),
     followPlayback: bool(r.followPlayback, d.followPlayback),

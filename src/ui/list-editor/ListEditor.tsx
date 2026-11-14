@@ -10,6 +10,7 @@ import { addEvents, deleteEvents, duplicateEvents, updateEvents, type NewEvent }
 import { CAPTURE_IDLE, captureInserted, captureStep, type CaptureState } from '../../core/list/listCapture';
 import { shiftOctave } from '../../input/KeyboardRouter';
 import { formatTicks, isConductorEvent, listRows, type ListRow, type ListUnit, type RowCategory } from '../../core/list/listRows';
+import { formatListPosition, parsePositionInput } from '../../core/list/listPosition';
 import { deleteConductorEvent, setTempo, setTimeSignature, upsertConductorEvent } from '../../core/editing/conductorOps';
 import { pasteRowsAt } from '../../core/list/listPaste';
 import { shownBpm } from '../../core/timing/tempoMap';
@@ -66,6 +67,9 @@ export function ListEditor() {
   const { project, selection } = useEditorState();
   const settings = project.settings;
   const unit: ListUnit = settings.listDisplayUnit;
+  /** notation of the TICK column (ADR-099); ST / GT stay in `unit` */
+  const posUnit = settings.listPositionUnit;
+  const colLabel = (c: Col) => (c === 'tick' && posUnit === 'mbt' ? 'M.B.T' : COL_LABEL[c]);
   const track = selectedTrack(project);
   const inputSnap = useSyncExternalStore(input.subscribe, input.getSnapshot);
   const stepSnap = useSyncExternalStore(step.subscribe, step.getSnapshot);
@@ -248,7 +252,7 @@ export function ListEditor() {
         return `${ch + 1}${'channelOverride' in r.event && r.event.channelOverride !== undefined ? '*' : ''}`;
       }
       case 'tick':
-        return formatTicks(r.tick, unit, project.ppq);
+        return formatListPosition(r.tick, posUnit, sig, unit, project.ppq);
       case 'detail':
         return r.detail;
     }
@@ -297,6 +301,13 @@ export function ListEditor() {
           cmd = setTimeSignature(store.project, cur.tick, Number(m[1]), Number(m[2]));
         } else if (cur.event.kind === 'marker') cmd = upsertConductorEvent(store.project, cur.tick, { kind: 'marker', text }, cur.id);
         else return false;
+      } else if (col === 'tick' && posUnit === 'mbt') {
+        const pos = parsePositionInput(text, 'mbt', sig, cur.tick);
+        if (!pos.ok) {
+          setMessage(pos.message);
+          return false;
+        }
+        cmd = setAbsoluteTick(store.project, cur.id, pos.ticks);
       } else if (col === 'st' || col === 'gt' || col === 'tick') {
         const tk = parseTicksInput(text, unit, project.ppq);
         if (!tk.ok) {
@@ -420,9 +431,11 @@ export function ListEditor() {
   }
   moveCursorRef.current = moveCursor;
 
-  function runNudge(row: ListRow, col: NudgeCol, steps: number, mergeKey: string) {
+  /** `big`: the factor of the big step (Shift), 0 for a plain one. In the bar.beat.tick notation the big step moves the position by whole beats. */
+  function runNudge(row: ListRow, col: NudgeCol, steps: number, mergeKey: string, big = 0) {
     try {
-      const r = nudgeCell(store.project, track!.id, row, col, { steps, unit, ppq: project.ppq });
+      const mbt = col === 'tick' && posUnit === 'mbt' ? { sig, ...(big ? { beats: steps } : {}) } : undefined;
+      const r = nudgeCell(store.project, track!.id, row, col, { steps: big ? steps * big : steps, unit, ppq: project.ppq, mbt });
       if (!r) return;
       if ('message' in r) {
         setMessage(r.message);
@@ -446,7 +459,7 @@ export function ListEditor() {
       setMessage(t('この列は編集できません。'));
       return;
     }
-    runNudge(cur, col, delta * (big ? (col === 'key' ? 12 : 10) : 1), `list-nudge:${cur.id}:${col}`);
+    runNudge(cur, col, delta, `list-nudge:${cur.id}:${col}`, big ? (col === 'key' ? 12 : 10) : 0);
   }
 
   /** Vertical drag on a numeric cell (mouse only): 6 px per unit, Shift ×10, one undo step per drag. */
@@ -460,10 +473,10 @@ export function ListEditor() {
     const onMove = (ev: PointerEvent) => {
       const units = Math.trunc((startY - ev.clientY) / 6);
       if (units === applied) return;
-      const steps = (units - applied) * (ev.shiftKey ? 10 : 1);
+      const steps = units - applied;
       applied = units;
       const r = latest.current.rows.find((x) => x.id === id);
-      if (r) runNudge(r, col, steps, key);
+      if (r) runNudge(r, col, steps, key, ev.shiftKey ? 10 : 0);
     };
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
@@ -727,6 +740,14 @@ export function ListEditor() {
             Classic 48（♩=48）
           </button>
         </div>
+        <div className="segmented" role="group" aria-label={t('位置の表記')} title={t('TICK 列の位置の書き方。小節.拍.Tick では「12.3.0」のように入力できます（ST・GT の単位は変わりません）。')}>
+          <button className={posUnit === 'tick' ? 'on' : ''} aria-pressed={posUnit === 'tick'} onClick={() => store.updateSettings({ listPositionUnit: 'tick' })} data-testid="pos-tick">
+            Tick
+          </button>
+          <button className={posUnit === 'mbt' ? 'on' : ''} aria-pressed={posUnit === 'mbt'} onClick={() => store.updateSettings({ listPositionUnit: 'mbt' })} data-testid="pos-mbt">
+            {t('小節.拍.Tick')}
+          </button>
+        </div>
         {unit === 'classic48' && !lossless && <span className="warn-text" title={t('PPQ が 48 の倍数でないため、一部の値は小数・分数で表示されます。入力は整数 Tick に正確に戻せる値だけ受け付けます。')}>{t('ⓘ 小数・分数表示あり')}</span>}
         <span className="note">{t('表示:')}</span>
         {ALL_CATS.map((c) => (
@@ -810,7 +831,7 @@ export function ListEditor() {
           <div className="list-header" role="row">
             {COLS.map((c) => (
               <div key={c} role="columnheader" className={`lc lc-${c}`}>
-                {COL_LABEL[c]}
+                {colLabel(c)}
               </div>
             ))}
           </div>
@@ -870,7 +891,7 @@ export function ListEditor() {
                               className="cell-input"
                               autoFocus
                               value={editing.text}
-                              aria-label={t('{col} を入力', { col: t(COL_LABEL[c]) })}
+                              aria-label={t('{col} を入力', { col: t(colLabel(c)) })}
                               onFocus={(e) => {
                                 if (editing.selectAll) e.currentTarget.select();
                               }}

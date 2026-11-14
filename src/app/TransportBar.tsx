@@ -11,6 +11,7 @@ import { LoopIcon, MetronomeIcon } from '../ui/icons';
 import { useSignatureMap } from '../ui/hooks';
 import { SeekBar } from './SeekBar';
 import { t } from '../i18n';
+import { parsePositionInput, type ParsedPosition } from '../core/list/listPosition';
 
 interface Props {
   transport: Transport;
@@ -39,6 +40,49 @@ function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds - m * 60;
   return `${String(m).padStart(2, '0')}:${s.toFixed(3).padStart(6, '0')}`;
+}
+
+/**
+ * The position readout. A click turns it into a field: a position typed as bar.beat.tick ("12",
+ * "12.3", "12.3.0"; "+480" / "-480" from where the playhead is) and Enter moves the playhead there
+ * (ADR-099). Esc or leaving the field puts the readout back.
+ */
+function Locate({ text, parse, onLocate }: { text: string; parse: (s: string) => ParsedPosition; onLocate: (tick: number) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const close = () => {
+    setDraft(null);
+    setError(null);
+  };
+  if (draft === null) {
+    return (
+      <button className="position" data-testid="transport-position" title={t('クリックして位置（小節.拍.Tick）を入力し、再生位置を移動')} aria-label={t('再生位置 {pos}（クリックで位置を入力して移動）', { pos: text })} onClick={() => setDraft(text)}>
+        {text}
+      </button>
+    );
+  }
+  return (
+    <input
+      className="position locate"
+      data-testid="transport-locate"
+      aria-label={t('移動先の位置（小節.拍.Tick）')}
+      aria-invalid={error !== null}
+      title={error ?? undefined}
+      value={draft}
+      autoFocus
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => (setDraft(e.target.value), setError(null))}
+      onBlur={close}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') close();
+        if (e.key !== 'Enter') return;
+        const r = parse(draft);
+        if (!r.ok) return setError(r.message);
+        onLocate(r.ticks);
+        close();
+      }}
+    />
+  );
 }
 
 /**
@@ -169,9 +213,11 @@ export function TransportBar({ transport, project, audioReady, ensureAudio, metr
           }}
         />
       </label>
-      <output className="position" data-testid="transport-position" aria-live="off">
-        {sig.format(tick)}
-      </output>
+      <Locate
+        text={sig.format(tick)}
+        parse={(s) => parsePositionInput(s, 'mbt', sig, tick)}
+        onLocate={(to) => transport.seek(to)}
+      />
       <output className="time">{formatTime(pos.seconds)}</output>
       <button className="readout" data-testid="bpm-readout" title={t('テンポを変更・追加')} aria-label={t('テンポ {bpm} BPM（クリックで変更）', { bpm: bpm.toFixed(2) })} onClick={(e) => conductorMenu(e, 'tempo')}>
         BPM {bpm.toFixed(bpm % 1 ? 2 : 0)}

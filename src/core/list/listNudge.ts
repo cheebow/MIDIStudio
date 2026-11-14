@@ -12,6 +12,8 @@ import { MAX_BPM, MIN_BPM } from '../timing/tempoMap';
 import { setAbsoluteTick, setGateTime, setRowChannel, setRowKey, setRowValue, setStepTime } from './listEdit';
 import { isConductorEvent, type ListRow, type ListUnit } from './listRows';
 import { t } from '../../i18n';
+import type { TimeSignatureMap } from '../timing/timeSignatureMap';
+import { shiftByBeats } from './listPosition';
 
 export type NudgeCol = 'key' | 'st' | 'gt' | 'vel' | 'tick' | 'ch';
 
@@ -20,6 +22,11 @@ export interface NudgeOpts {
   steps: number;
   unit: ListUnit;
   ppq: number;
+  /**
+   * TICK column in the bar.beat.tick notation (ADR-099): a step is one native tick whatever the
+   * display unit of ST / GT is, and `beats` (the big step) moves by whole beats instead.
+   */
+  mbt?: { sig: TimeSignatureMap; beats?: number };
 }
 
 export type NudgeResult = { ok: true; value: number } | { ok: false; message: string } | null;
@@ -67,7 +74,9 @@ export function nudgedValue(row: ListRow, col: NudgeCol, opts: NudgeOpts, trackC
   const cur = currentValue(row, col, trackChannel);
   if (!range || cur === null) return null;
   let delta = opts.steps;
-  if (col === 'st' || col === 'gt' || col === 'tick') {
+  if (col === 'tick' && opts.mbt) {
+    if (opts.mbt.beats) delta = shiftByBeats(cur, opts.mbt.beats, opts.mbt.sig) - cur;
+  } else if (col === 'st' || col === 'gt' || col === 'tick') {
     if (opts.unit === 'classic48') {
       if (opts.ppq % 48 !== 0) return { ok: false, message: t('PPQ {ppq} では Classic 48 の 1 単位が整数 Tick になりません。Native Tick 表示で増減してください。', { ppq: opts.ppq }) };
       delta = opts.steps * (opts.ppq / 48);

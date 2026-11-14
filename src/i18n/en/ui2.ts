@@ -377,4 +377,15 @@ export const EN_UI2: Record<string, string> = {
   '次の音の手前で離す': 'released before the next note',
   '和音の終わりまで伸ばす': 'Hold to the end of the chord',
   '鳴り始めだけずらす（ゆっくりしたストラムのよう）': 'only the starts are spread (like a slow strum)',
+  // ADR-099: positions as bar.beat.tick
+  '位置の表記': 'Position notation',
+  '小節.拍.Tick': 'Bar.Beat.Tick',
+  'TICK 列の位置の書き方。小節.拍.Tick では「12.3.0」のように入力できます（ST・GT の単位は変わりません）。': 'How the position in the TICK column is written. With Bar.Beat.Tick you can type e.g. "12.3.0" (the unit of ST and GT does not change).',
+  '位置は 小節.拍.Tick（例 5.1.0）で入力してください。その小節にない拍は入力できません。+120 / -120 で今の位置から動かせます。': 'Enter the position as bar.beat.tick (e.g. 5.1.0). A beat the bar does not have is not accepted. +120 / -120 moves from the current position.',
+  '位置は 0 以上の整数 Tick で入力してください。+120 / -120 で今の位置から動かせます。': 'Enter the position as a whole number of ticks, 0 or more. +120 / -120 moves from the current position.',
+  '曲の先頭より前には置けません。': 'A position before the start of the song is not possible.',
+  '位置が大きすぎます。': 'The position is too large.',
+  'クリックして位置（小節.拍.Tick）を入力し、再生位置を移動': 'Click to type a position (bar.beat.tick) and move the playhead there',
+  '再生位置 {pos}（クリックで位置を入力して移動）': 'Playhead at {pos} (click to type a position and go there)',
+  '移動先の位置（小節.拍.Tick）': 'Position to go to (bar.beat.tick)',
 };
